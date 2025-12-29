@@ -184,6 +184,7 @@ Disable/uninstall hooks:
 - Run: `WindsurfAutoMcp: Uninstall Hooks / 卸载 Hooks` (or remove the corresponding `command` entries from hooks.json)
 
 Note: Hooks use Python (the official docs example uses `python3`). Windows uses `python`, macOS/Linux use `python3`; ensure Python is available or you will see hook execution errors.
+If you installed an older PowerShell/Node hooks version, running “Install Hooks” or “Uninstall Hooks” will clean up legacy `ps1/js` entries.
 
 You can also reference the repo examples for manual installation:
 - `examples/windsurf-hooks/hooks.json`

@@ -442,6 +442,11 @@ function buildHooksCommand(variantHooksDir: string): string {
     return `python3 "${guardPath}"`;
 }
 
+function isLegacyHookCommand(command: unknown): boolean {
+    if (!command || typeof command !== 'string') return false;
+    return /windsurf-auto-mcp-guard\.(ps1|js)/i.test(command);
+}
+
 function installWindsurfHooks() {
     const homeDir = os.homedir();
     const items = getWindsurfHooksConfigPaths(homeDir);
@@ -464,6 +469,15 @@ function installWindsurfHooks() {
 
             // Copy guard script (Python)
             fs.copyFileSync(guardPySource, path.join(scriptDir, 'windsurf-auto-mcp-guard.py'));
+            // Remove legacy scripts if present.
+            try {
+                const legacyPs1 = path.join(scriptDir, 'windsurf-auto-mcp-guard.ps1');
+                if (fs.existsSync(legacyPs1)) fs.unlinkSync(legacyPs1);
+                const legacyJs = path.join(scriptDir, 'windsurf-auto-mcp-guard.js');
+                if (fs.existsSync(legacyJs)) fs.unlinkSync(legacyJs);
+            } catch {
+                // ignore cleanup failures
+            }
 
             const command = buildHooksCommand(scriptDir);
             const desiredHooks = {
@@ -489,6 +503,10 @@ function installWindsurfHooks() {
 
             for (const [eventName, hooks] of Object.entries(desiredHooks)) {
                 if (!Array.isArray(config.hooks[eventName])) config.hooks[eventName] = [];
+                // Drop legacy PS1/JS hooks from earlier versions.
+                config.hooks[eventName] = config.hooks[eventName].filter(
+                    (h: any) => !isLegacyHookCommand(h?.command)
+                );
                 for (const hook of hooks) {
                     const already = config.hooks[eventName].some((h: any) => h && h.command === hook.command);
                     if (!already) config.hooks[eventName].push(hook);
@@ -541,7 +559,9 @@ function uninstallWindsurfHooks() {
                         const events = ['pre_run_command', 'pre_write_code', 'post_cascade_response'];
                         for (const ev of events) {
                             if (!Array.isArray(config.hooks[ev])) continue;
-                            config.hooks[ev] = config.hooks[ev].filter((h: any) => !h || h.command !== command);
+                            config.hooks[ev] = config.hooks[ev].filter(
+                                (h: any) => !h || (h.command !== command && !isLegacyHookCommand(h.command))
+                            );
                             if (config.hooks[ev].length === 0) delete config.hooks[ev];
                         }
                     }

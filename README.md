@@ -194,6 +194,7 @@ WindsurfAutoMcp 会在扩展激活时（默认开启）自动把一组最小 hoo
 - 运行命令：`WindsurfAutoMcp: Uninstall Hooks / 卸载 Hooks`（或手动从 hooks.json 删除对应 command）
 
 注意：Hooks 使用 Python（官方文档示例也是 `python3`）。Windows 使用 `python`，macOS/Linux 使用 `python3`；请确保 Python 可用，否则会看到 hook 执行错误提示。
+如果你曾安装旧版（PowerShell/Node）hooks：运行一次 “Install Hooks / 安装 Hooks” 或 “Uninstall Hooks / 卸载 Hooks” 会自动清理旧的 `ps1/js` entries。
 
 你也可以参考仓库里的示例（手动安装）：
 - `examples/windsurf-hooks/hooks.json`
