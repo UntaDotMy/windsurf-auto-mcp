@@ -139,18 +139,14 @@ Windsurf officially supports **Cascade Hooks**: run your own shell commands auto
 
 Official docs: `https://docs.windsurf.com/windsurf/cascade/hooks`
 
-Config file locations (official):
+Config file locations (from official docs):
 - System-level:
   - Windows: `C:\ProgramData\Windsurf\hooks.json`
   - macOS: `/Library/Application Support/Windsurf/hooks.json`
   - Linux/WSL: `/etc/windsurf/hooks.json`
-- User-level:
-  - Windsurf (official):
-    - Windows: `%USERPROFILE%\.codeium\windsurf\hooks.json`
-    - macOS/Linux: `~/.codeium/windsurf/hooks.json`
-  - Windsurf-next (not officially documented, but matches `mcp_config.json` path patterns):
-    - Windows: `%USERPROFILE%\.codeium\windsurf-next\hooks.json`
-    - macOS/Linux: `~/.codeium/windsurf-next/hooks.json`
+- User-level (Windsurf, official):
+  - Windows: `%USERPROFILE%\.codeium\windsurf\hooks.json`
+  - macOS/Linux: `~/.codeium/windsurf/hooks.json`
 - Workspace-level: `.windsurf/hooks.json` in your workspace root
 
 Key rules (official):
@@ -177,16 +173,24 @@ Events (official):
 - `pre_user_prompt`
 - `post_cascade_response`
 
-Repo examples (not installed automatically):
+WindsurfAutoMcp auto-installs a minimal set of hooks into the **user-level hooks.json** on activation (enabled by default). It does not overwrite your existing hooks; it only appends missing entries. It is used for:
+- `pre_run_command` / `pre_write_code`: block common dangerous commands and sensitive writes
+- `post_cascade_response`: warn when `ask_continue` is missing (warning only; does not block)
+
+The scripts are copied under the user directory (example, Windows / windsurf-next): `%USERPROFILE%\.codeium\windsurf-next\hooks\windsurf-auto-mcp\...`
+
+Disable/uninstall hooks:
+- Set `mcpService.autoInstallHooks = false`
+- Run: `WindsurfAutoMcp: Uninstall Hooks / 卸载 Hooks` (or remove the corresponding `command` entries from hooks.json)
+
+You can also reference the repo examples for manual installation:
 - `examples/windsurf-hooks/hooks.json`
 - `examples/windsurf-hooks/scripts/guard.js`
 
 Notes:
-- Usage: copy `examples/windsurf-hooks/hooks.json` to one of the hooks.json locations above, then replace `/ABSOLUTE/PATH/...` in `command` with your local absolute path.
-- The example blocks typical dangerous ops via `pre_run_command`/`pre_write_code`, and warns when `ask_continue` is missing via `post_cascade_response` (warning only; does not block).
-- Hooks run with your user’s full permissions: use absolute paths, validate input JSON, and don’t log secrets.
-- Disable/uninstall behavior: the example script reads `mcp_config.json` and probes `http://localhost:<port>/health`; if `windsurf_auto_mcp` is not configured/disabled/unreachable (e.g., extension disabled or uninstalled), it exits 0 and will not block/audit actions.
-- windsurf-next: official docs currently only mention `windsurf` paths; if you use windsurf-next and user-level hooks don’t apply, you can also try `~/.codeium/windsurf-next/hooks.json` (matches the `mcp_config.json` path pattern; not officially documented).
+- Hooks run with your user’s full permissions: only use trusted scripts; validate stdin JSON; don’t log secrets.
+- Disable/uninstall behavior: the bundled hook script reads `mcp_config.json` and probes `http://localhost:<port>/health`; if `windsurf_auto_mcp` is not configured/disabled/unreachable (e.g., extension disabled or uninstalled), it exits 0 and will not block/audit actions.
+- windsurf-next: official Hooks docs currently only mention `windsurf` paths, but windsurf-next’s MCP config is `%USERPROFILE%\.codeium\windsurf-next\mcp_config.json`. This extension also writes user-level hooks into `%USERPROFILE%\.codeium\windsurf-next\hooks.json` using the same pattern (best-effort/inferred; not officially documented).
 
 ### Hotkey
 
@@ -212,6 +216,8 @@ Search `mcpService` in settings:
 | `mcpService.autoStart` | true | Auto‑start server on launch |
 | `mcpService.language` | zh | UI language (`zh`/`en`) |
 | `mcpService.defaultReason` | empty | Default reason used when `ask_continue` has no `reason` |
+| `mcpService.autoInstallHooks` | true | Auto-install/update user-level hooks.json (Windsurf / windsurf-next) |
+| `mcpService.mode` | http | MCP server mode |
 
 ## FAQ
 

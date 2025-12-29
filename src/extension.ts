@@ -39,6 +39,11 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'ext.statusTooltipStopped': 'WindsurfAutoMcp 已停止',
         'ext.statusTextStopped': '$(server) MCP: 停止',
         'ext.invalidConfigJson': '配置文件 JSON 无效: {path}。请修复 JSON（或删除文件以重新生成）后重试。原始错误: {error}',
+        'ext.hooksInstalled': 'Hooks 已安装/更新（Windsurf / windsurf-next）',
+        'ext.hooksInstallFailed': '安装 Hooks 失败',
+        'ext.hooksUninstalled': 'Hooks 已卸载（已从 hooks.json 移除并删除脚本）',
+        'ext.hooksUninstallFailed': '卸载 Hooks 失败',
+        'ext.invalidHooksJson': 'hooks.json JSON 无效: {path}。请修复 JSON 后重试。原始错误: {error}',
 
         // Tool responses
         'tool.confirmYes': '是',
@@ -213,6 +218,11 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'ext.statusTooltipStopped': 'WindsurfAutoMcp stopped',
         'ext.statusTextStopped': '$(server) MCP: Stopped',
         'ext.invalidConfigJson': 'Invalid JSON in existing config file: {path}. Please fix the JSON (or delete the file to recreate) then run Configure again. Original error: {error}',
+        'ext.hooksInstalled': 'Hooks installed/updated (Windsurf / windsurf-next)',
+        'ext.hooksInstallFailed': 'Failed to install Hooks',
+        'ext.hooksUninstalled': 'Hooks uninstalled (removed from hooks.json and deleted scripts)',
+        'ext.hooksUninstallFailed': 'Failed to uninstall Hooks',
+        'ext.invalidHooksJson': 'Invalid JSON in hooks.json: {path}. Please fix the JSON then retry. Original error: {error}',
 
         // Tool responses
         'tool.confirmYes': 'Yes',
@@ -416,6 +426,166 @@ function getWindsurfMcpConfigPaths(homeDir: string): string[] {
     return paths;
 }
 
+function getWindsurfHooksConfigPaths(homeDir: string): Array<{ variant: string; hooksPath: string }> {
+    const variants = ['windsurf', 'windsurf-next'];
+    return variants.map((variant) => ({
+        variant,
+        hooksPath: path.join(homeDir, '.codeium', variant, 'hooks.json')
+    }));
+}
+
+function buildHooksCommand(variantHooksDir: string): string {
+    const platform = process.platform;
+
+    if (platform === 'win32') {
+        const guardPath = path.join(variantHooksDir, 'windsurf-auto-mcp-guard.ps1');
+        return `powershell -NoProfile -ExecutionPolicy Bypass -File "${guardPath}"`;
+    }
+
+    const guardPath = path.join(variantHooksDir, 'windsurf-auto-mcp-guard.js');
+    // Avoid breaking environments without node: silently no-op if node is missing.
+    return `bash -lc 'command -v node >/dev/null 2>&1 && node "${guardPath}" || exit 0'`;
+}
+
+function installWindsurfHooks() {
+    const homeDir = os.homedir();
+    const items = getWindsurfHooksConfigPaths(homeDir);
+    const installed: string[] = [];
+    const failed: Array<{ path: string; error: string }> = [];
+
+    const guardPs1Source = path.join(extensionContext.extensionPath, 'resources', 'hooks', 'windsurf-auto-mcp-guard.ps1');
+    const guardJsSource = path.join(extensionContext.extensionPath, 'resources', 'hooks', 'windsurf-auto-mcp-guard.js');
+
+    for (const { variant, hooksPath } of items) {
+        try {
+            const variantDir = path.dirname(hooksPath);
+            if (!fs.existsSync(variantDir)) {
+                fs.mkdirSync(variantDir, { recursive: true });
+            }
+
+            const scriptDir = path.join(variantDir, 'hooks', 'windsurf-auto-mcp');
+            if (!fs.existsSync(scriptDir)) {
+                fs.mkdirSync(scriptDir, { recursive: true });
+            }
+
+            // Copy guard scripts
+            if (process.platform === 'win32') {
+                fs.copyFileSync(guardPs1Source, path.join(scriptDir, 'windsurf-auto-mcp-guard.ps1'));
+            } else {
+                fs.copyFileSync(guardJsSource, path.join(scriptDir, 'windsurf-auto-mcp-guard.js'));
+            }
+
+            const command = buildHooksCommand(scriptDir);
+            const desiredHooks = {
+                pre_run_command: [{ command, show_output: true }],
+                pre_write_code: [{ command, show_output: true }],
+                post_cascade_response: [{ command, show_output: true }]
+            } as Record<string, Array<{ command: string; show_output: boolean }>>;
+
+            let config: any = {};
+            if (fs.existsSync(hooksPath)) {
+                const raw = fs.readFileSync(hooksPath, 'utf-8');
+                if (raw.trim()) {
+                    try {
+                        config = JSON.parse(raw);
+                    } catch (e: any) {
+                        const lang = getUiLanguage();
+                        throw new Error(tr('ext.invalidHooksJson', { path: hooksPath, error: e?.message ?? String(e) }, lang));
+                    }
+                }
+            }
+
+            if (!config.hooks || typeof config.hooks !== 'object') config.hooks = {};
+
+            for (const [eventName, hooks] of Object.entries(desiredHooks)) {
+                if (!Array.isArray(config.hooks[eventName])) config.hooks[eventName] = [];
+                for (const hook of hooks) {
+                    const already = config.hooks[eventName].some((h: any) => h && h.command === hook.command);
+                    if (!already) config.hooks[eventName].push(hook);
+                }
+            }
+
+            fs.writeFileSync(hooksPath, JSON.stringify(config, null, 2));
+            installed.push(`${variant}: ${hooksPath}`);
+            outputChannel.appendLine(`Installed hooks (${variant}): ${hooksPath}`);
+        } catch (e: any) {
+            const msg = e?.message ?? String(e);
+            failed.push({ path: hooksPath, error: msg });
+            outputChannel.appendLine(`Install hooks failed (${variant}): ${hooksPath} - ${msg}`);
+        }
+    }
+
+    if (installed.length > 0) {
+        vscode.window.showInformationMessage(tr('ext.hooksInstalled'));
+    } else if (failed.length > 0) {
+        const lang = getUiLanguage();
+        vscode.window.showErrorMessage(
+            tr('ext.hooksInstallFailed', {}, lang) + '\n' + failed.map((f) => `${f.path}: ${f.error}`).join('\n')
+        );
+    }
+}
+
+function uninstallWindsurfHooks() {
+    const homeDir = os.homedir();
+    const items = getWindsurfHooksConfigPaths(homeDir);
+    const removed: string[] = [];
+    const failed: Array<{ path: string; error: string }> = [];
+
+    for (const { variant, hooksPath } of items) {
+        try {
+            const variantDir = path.dirname(hooksPath);
+            const scriptDir = path.join(variantDir, 'hooks', 'windsurf-auto-mcp');
+            const command = buildHooksCommand(scriptDir);
+
+            if (fs.existsSync(hooksPath)) {
+                const raw = fs.readFileSync(hooksPath, 'utf-8');
+                if (raw.trim()) {
+                    let config: any;
+                    try {
+                        config = JSON.parse(raw);
+                    } catch (e: any) {
+                        const lang = getUiLanguage();
+                        throw new Error(tr('ext.invalidHooksJson', { path: hooksPath, error: e?.message ?? String(e) }, lang));
+                    }
+                    if (config?.hooks && typeof config.hooks === 'object') {
+                        const events = ['pre_run_command', 'pre_write_code', 'post_cascade_response'];
+                        for (const ev of events) {
+                            if (!Array.isArray(config.hooks[ev])) continue;
+                            config.hooks[ev] = config.hooks[ev].filter((h: any) => !h || h.command !== command);
+                            if (config.hooks[ev].length === 0) delete config.hooks[ev];
+                        }
+                    }
+                    fs.writeFileSync(hooksPath, JSON.stringify(config, null, 2));
+                }
+            }
+
+            try {
+                if (fs.existsSync(scriptDir)) {
+                    fs.rmSync(scriptDir, { recursive: true, force: true });
+                }
+            } catch (e: any) {
+                outputChannel.appendLine(`Uninstall hooks: failed to remove script dir ${scriptDir}: ${e?.message ?? String(e)}`);
+            }
+
+            removed.push(`${variant}: ${hooksPath}`);
+            outputChannel.appendLine(`Uninstalled hooks (${variant}): ${hooksPath}`);
+        } catch (e: any) {
+            const msg = e?.message ?? String(e);
+            failed.push({ path: hooksPath, error: msg });
+            outputChannel.appendLine(`Uninstall hooks failed (${variant}): ${hooksPath} - ${msg}`);
+        }
+    }
+
+    if (removed.length > 0) {
+        vscode.window.showInformationMessage(tr('ext.hooksUninstalled'));
+    } else if (failed.length > 0) {
+        const lang = getUiLanguage();
+        vscode.window.showErrorMessage(
+            tr('ext.hooksUninstallFailed', {}, lang) + '\n' + failed.map((f) => `${f.path}: ${f.error}`).join('\n')
+        );
+    }
+}
+
 function broadcastLanguageChanged(language: UiLanguage) {
     try {
         sidebarProvider?.postMessage({ type: 'languageChanged', language });
@@ -535,22 +705,34 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.window.registerWebviewViewProvider('mcpServicePanel.sidebarView', sidebarProvider)
     );
 
-    // 注册命令
-    context.subscriptions.push(
-        vscode.commands.registerCommand('mcpService.startServer', () => startServer()),
-        vscode.commands.registerCommand('mcpService.stopServer', () => stopServer()),
-        vscode.commands.registerCommand('mcpService.configWindsurf', () => configureWindsurf()),
-        vscode.commands.registerCommand('mcpService.showStats', () => showStats()),
-        vscode.commands.registerCommand('mcpService.toggleDialog', () => toggleDialog())
-    );
+	    // 注册命令
+	    context.subscriptions.push(
+	        vscode.commands.registerCommand('mcpService.startServer', () => startServer()),
+	        vscode.commands.registerCommand('mcpService.stopServer', () => stopServer()),
+	        vscode.commands.registerCommand('mcpService.configWindsurf', () => configureWindsurf()),
+	        vscode.commands.registerCommand('mcpService.showStats', () => showStats()),
+	        vscode.commands.registerCommand('mcpService.toggleDialog', () => toggleDialog()),
+	        vscode.commands.registerCommand('mcpService.installHooks', () => installWindsurfHooks()),
+	        vscode.commands.registerCommand('mcpService.uninstallHooks', () => uninstallWindsurfHooks())
+	    );
 
-    // 自动启动服务器
-    const config = vscode.workspace.getConfiguration('mcpService');
-    if (config.get('autoStart', true)) {
-        startServer();
-    }
+	    // 自动启动服务器
+	    const config = vscode.workspace.getConfiguration('mcpService');
+	    if (config.get('autoStart', true)) {
+	        startServer();
+	    }
 
-    outputChannel.appendLine(tr('ext.activated'));
+        // Install hooks (user-level) for Windsurf & windsurf-next (best-effort).
+        try {
+            const cfg = vscode.workspace.getConfiguration('mcpService');
+            if (cfg.get('autoInstallHooks', true)) {
+                installWindsurfHooks();
+            }
+        } catch (e: any) {
+            outputChannel.appendLine(`Install hooks error: ${e?.message ?? String(e)}`);
+        }
+
+	    outputChannel.appendLine(tr('ext.activated'));
 }
 
 export function deactivate() {
@@ -1759,6 +1941,14 @@ function configureWindsurf() {
 
     if (written.length > 0) {
         vscode.window.showInformationMessage(tr('ext.configuredWindsurf', { port: currentPort }));
+        try {
+            const cfg = vscode.workspace.getConfiguration('mcpService');
+            if (cfg.get('autoInstallHooks', true)) {
+                installWindsurfHooks();
+            }
+        } catch (e: any) {
+            outputChannel.appendLine(`Configure Windsurf: install hooks error: ${e?.message ?? String(e)}`);
+        }
     } else {
         const lang = getUiLanguage();
         const detail = failed.length ? failed.map((f) => `${f.path}: ${f.error}`).join('\n') : '';

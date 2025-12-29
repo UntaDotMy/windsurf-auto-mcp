@@ -149,18 +149,14 @@ Windsurf 官方支持 **Cascade Hooks**：在 Cascade 读/写代码、执行命�
 
 官方文档：`https://docs.windsurf.com/windsurf/cascade/hooks`
 
-配置文件位置（官方）：
+配置文件位置（官方文档）：
 - 系统级（System-level）：
   - Windows：`C:\ProgramData\Windsurf\hooks.json`
   - macOS：`/Library/Application Support/Windsurf/hooks.json`
   - Linux/WSL：`/etc/windsurf/hooks.json`
-- 用户级（User-level）：
-  - Windsurf（官方）：
-    - Windows：`%USERPROFILE%\.codeium\windsurf\hooks.json`
-    - macOS/Linux：`~/.codeium/windsurf/hooks.json`
-  - Windsurf-next（非官方，但与 `mcp_config.json` 路径规律一致）：
-    - Windows：`%USERPROFILE%\.codeium\windsurf-next\hooks.json`
-    - macOS/Linux：`~/.codeium/windsurf-next/hooks.json`
+- 用户级（User-level，Windsurf 官方）：
+  - Windows：`%USERPROFILE%\.codeium\windsurf\hooks.json`
+  - macOS/Linux：`~/.codeium/windsurf/hooks.json`
 - 工作区级（Workspace-level）：工作区根目录的 `.windsurf/hooks.json`
 
 关键规则（官方）：
@@ -187,16 +183,24 @@ Windsurf 官方支持 **Cascade Hooks**：在 Cascade 读/写代码、执行命�
 - `pre_user_prompt`
 - `post_cascade_response`
 
-本仓库提供了一个可直接参考的示例（不会自动安装）：
+WindsurfAutoMcp 会在扩展激活时（默认开启）自动把一组最小 hooks 写入 **用户级 hooks.json**（不会覆盖你现有 hooks，只会追加缺失项），用于：
+- `pre_run_command` / `pre_write_code`：阻止常见危险命令与敏感写入
+- `post_cascade_response`：在遗漏 `ask_continue` 时给出提示（不阻止）
+
+脚本会复制到（示例，Windows / windsurf-next）：`%USERPROFILE%\.codeium\windsurf-next\hooks\windsurf-auto-mcp\...`
+
+关闭/卸载 hooks：
+- 设置 `mcpService.autoInstallHooks = false`
+- 运行命令：`WindsurfAutoMcp: Uninstall Hooks / 卸载 Hooks`（或手动从 hooks.json 删除对应 command）
+
+你也可以参考仓库里的示例（手动安装）：
 - `examples/windsurf-hooks/hooks.json`
 - `examples/windsurf-hooks/scripts/guard.js`
 
 说明：
-- 用法：把 `examples/windsurf-hooks/hooks.json` 复制到上述任意一个 hooks.json 位置，并把 `command` 里的 `/ABSOLUTE/PATH/...` 改成你本机的绝对路径。
-- 该示例用 `pre_run_command`/`pre_write_code` 阻止典型危险操作；用 `post_cascade_response` 在遗漏 `ask_continue` 时给出警告（不阻止）。
-- Hooks 以当前用户权限执行，风险很高：请使用绝对路径、验证输入 JSON、避免把密钥写入日志。
-- “禁用/卸载扩展”联动：示例脚本会读取 `mcp_config.json` 并探测 `http://localhost:<port>/health`；如果 `windsurf_auto_mcp` 未配置/被禁用/服务不可达（例如扩展已禁用或卸载），脚本会直接退出 0，不再阻止/审计任何动作。
-- windsurf-next：官方文档目前只写了 `windsurf` 路径；如果你使用 windsurf-next 且 user-level hooks 不生效，可尝试把用户级路径改成 `~/.codeium/windsurf-next/hooks.json`（与 `mcp_config.json` 的路径规律一致，非官方保证）。
+- Hooks 以当前用户权限执行，风险很高：请只使用可信脚本；验证 stdin JSON；避免把密钥写入日志。
+- “禁用/卸载扩展”联动：WindsurfAutoMcp 自带的 hook 脚本会读取 `mcp_config.json` 并探测 `http://localhost:<port>/health`；如果 `windsurf_auto_mcp` 未配置/被禁用/服务不可达（例如扩展已禁用或卸载），脚本会直接退出 0，不再阻止/审计任何动作。
+- windsurf-next：官方 Hooks 文档目前只写了 `windsurf` 路径；但 windsurf-next 的 MCP 配置实际使用 `%USERPROFILE%\.codeium\windsurf-next\mcp_config.json`。本扩展会按相同规律在 `%USERPROFILE%\.codeium\windsurf-next\hooks.json` 写入用户级 hooks（属于“推断支持”，非官方承诺）。
 
 ### 快捷键
 
@@ -222,6 +226,8 @@ Windsurf 官方支持 **Cascade Hooks**：在 Cascade 读/写代码、执行命�
 | `mcpService.autoStart` | true | 启动时自动运行服务器 |
 | `mcpService.language` | zh | 界面语言（`zh`/`en`） |
 | `mcpService.defaultReason` | 空 | `ask_continue` 未提供 reason 时使用的默认原因 |
+| `mcpService.autoInstallHooks` | true | 自动安装/更新用户级 hooks.json（Windsurf / windsurf-next） |
+| `mcpService.mode` | http | MCP 服务器模式 |
 
 ## 工作原理
 
