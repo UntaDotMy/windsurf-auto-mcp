@@ -26,7 +26,7 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'ext.noPendingRequests': '当前没有待处理的对话请求。AI 需要先调用 ask_continue 工具。',
         'ext.noPendingRequestsShort': '当前没有待处理的对话请求',
         'ext.defaultsRestored': '已恢复默认设置',
-        'ext.configuredWindsurf': 'WindsurfAutoMcp 已配置到 Windsurf (端口: {port})',
+        'ext.configuredWindsurf': 'WindsurfAutoMcp 已配置到 Windsurf/Windsurf-next (端口: {port})',
         'ext.statsTitle': 'WindsurfAutoMcp 统计:\n',
         'ext.statsLineTotal': '总调用: {total}\n',
         'ext.statsLineAskUser': 'ask_user: {askUser}\n',
@@ -193,7 +193,7 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'ext.noPendingRequests': 'No pending dialog requests. The AI must call ask_continue first.',
         'ext.noPendingRequestsShort': 'No pending dialog requests',
         'ext.defaultsRestored': 'Defaults restored',
-        'ext.configuredWindsurf': 'Configured WindsurfAutoMcp in Windsurf (port: {port})',
+        'ext.configuredWindsurf': 'Configured WindsurfAutoMcp in Windsurf/Windsurf-next (port: {port})',
         'ext.statsTitle': 'WindsurfAutoMcp stats:\n',
         'ext.statsLineTotal': 'Total calls: {total}\n',
         'ext.statsLineAskUser': 'ask_user: {askUser}\n',
@@ -386,6 +386,20 @@ function getDefaultReason(lang: UiLanguage = getUiLanguage()): string {
     const configured = String(config.get<string>('defaultReason', '') || '').trim();
     if (configured) return configured;
     return lang === 'en' ? 'Task completed' : '任务已完成';
+}
+
+function getWindsurfMcpConfigPaths(homeDir: string): string[] {
+    const baseDirs = ['.windsurf', '.codeium'];
+    const variants = ['windsurf', 'windsurf-next'];
+    const paths: string[] = [];
+
+    for (const base of baseDirs) {
+        for (const variant of variants) {
+            paths.push(path.join(homeDir, base, variant, 'mcp_config.json'));
+        }
+    }
+
+    return paths;
 }
 
 function broadcastLanguageChanged(language: UiLanguage) {
@@ -1675,10 +1689,7 @@ function getDialogHtml(requestId: string, type: 'continue' | 'input', title: str
 
 function configureWindsurf() {
     const homeDir = os.homedir();
-    const configPaths = [
-        path.join(homeDir, '.windsurf', 'windsurf', 'mcp_config.json'),
-        path.join(homeDir, '.codeium', 'windsurf', 'mcp_config.json')
-    ];
+    const configPaths = getWindsurfMcpConfigPaths(homeDir);
 
     for (const configPath of configPaths) {
         try {
@@ -1969,14 +1980,19 @@ class SidebarProvider implements vscode.WebviewViewProvider {
             `font-src 'none'`,
             `connect-src 'none'`
         ].join('; ');
-        const configPath = path.join(os.homedir(), '.codeium', 'windsurf', 'mcp_config.json');
+        const homeDir = os.homedir();
+        const configPaths = getWindsurfMcpConfigPaths(homeDir);
         
         // 检测是否已初始化配置
         let isConfigured = false;
         try {
-            if (fs.existsSync(configPath)) {
+            for (const configPath of configPaths) {
+                if (!fs.existsSync(configPath)) continue;
                 const configContent = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-                isConfigured = configContent.mcpServers && configContent.mcpServers.windsurf_auto_mcp;
+                if (configContent?.mcpServers?.windsurf_auto_mcp) {
+                    isConfigured = true;
+                    break;
+                }
             }
         } catch (e) {
             isConfigured = false;

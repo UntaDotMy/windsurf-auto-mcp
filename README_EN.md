@@ -31,6 +31,7 @@ WindsurfAutoMcp uses MCP to:
 - 🖼️ **Multi‑image upload** in dialogs (paste/drag/drop/file picker)
 - 🗑️ **Remove wrong images** before sending (click **×** on the preview)
 - ⚙️ **One‑click Windsurf config** (writes MCP config automatically)
+- ⚙️ **Windsurf-next supported** (writes MCP config for both Windsurf and Windsurf-next)
 - 🎨 **Sidebar control panel**
 - 🌐 **Bilingual UI** (EN/中文 toggle in sidebar + dialogs)
 - ⌨️ **Hotkey**: `Ctrl+M` toggles the dialog
