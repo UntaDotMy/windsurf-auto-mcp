@@ -193,9 +193,11 @@ WindsurfAutoMcp 会在扩展激活时（默认开启）自动把一组最小 hoo
 - 设置 `mcpService.autoInstallHooks = false`
 - 运行命令：`WindsurfAutoMcp: Uninstall Hooks / 卸载 Hooks`（或手动从 hooks.json 删除对应 command）
 
+注意：Hooks 使用 Python（官方文档示例也是 `python3`）。Windows 使用 `python`，macOS/Linux 使用 `python3`；请确保 Python 可用，否则会看到 hook 执行错误提示。
+
 你也可以参考仓库里的示例（手动安装）：
 - `examples/windsurf-hooks/hooks.json`
-- `examples/windsurf-hooks/scripts/guard.js`
+- `examples/windsurf-hooks/scripts/guard.py`
 
 说明：
 - Hooks 以当前用户权限执行，风险很高：请只使用可信脚本；验证 stdin JSON；避免把密钥写入日志。

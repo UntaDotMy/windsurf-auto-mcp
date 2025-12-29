@@ -183,9 +183,11 @@ Disable/uninstall hooks:
 - Set `mcpService.autoInstallHooks = false`
 - Run: `WindsurfAutoMcp: Uninstall Hooks / 卸载 Hooks` (or remove the corresponding `command` entries from hooks.json)
 
+Note: Hooks use Python (the official docs example uses `python3`). Windows uses `python`, macOS/Linux use `python3`; ensure Python is available or you will see hook execution errors.
+
 You can also reference the repo examples for manual installation:
 - `examples/windsurf-hooks/hooks.json`
-- `examples/windsurf-hooks/scripts/guard.js`
+- `examples/windsurf-hooks/scripts/guard.py`
 
 Notes:
 - Hooks run with your user’s full permissions: only use trusted scripts; validate stdin JSON; don’t log secrets.

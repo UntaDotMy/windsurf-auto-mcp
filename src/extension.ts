@@ -435,16 +435,11 @@ function getWindsurfHooksConfigPaths(homeDir: string): Array<{ variant: string; 
 }
 
 function buildHooksCommand(variantHooksDir: string): string {
-    const platform = process.platform;
-
-    if (platform === 'win32') {
-        const guardPath = path.join(variantHooksDir, 'windsurf-auto-mcp-guard.ps1');
-        return `powershell -NoProfile -ExecutionPolicy Bypass -File "${guardPath}"`;
+    const guardPath = path.join(variantHooksDir, 'windsurf-auto-mcp-guard.py');
+    if (process.platform === 'win32') {
+        return `python "${guardPath}"`;
     }
-
-    const guardPath = path.join(variantHooksDir, 'windsurf-auto-mcp-guard.js');
-    // Avoid breaking environments without node: silently no-op if node is missing.
-    return `bash -lc 'command -v node >/dev/null 2>&1 && node "${guardPath}" || exit 0'`;
+    return `python3 "${guardPath}"`;
 }
 
 function installWindsurfHooks() {
@@ -453,8 +448,7 @@ function installWindsurfHooks() {
     const installed: string[] = [];
     const failed: Array<{ path: string; error: string }> = [];
 
-    const guardPs1Source = path.join(extensionContext.extensionPath, 'resources', 'hooks', 'windsurf-auto-mcp-guard.ps1');
-    const guardJsSource = path.join(extensionContext.extensionPath, 'resources', 'hooks', 'windsurf-auto-mcp-guard.js');
+    const guardPySource = path.join(extensionContext.extensionPath, 'resources', 'hooks', 'windsurf-auto-mcp-guard.py');
 
     for (const { variant, hooksPath } of items) {
         try {
@@ -468,12 +462,8 @@ function installWindsurfHooks() {
                 fs.mkdirSync(scriptDir, { recursive: true });
             }
 
-            // Copy guard scripts
-            if (process.platform === 'win32') {
-                fs.copyFileSync(guardPs1Source, path.join(scriptDir, 'windsurf-auto-mcp-guard.ps1'));
-            } else {
-                fs.copyFileSync(guardJsSource, path.join(scriptDir, 'windsurf-auto-mcp-guard.js'));
-            }
+            // Copy guard script (Python)
+            fs.copyFileSync(guardPySource, path.join(scriptDir, 'windsurf-auto-mcp-guard.py'));
 
             const command = buildHooksCommand(scriptDir);
             const desiredHooks = {

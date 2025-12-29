@@ -2,19 +2,19 @@
   "hooks": {
     "pre_run_command": [
       {
-        "command": "node /ABSOLUTE/PATH/TO/windsurf-auto-mcp/examples/windsurf-hooks/scripts/guard.js",
+        "command": "python3 /ABSOLUTE/PATH/TO/windsurf-auto-mcp/examples/windsurf-hooks/scripts/guard.py",
         "show_output": true
       }
     ],
     "pre_write_code": [
       {
-        "command": "node /ABSOLUTE/PATH/TO/windsurf-auto-mcp/examples/windsurf-hooks/scripts/guard.js",
+        "command": "python3 /ABSOLUTE/PATH/TO/windsurf-auto-mcp/examples/windsurf-hooks/scripts/guard.py",
         "show_output": true
       }
     ],
     "post_cascade_response": [
       {
-        "command": "node /ABSOLUTE/PATH/TO/windsurf-auto-mcp/examples/windsurf-hooks/scripts/guard.js",
+        "command": "python3 /ABSOLUTE/PATH/TO/windsurf-auto-mcp/examples/windsurf-hooks/scripts/guard.py",
         "show_output": true
       }
     ]
