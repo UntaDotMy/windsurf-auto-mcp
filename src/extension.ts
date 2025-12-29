@@ -1690,6 +1690,8 @@ function getDialogHtml(requestId: string, type: 'continue' | 'input', title: str
 function configureWindsurf() {
     const homeDir = os.homedir();
     const configPaths = getWindsurfMcpConfigPaths(homeDir);
+    const written: string[] = [];
+    const failed: Array<{ path: string; error: string }> = [];
 
     for (const configPath of configPaths) {
         try {
@@ -1710,14 +1712,32 @@ function configureWindsurf() {
             };
 
             fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+            // Verify write
+            const verify = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+            if (!verify?.mcpServers?.windsurf_auto_mcp) {
+                throw new Error('Config write verification failed (missing mcpServers.windsurf_auto_mcp)');
+            }
+            written.push(configPath);
             outputChannel.appendLine(`Configured Windsurf: ${configPath}`);
             
         } catch (e: any) {
-            outputChannel.appendLine(`Configure Windsurf failed: ${e.message}`);
+            const msg = e?.message ?? String(e);
+            failed.push({ path: configPath, error: msg });
+            outputChannel.appendLine(`Configure Windsurf failed: ${configPath} - ${msg}`);
         }
     }
 
-    vscode.window.showInformationMessage(tr('ext.configuredWindsurf', { port: currentPort }));
+    if (written.length > 0) {
+        vscode.window.showInformationMessage(tr('ext.configuredWindsurf', { port: currentPort }));
+    } else {
+        const lang = getUiLanguage();
+        const detail = failed.length ? failed.map((f) => `${f.path}: ${f.error}`).join('\n') : '';
+        const msg =
+            lang === 'en'
+                ? `Failed to write Windsurf config files.\n${detail}`
+                : `写入 Windsurf 配置失败。\n${detail}`;
+        vscode.window.showErrorMessage(msg);
+    }
 }
 
 // ==================== 状态栏 ====================
