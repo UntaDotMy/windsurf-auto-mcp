@@ -1,7 +1,7 @@
 {
   "name": "windsurf-auto-mcp",
   "displayName": "WindsurfAutoMcp",
-  "description": "Windsurf MCP 自动化工具 - 任务完成确认、用户交互、一键配置",
+  "description": "Windsurf MCP automation - task completion confirmation, user interaction, one-click setup / Windsurf MCP 自动化工具 - 任务完成确认、用户交互、一键配置",
   "version": "1.0.1",
   "publisher": "windsurf-auto-mcp",
   "repository": {
@@ -41,30 +41,30 @@
         {
           "type": "webview",
           "id": "mcpServicePanel.sidebarView",
-          "name": "控制面板"
+          "name": "Control Panel / 控制面板"
         }
       ]
     },
     "commands": [
       {
         "command": "mcpService.startServer",
-        "title": "WindsurfAutoMcp: 启动服务器"
+        "title": "WindsurfAutoMcp: Start Server / 启动服务器"
       },
       {
         "command": "mcpService.stopServer",
-        "title": "WindsurfAutoMcp: 停止服务器"
+        "title": "WindsurfAutoMcp: Stop Server / 停止服务器"
       },
       {
         "command": "mcpService.configWindsurf",
-        "title": "WindsurfAutoMcp: 配置 Windsurf"
+        "title": "WindsurfAutoMcp: Configure Windsurf / 配置 Windsurf"
       },
       {
         "command": "mcpService.showStats",
-        "title": "WindsurfAutoMcp: 显示统计"
+        "title": "WindsurfAutoMcp: Show Stats / 显示统计"
       },
       {
         "command": "mcpService.toggleDialog",
-        "title": "WindsurfAutoMcp: 切换对话框 (Ctrl+M)"
+        "title": "WindsurfAutoMcp: Toggle Dialog (Ctrl+M) / 切换对话框 (Ctrl+M)"
       }
     ],
     "keybindings": [
@@ -80,18 +80,32 @@
         "mcpService.port": {
           "type": "number",
           "default": 3456,
-          "description": "MCP HTTP服务器端口"
+          "description": "MCP HTTP server port / MCP HTTP 服务器端口"
         },
         "mcpService.autoStart": {
           "type": "boolean",
           "default": true,
-          "description": "启动时自动启动服务器"
+          "description": "Auto-start server on launch / 启动时自动启动服务器"
+        },
+        "mcpService.language": {
+          "type": "string",
+          "enum": [
+            "zh",
+            "en"
+          ],
+          "default": "zh",
+          "description": "UI language / 界面语言"
+        },
+        "mcpService.defaultReason": {
+          "type": "string",
+          "default": "",
+          "description": "Default completion reason (used when ask_continue reason is missing) / 默认完成原因（ask_continue 未提供 reason 时使用）"
         },
         "mcpService.mode": {
           "type": "string",
           "enum": ["http", "stdio"],
           "default": "http",
-          "description": "MCP服务器模式：http=HTTP模式，stdio=标准输入输出模式"
+          "description": "MCP server mode: http or stdio / MCP 服务器模式：http 或 stdio"
         }
       }
     }

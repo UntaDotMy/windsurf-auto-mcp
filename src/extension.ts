@@ -9,6 +9,406 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 
+type UiLanguage = 'zh' | 'en';
+
+const I18N: Record<UiLanguage, Record<string, string>> = {
+    zh: {
+        // Extension host
+        'ext.activating': 'WindsurfAutoMcp 扩展正在激活...',
+        'ext.activated': 'WindsurfAutoMcp 扩展激活完成',
+        'ext.deactivated': 'WindsurfAutoMcp 扩展已停用',
+        'ext.serverAlreadyRunning': '服务器已在运行',
+        'ext.serverStarted': 'MCP服务器已启动，端口: {port}',
+        'ext.portInUseTry': '端口被占用，尝试端口: {port}',
+        'ext.serverStopped': 'MCP服务器已停止',
+        'ext.portUpdatedRestart': '端口已更新为 {port}，重启服务器后生效',
+        'ext.settingsSaved': '设置已保存',
+        'ext.noPendingRequests': '当前没有待处理的对话请求。AI 需要先调用 ask_continue 工具。',
+        'ext.noPendingRequestsShort': '当前没有待处理的对话请求',
+        'ext.defaultsRestored': '已恢复默认设置',
+        'ext.configuredWindsurf': 'WindsurfAutoMcp 已配置到 Windsurf (端口: {port})',
+        'ext.statsTitle': 'WindsurfAutoMcp 统计:\n',
+        'ext.statsLineTotal': '总调用: {total}\n',
+        'ext.statsLineAskUser': 'ask_user: {askUser}\n',
+        'ext.statsLineAskContinue': 'ask_continue: {askContinue}\n',
+        'ext.statsLineNotify': 'notify: {notify}\n',
+        'ext.statsLineUploads': '图片上传: {uploads}\n',
+        'ext.statsLineUptime': '运行时间: {uptime} 分钟',
+        'ext.workspaceRequired': '请先打开一个工作区',
+        'ext.statusTooltipRunning': 'WindsurfAutoMcp 运行中 - 端口 {port}\n调用次数: {calls}',
+        'ext.statusTooltipStopped': 'WindsurfAutoMcp 已停止',
+        'ext.statusTextStopped': '$(server) MCP: 停止',
+
+        // Tool responses
+        'tool.confirmYes': '是',
+        'tool.confirmNo': '否',
+        'tool.userChoice': '用户选择: {choice}',
+        'tool.userConfirmed': '用户已确认',
+        'tool.userCanceled': '用户取消了操作',
+        'tool.userInput': '用户输入: {text}',
+        'tool.userUploadedImages': '[用户上传了图片 x{count}]',
+        'tool.userEmpty': '用户提交了空内容',
+        'tool.userContinue': '用户选择继续。',
+        'tool.newInstruction': '\n新指令: {instruction}',
+        'tool.userEnd': '用户选择结束对话。',
+
+        // Webview (shared)
+        'ui.lang.zh': '中文',
+        'ui.lang.en': 'EN',
+        'ui.lang.toggleToZh': '切换到中文',
+        'ui.lang.toggleToEn': 'Switch to English',
+
+        // Sidebar
+        'sidebar.openSourceTitle': '开源与免费',
+        'sidebar.openSourceDesc': '本插件完全免费。开源地址：',
+        'sidebar.openGithub': '打开 GitHub',
+        'sidebar.copyLink': '复制链接',
+        'sidebar.serverTitle': '服务器',
+        'sidebar.running': '运行中',
+        'sidebar.stopped': '已停止',
+        'sidebar.port': '端口',
+        'sidebar.start': '启动',
+        'sidebar.stop': '停止',
+        'sidebar.restart': '重启',
+        'sidebar.chatTitle': '对话',
+        'sidebar.openDialog': '打开对话窗口',
+        'sidebar.shortcut': '快捷键:',
+        'sidebar.promptTitle': '提示语',
+        'sidebar.promptText': '任务完成后请调用 ask_continue 询问是否继续。',
+        'sidebar.promptCopyText': [
+            '强制规则（必须严格遵守）：当你完成一个任务时，必须调用 WindsurfAutoMcp 的 ask_continue 工具询问用户是否继续，并提供清晰的完成原因/说明。',
+            '',
+            '你现在扮演一个“完整的软件工程部门”（跨职能团队）来协作完成用户任务，适用于任何语言/框架/平台。',
+            '',
+            '团队协作（必须做到）：像一个团队一样协作，不要单点思维；在输出中体现“协同结论”。',
+            '',
+            '开始前必须做：先读“目标/现状/约束”。在做任何修改前，必须先阅读目标文件/相关代码/配置/日志，理解当前状态与约束，再做决策。',
+            '',
+            '计划与拆解（必须做到）：对任何“大功能/复杂任务”，必须先输出一个计划（Plan），并把它拆成 TODO 小任务（可并行/可验证）。每完成一项就更新进度。',
+            '',
+            '不信任知识（必须做到）：不要依赖你已有的知识库来拍脑袋。你的知识可能过时且有害。遇到关键决策（API/配置/版本/安全/安装）必须先研究，再行动。',
+            '',
+            '团队角色（你需要在脑中协作，但对外输出要简洁一致）：',
+            '- 需求负责人（PM）：澄清目标、范围、验收标准、约束与优先级。',
+            '- 技术负责人（Tech Lead）：制定方案与里程碑，控制复杂度与风险，保证可维护性。',
+            '- 开发工程师（Dev）：实现最小正确改动，遵循项目规范，避免不必要的重构。',
+            '- 测试/质量（QA）：设计验证步骤与回归点，优先运行已有测试/构建，必要时补充测试。',
+            '- 安全（Security）：检查输入/输出边界、权限、注入、依赖风险、敏感信息泄露。',
+            '- 性能（Perf）：识别热点与不必要开销，避免引入明显性能退化。',
+            '- 文档（Docs）：更新 README/配置/使用说明，确保用户能按步骤复现。',
+            '- 发布（Release）：给出升级/回滚说明，避免破坏性变更。',
+            '',
+            '协作工作流（必须遵循）：',
+            '1) 读目标/读现状：先阅读目标文件与相关代码，确认当前行为与期望行为。',
+            '2) 需求澄清：列出你理解的目标/不确定点；缺关键输入就先问 1-3 个问题。',
+            '3) 计划与 TODO：先给 Plan + TODO（大任务必须拆分），每个 TODO 都要可验证。',
+            '4) 研究取证（不要凭空猜）：',
+            '   - 优先查“官方文档/官方 README/官方发布说明/源码”来决定用法与安装方式。',
+            '   - 对第三方库/插件/包：先确认最新版用法与破坏性变更，再决定是否升级/替换。',
+            '   - 如果可用，请使用 Context7（或类似“官方文档检索”工具）获取最新版本文档后再实现/安装。',
+            '   - 使用 web search 时：把 2024 视为过旧；默认从 2025 年 10 月开始筛选/优先选择更新来源（≥ 2025-10）。',
+            '   - 如果搜索结果泛泛而谈、与问题无关、无法落地：必须调整检索词继续搜索，直到拿到可执行的具体信息（例如确切 API、配置项、版本要求、路径/命令）。',
+            '   - 若只能找到旧资料：必须交叉验证（至少 2 个独立来源或对照源码），并在结论中标明不确定性与替代方案。',
+            '5) 整理与结构（必须做到）：动手前先整理入口与模块边界；新增/修改代码必须模块化、易读、易维护（但不要做与任务无关的重构）。',
+            '6) 实现：小步提交、保持一致风格；优先修根因；避免引入框架绑定假设。',
+            '7) 代码评审（必须做，像 PR 一样）：检查 gaps、正确性、边界条件、错误处理、安全（注入/权限/泄露）、性能（是否有泄漏/热点）、兼容性。',
+            '8) 验证：能跑就跑（build/test/lint）；无法运行则给出用户可执行的验证步骤与期望结果。',
+            '9) 交付：总结改动、给出验证命令/路径、列出风险与回滚方案。',
+            '',
+            '依赖与生态最佳实践：',
+            '- 如果需要新增依赖：优先选择维护活跃、体积小、常用且与需求匹配的方案；并说明原因。',
+            '- 如果发现依赖过旧/有安全风险：先用官方发布说明/迁移指南确认升级路径，再提出升级方案（避免盲升大版本）。',
+            '- 任何安装/升级建议必须给出依据（官方文档/发布说明）与验证步骤。'
+        ].join('\\n'),
+        'sidebar.copy': '复制',
+        'sidebar.windsurfConfigTitle': 'Windsurf 配置',
+        'sidebar.writeConfig': '写入 Windsurf 配置',
+        'sidebar.configWritten': '✓ 已写入配置',
+        'sidebar.resetDefaultPort': '恢复默认端口',
+        'sidebar.configHintWritten': '配置已写入，请重启 Windsurf 生效',
+        'sidebar.configHintNotWritten': '点击按钮将 MCP 服务信息写入 Windsurf 配置文件',
+        'sidebar.statsTitle': '统计',
+        'sidebar.totalCalls': '总调用',
+        'sidebar.settingsTitle': '设置',
+        'sidebar.autoStart': '启动时自动启动服务器',
+        'sidebar.defaultReason': '默认完成原因',
+        'sidebar.defaultReasonPlaceholder': '例如：任务已完成',
+        'sidebar.saveSettings': '保存设置',
+
+        // Sidebar toasts
+        'toast.startingServer': '正在启动服务器...',
+        'toast.serverStopped': '服务器已停止',
+        'toast.restartingServer': '正在重启服务器...',
+        'toast.portCopied': '端口号已复制',
+        'toast.checkingPending': '正在检查待处理请求...',
+        'toast.promptCopied': '提示语已复制',
+        'toast.openingGithub': '正在打开 GitHub...',
+        'toast.linkCopied': '链接已复制',
+        'toast.initializing': '正在初始化...',
+        'toast.defaultsRestored': '已恢复默认设置',
+        'toast.continueSent': '已发送继续指令',
+        'toast.conversationEnded': '对话已结束',
+        'toast.submitted': '已提交',
+        'toast.invalidPort': '端口范围需在 1024-65535',
+        'toast.settingsSaved': '设置已保存',
+        'toast.portUpdated': '端口已更新（重启后生效）',
+
+        // Panel dialog
+        'panel.confirmTitle': '继续对话？',
+        'panel.confirmSub': 'AI 请求您的确认',
+        'panel.inputSub': '请输入您的回复',
+        'panel.reasonLabelContinue': '任务完成说明',
+        'panel.reasonLabelInput': '消息内容',
+        'panel.replyLabelContinue': '新指令（可选）',
+        'panel.replyLabelInput': '您的回复',
+        'panel.replyPlaceholderContinue': '输入新指令或留空继续...',
+        'panel.replyPlaceholderInput': '输入内容...',
+        'panel.imageLabel': '附加图片（可选）',
+        'panel.pasteOrDrop': 'Ctrl+V 粘贴 或 拖放图片到此处',
+        'panel.chooseImage': '📁 选择图片文件',
+        'panel.submitContinue': '✓ 继续执行',
+        'panel.submit': '✓ 提交',
+        'panel.end': '✗ 结束对话',
+        'panel.cancel': '✗ 取消',
+        'panel.shortcutsConfirm': '确认',
+        'panel.shortcutsNewline': '换行',
+        'panel.shortcutsCancel': '取消',
+        'panel.toast.imageLoaded': '图片已加载',
+        'panel.toast.imageRemoved': '已移除图片',
+        'panel.toast.imageTooLarge': '图片过大，已跳过',
+        'panel.toast.tooManyImages': '图片数量过多，已跳过',
+        'panel.removeImage': '移除图片'
+    },
+    en: {
+        // Extension host
+        'ext.activating': 'Activating WindsurfAutoMcp...',
+        'ext.activated': 'WindsurfAutoMcp activated',
+        'ext.deactivated': 'WindsurfAutoMcp deactivated',
+        'ext.serverAlreadyRunning': 'Server is already running',
+        'ext.serverStarted': 'MCP server started on port: {port}',
+        'ext.portInUseTry': 'Port in use, trying port: {port}',
+        'ext.serverStopped': 'MCP server stopped',
+        'ext.portUpdatedRestart': 'Port updated to {port}. Restart the server to apply.',
+        'ext.settingsSaved': 'Settings saved',
+        'ext.noPendingRequests': 'No pending dialog requests. The AI must call ask_continue first.',
+        'ext.noPendingRequestsShort': 'No pending dialog requests',
+        'ext.defaultsRestored': 'Defaults restored',
+        'ext.configuredWindsurf': 'Configured WindsurfAutoMcp in Windsurf (port: {port})',
+        'ext.statsTitle': 'WindsurfAutoMcp stats:\n',
+        'ext.statsLineTotal': 'Total calls: {total}\n',
+        'ext.statsLineAskUser': 'ask_user: {askUser}\n',
+        'ext.statsLineAskContinue': 'ask_continue: {askContinue}\n',
+        'ext.statsLineNotify': 'notify: {notify}\n',
+        'ext.statsLineUploads': 'Image uploads: {uploads}\n',
+        'ext.statsLineUptime': 'Uptime: {uptime} minutes',
+        'ext.workspaceRequired': 'Please open a workspace first',
+        'ext.statusTooltipRunning': 'WindsurfAutoMcp running - port {port}\nCalls: {calls}',
+        'ext.statusTooltipStopped': 'WindsurfAutoMcp stopped',
+        'ext.statusTextStopped': '$(server) MCP: Stopped',
+
+        // Tool responses
+        'tool.confirmYes': 'Yes',
+        'tool.confirmNo': 'No',
+        'tool.userChoice': 'User choice: {choice}',
+        'tool.userConfirmed': 'User confirmed',
+        'tool.userCanceled': 'User canceled',
+        'tool.userInput': 'User input: {text}',
+        'tool.userUploadedImages': '[User uploaded images x{count}]',
+        'tool.userEmpty': 'User submitted empty content',
+        'tool.userContinue': 'User chose to continue.',
+        'tool.newInstruction': '\nNew instruction: {instruction}',
+        'tool.userEnd': 'User chose to end the conversation.',
+
+        // Webview (shared)
+        'ui.lang.zh': '中文',
+        'ui.lang.en': 'EN',
+        'ui.lang.toggleToZh': '切换到中文',
+        'ui.lang.toggleToEn': 'Switch to English',
+
+        // Sidebar
+        'sidebar.openSourceTitle': 'Open Source',
+        'sidebar.openSourceDesc': 'This extension is free and open-source. Repo:',
+        'sidebar.openGithub': 'Open GitHub',
+        'sidebar.copyLink': 'Copy link',
+        'sidebar.serverTitle': 'Server',
+        'sidebar.running': 'Running',
+        'sidebar.stopped': 'Stopped',
+        'sidebar.port': 'Port',
+        'sidebar.start': 'Start',
+        'sidebar.stop': 'Stop',
+        'sidebar.restart': 'Restart',
+        'sidebar.chatTitle': 'Conversation',
+        'sidebar.openDialog': 'Open dialog',
+        'sidebar.shortcut': 'Shortcut:',
+        'sidebar.promptTitle': 'Prompt',
+        'sidebar.promptText': 'After finishing a task, call ask_continue to confirm next steps.',
+        'sidebar.promptCopyText': [
+            'Hard rule (must follow): When you finish a task, you MUST call WindsurfAutoMcp ask_continue and include a clear completion reason.',
+            '',
+            'You operate as a full "software engineering department" (cross‑functional team) to complete tasks across any language/framework/platform.',
+            '',
+            'Collaboration (must): work like a real team, not a single thinker; your output should reflect a consolidated team conclusion.',
+            '',
+            'Before anything: read the target first. Before making decisions or edits, read the relevant files/config/logs to understand the current state and constraints.',
+            '',
+            'Planning & TODO breakdown (must): for any big feature/complex task, produce a Plan and break it into small TODOs (verifiable, trackable). Update progress as you go.',
+            '',
+            'Do not trust your knowledge (must): your knowledge can be outdated and harmful. For any important decision (API/config/version/security/install), research first, then act.',
+            '',
+            'Team roles (coordinate internally; keep external output concise):',
+            '- PM: clarify goals, scope, acceptance criteria, constraints, priorities.',
+            '- Tech Lead: propose an executable plan, manage risk/complexity, ensure maintainability.',
+            '- Dev: implement minimal correct changes; follow repo conventions; avoid unnecessary refactors.',
+            '- QA: define verification steps and regression points; run build/tests when possible; add tests when appropriate.',
+            '- Security: validate boundaries, permissions, injection risks, dependency risks, secrets handling.',
+            '- Performance: avoid regressions; remove needless work; measure when relevant.',
+            '- Docs: keep README/config/usage accurate and reproducible.',
+            '- Release: provide upgrade/rollback notes; avoid breaking changes.',
+            '',
+            'Workflow (must follow):',
+            '1) Read target/current state: read the target files and related code to confirm current vs expected behavior.',
+            '2) Clarify: restate goals + unknowns; if key inputs are missing, ask 1–3 targeted questions.',
+            '3) Plan + TODOs: provide a plan and a TODO breakdown for big tasks; each TODO must be verifiable.',
+            '4) Research (no guessing):',
+            '   - Prefer official docs/official README/release notes/source code for usage and installation decisions.',
+            '   - For any package/plugin/library: confirm latest usage + breaking changes before upgrading/replacing.',
+            '   - If available, use Context7 (or an equivalent official-docs tool) to fetch the latest docs before implementing/installing.',
+            '   - When using web search: treat 2024 as outdated; default to sources updated from Oct 2025 onward (≥ 2025-10).',
+            '   - If results are generic or not actionable: refine the query and keep searching until you get specific, executable details (exact API/config/version/path/commands).',
+            '   - If only older sources exist: cross-check (2+ independent sources or confirm in code) and clearly label uncertainty + alternatives.',
+            '5) Tidy & structure (must): before coding, identify boundaries and keep changes modular, readable, manageable, maintainable (avoid unrelated refactors).',
+            '6) Implement: small, focused changes; fix root causes; avoid framework-specific assumptions.',
+            '7) Code review (must, like a PR): check gaps, correctness, edge cases, error handling, security (injection/permissions/leaks), performance (leaks/hot paths), compatibility.',
+            '8) Verify: run build/tests/lint when possible; otherwise provide concrete user-run verification steps and expected results.',
+            '9) Deliver: summarize changes, verification commands/paths, risks, and rollback plan.',
+            '',
+            'Dependencies best practices:',
+            '- If adding dependencies: prefer actively maintained, small, widely used options that match the requirement; explain why.',
+            '- If a dependency is outdated or risky: consult official release notes/migration guides before proposing upgrades (avoid blind major bumps).',
+            '- Any install/upgrade recommendation must include evidence (official docs/release notes) and verification steps.'
+        ].join('\\n'),
+        'sidebar.copy': 'Copy',
+        'sidebar.windsurfConfigTitle': 'Windsurf Config',
+        'sidebar.writeConfig': 'Write Windsurf config',
+        'sidebar.configWritten': '✓ Config written',
+        'sidebar.resetDefaultPort': 'Reset default port',
+        'sidebar.configHintWritten': 'Config written. Restart Windsurf to apply.',
+        'sidebar.configHintNotWritten': 'Click to write MCP server info into Windsurf config.',
+        'sidebar.statsTitle': 'Stats',
+        'sidebar.totalCalls': 'Total calls',
+        'sidebar.settingsTitle': 'Settings',
+        'sidebar.autoStart': 'Auto-start server on launch',
+        'sidebar.defaultReason': 'Default completion reason',
+        'sidebar.defaultReasonPlaceholder': 'e.g. Task completed',
+        'sidebar.saveSettings': 'Save settings',
+
+        // Sidebar toasts
+        'toast.startingServer': 'Starting server...',
+        'toast.serverStopped': 'Server stopped',
+        'toast.restartingServer': 'Restarting server...',
+        'toast.portCopied': 'Port copied',
+        'toast.checkingPending': 'Checking pending requests...',
+        'toast.promptCopied': 'Prompt copied',
+        'toast.openingGithub': 'Opening GitHub...',
+        'toast.linkCopied': 'Link copied',
+        'toast.initializing': 'Initializing...',
+        'toast.defaultsRestored': 'Defaults restored',
+        'toast.continueSent': 'Continue sent',
+        'toast.conversationEnded': 'Conversation ended',
+        'toast.submitted': 'Submitted',
+        'toast.invalidPort': 'Port must be between 1024 and 65535',
+        'toast.settingsSaved': 'Settings saved',
+        'toast.portUpdated': 'Port updated (restart to apply)',
+
+        // Panel dialog
+        'panel.confirmTitle': 'Continue?',
+        'panel.confirmSub': 'The AI is asking for confirmation',
+        'panel.inputSub': 'Please enter your reply',
+        'panel.reasonLabelContinue': 'Completion note',
+        'panel.reasonLabelInput': 'Message',
+        'panel.replyLabelContinue': 'New instruction (optional)',
+        'panel.replyLabelInput': 'Your reply',
+        'panel.replyPlaceholderContinue': 'Enter a new instruction or leave empty to continue...',
+        'panel.replyPlaceholderInput': 'Enter text...',
+        'panel.imageLabel': 'Attach images (optional)',
+        'panel.pasteOrDrop': 'Ctrl+V to paste or drag & drop images here',
+        'panel.chooseImage': '📁 Choose images',
+        'panel.submitContinue': '✓ Continue',
+        'panel.submit': '✓ Submit',
+        'panel.end': '✗ End',
+        'panel.cancel': '✗ Cancel',
+        'panel.shortcutsConfirm': 'Confirm',
+        'panel.shortcutsNewline': 'New line',
+        'panel.shortcutsCancel': 'Cancel',
+        'panel.toast.imageLoaded': 'Image loaded',
+        'panel.toast.imageRemoved': 'Image removed',
+        'panel.toast.imageTooLarge': 'Image too large, skipped',
+        'panel.toast.tooManyImages': 'Too many images, skipped',
+        'panel.removeImage': 'Remove image'
+    }
+};
+
+const WEBVIEW_I18N: Record<UiLanguage, Record<string, string>> = ((): Record<UiLanguage, Record<string, string>> => {
+    const prefixes = ['ui.', 'sidebar.', 'toast.', 'panel.'];
+    const pick = (lang: UiLanguage) => {
+        const entries = Object.entries(I18N[lang]).filter(([key]) => prefixes.some((p) => key.startsWith(p)));
+        return Object.fromEntries(entries);
+    };
+    return { zh: pick('zh'), en: pick('en') };
+})();
+
+function getUiLanguage(): UiLanguage {
+    const config = vscode.workspace.getConfiguration('mcpService');
+    const lang = config.get<string>('language', 'zh');
+    return lang === 'en' ? 'en' : 'zh';
+}
+
+function tr(key: string, vars: Record<string, string | number> = {}, lang: UiLanguage = getUiLanguage()): string {
+    const template = I18N[lang][key] ?? I18N.zh[key] ?? key;
+    return template.replace(/\{(\w+)\}/g, (_, name) => String(vars[name] ?? `{${name}}`));
+}
+
+function safeJson(value: unknown): string {
+    return JSON.stringify(value).replace(/</g, '\\u003c');
+}
+
+function getNonce(length = 32): string {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let result = '';
+    for (let i = 0; i < length; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+}
+
+function getDefaultReason(lang: UiLanguage = getUiLanguage()): string {
+    const config = vscode.workspace.getConfiguration('mcpService');
+    const configured = String(config.get<string>('defaultReason', '') || '').trim();
+    if (configured) return configured;
+    return lang === 'en' ? 'Task completed' : '任务已完成';
+}
+
+function broadcastLanguageChanged(language: UiLanguage) {
+    try {
+        sidebarProvider?.postMessage({ type: 'languageChanged', language });
+    } catch {
+        // ignore
+    }
+    try {
+        dialogPanel?.webview.postMessage({ type: 'languageChanged', language });
+    } catch {
+        // ignore
+    }
+}
+
+async function setUiLanguage(language: UiLanguage) {
+    const normalized: UiLanguage = language === 'en' ? 'en' : 'zh';
+    const config = vscode.workspace.getConfiguration('mcpService');
+    await config.update('language', normalized, vscode.ConfigurationTarget.Global);
+    updateStatusBar();
+    broadcastLanguageChanged(normalized);
+}
+
 // ==================== 全局变量 ====================
 
 let outputChannel: vscode.OutputChannel;
@@ -43,41 +443,41 @@ const pendingRequests = new Map<string, {
 const TOOLS = [
     {
         name: 'ask_user',
-        description: '请求用户输入或确认。会弹出对话框让用户输入内容或做出选择。支持图片上传。',
+        description: 'Request user input/confirmation; opens a dialog (supports image upload) / 请求用户输入或确认：弹出对话框（支持图片上传）',
         inputSchema: {
             type: 'object',
             properties: {
-                title: { type: 'string', description: '对话框标题' },
-                message: { type: 'string', description: '显示给用户的消息' },
+                title: { type: 'string', description: 'Dialog title / 对话框标题' },
+                message: { type: 'string', description: 'Message shown to user / 显示给用户的消息' },
                 type: { 
                     type: 'string', 
                     enum: ['input', 'confirm', 'info'],
-                    description: '对话框类型：input=输入框，confirm=确认框，info=信息提示'
+                    description: 'Dialog type: input/confirm/info / 对话框类型：input=输入框，confirm=确认框，info=信息提示'
                 },
-                allowImage: { type: 'boolean', description: '是否允许上传图片' }
+                allowImage: { type: 'boolean', description: 'Allow image upload / 是否允许上传图片' }
             },
             required: ['message']
         }
     },
     {
         name: 'notify',
-        description: '向用户发送通知消息。',
+        description: 'Send a notification to the user / 向用户发送通知消息',
         inputSchema: {
             type: 'object',
             properties: {
-                message: { type: 'string', description: '通知内容' },
-                level: { type: 'string', enum: ['info', 'warning', 'error'], description: '通知级别' }
+                message: { type: 'string', description: 'Notification message / 通知内容' },
+                level: { type: 'string', enum: ['info', 'warning', 'error'], description: 'Notification level / 通知级别' }
             },
             required: ['message']
         }
     },
     {
         name: 'ask_continue',
-        description: '当完成任务时，必须调用此工具询问用户是否继续。用户可以选择继续并提供新的指令。',
+        description: 'Ask whether to continue after finishing a task / 任务完成后询问用户是否继续（可提供新指令）',
         inputSchema: {
             type: 'object',
             properties: {
-                reason: { type: 'string', description: '任务完成的原因或说明' }
+                reason: { type: 'string', description: 'Completion reason / 任务完成的原因或说明' }
             },
             required: ['reason']
         }
@@ -89,7 +489,7 @@ const TOOLS = [
 export function activate(context: vscode.ExtensionContext) {
     extensionContext = context;
     outputChannel = vscode.window.createOutputChannel('WindsurfAutoMcp');
-    outputChannel.appendLine('WindsurfAutoMcp 扩展正在激活...');
+    outputChannel.appendLine(tr('ext.activating'));
 
     // 加载统计数据
     loadStats(context);
@@ -122,19 +522,19 @@ export function activate(context: vscode.ExtensionContext) {
         startServer();
     }
 
-    outputChannel.appendLine('WindsurfAutoMcp 扩展激活完成');
+    outputChannel.appendLine(tr('ext.activated'));
 }
 
 export function deactivate() {
     stopServer();
-    outputChannel?.appendLine('WindsurfAutoMcp 扩展已停用');
+    outputChannel?.appendLine(tr('ext.deactivated'));
 }
 
 // ==================== 服务器管理 ====================
 
 async function startServer() {
     if (mcpServer) {
-        outputChannel.appendLine('服务器已在运行');
+        outputChannel.appendLine(tr('ext.serverAlreadyRunning'));
         return;
     }
 
@@ -145,20 +545,30 @@ async function startServer() {
 
     await new Promise<void>((resolve, reject) => {
         mcpServer!.listen(currentPort, 'localhost', () => {
-            outputChannel.appendLine(`MCP服务器已启动，端口: ${currentPort}`);
+            outputChannel.appendLine(tr('ext.serverStarted', { port: currentPort }));
             resolve();
         });
 
         mcpServer!.on('error', (err: NodeJS.ErrnoException) => {
             if (err.code === 'EADDRINUSE') {
                 currentPort++;
-                outputChannel.appendLine(`端口被占用，尝试端口: ${currentPort}`);
+                outputChannel.appendLine(tr('ext.portInUseTry', { port: currentPort }));
                 mcpServer!.listen(currentPort, 'localhost');
             } else {
                 reject(err);
             }
         });
     });
+
+    // If we auto-incremented due to port conflicts, keep config in sync.
+    try {
+        const configuredPort = config.get('port', 3456);
+        if (configuredPort !== currentPort) {
+            await config.update('port', currentPort, vscode.ConfigurationTarget.Global);
+        }
+    } catch {
+        // ignore
+    }
 
     updateStatusBar();
     sidebarProvider?.updateStatus(true, currentPort);
@@ -174,8 +584,9 @@ function stopServer() {
         mcpServer = null;
         deletePortFile();
         updateStatusBar();
-        sidebarProvider?.updateStatus(false, 0);
-        outputChannel.appendLine('MCP服务器已停止');
+        const configuredPort = vscode.workspace.getConfiguration('mcpService').get('port', 3456);
+        sidebarProvider?.updateStatus(false, configuredPort);
+        outputChannel.appendLine(tr('ext.serverStopped'));
     }
 }
 
@@ -223,9 +634,26 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse) {
     }
 
     if (req.method === 'POST') {
+        const maxBodyBytes = 1024 * 1024; // 1MB
+        let receivedBytes = 0;
         let body = '';
-        req.on('data', chunk => body += chunk);
-        req.on('end', () => handleJSONRPC(body, res));
+        let aborted = false;
+
+        req.on('data', (chunk: Buffer) => {
+            receivedBytes += chunk.length;
+            if (receivedBytes > maxBodyBytes) {
+                aborted = true;
+                res.writeHead(413, { 'Content-Type': 'text/plain' });
+                res.end('Payload Too Large');
+                req.destroy();
+                return;
+            }
+            body += chunk.toString('utf8');
+        });
+        req.on('end', () => {
+            if (aborted) return;
+            handleJSONRPC(body, res);
+        });
         return;
     }
 
@@ -314,26 +742,31 @@ async function handleToolCall(name: string, args: any): Promise<any> {
     // 保存统计数据并刷新界面
     saveStats();
     updateStatusBar();
-    sidebarProvider?.refreshContent();
+    const configuredPort = vscode.workspace.getConfiguration('mcpService').get('port', 3456);
+    sidebarProvider?.updateStatus(mcpServer !== null, mcpServer ? currentPort : configuredPort);
     
     return result;
 }
 
 async function handleAskUser(args: any): Promise<any> {
     const { title, message, type = 'input', allowImage } = args;
+    const lang = getUiLanguage();
 
     if (type === 'confirm') {
+        const yes = tr('tool.confirmYes', {}, lang);
+        const no = tr('tool.confirmNo', {}, lang);
         const result = await vscode.window.showInformationMessage(
             message,
             { modal: true },
-            '是', '否'
+            yes, no
         );
-        return { content: [{ type: 'text', text: `用户选择: ${result === '是' ? '是' : '否'}` }] };
+        const choice = result === yes ? yes : no;
+        return { content: [{ type: 'text', text: tr('tool.userChoice', { choice }, lang) }] };
     }
 
     if (type === 'info') {
         await vscode.window.showInformationMessage(message);
-        return { content: [{ type: 'text', text: '用户已确认' }] };
+        return { content: [{ type: 'text', text: tr('tool.userConfirmed', {}, lang) }] };
     }
 
     // input type - 使用webview获取更丰富的输入
@@ -349,13 +782,13 @@ async function handleAskUser(args: any): Promise<any> {
                 pendingRequests.delete(requestId);
                 // 格式化为 MCP 协议要求的响应格式
                 if (value === null || value === undefined) {
-                    resolve({ content: [{ type: 'text', text: '用户取消了操作' }] });
+                    resolve({ content: [{ type: 'text', text: tr('tool.userCanceled', {}, lang) }] });
                 } else {
                     const content: any[] = [];
                     // 处理文本输入
                     const text = typeof value === 'string' ? value : (value.text || '');
                     if (text) {
-                        content.push({ type: 'text', text: `用户输入: ${text}` });
+                        content.push({ type: 'text', text: tr('tool.userInput', { text }, lang) });
                     }
                     // 处理图片（如果有）
                     const images: any[] = Array.isArray(value.images)
@@ -376,17 +809,17 @@ async function handleAskUser(args: any): Promise<any> {
                         }
                     }
                     if (images.length > 0) {
-                        content.push({ type: 'text', text: `[用户上传了图片 x${images.length}]` });
+                        content.push({ type: 'text', text: tr('tool.userUploadedImages', { count: images.length }, lang) });
                     }
                     if (content.length === 0) {
-                        content.push({ type: 'text', text: '用户提交了空内容' });
+                        content.push({ type: 'text', text: tr('tool.userEmpty', {}, lang) });
                     }
                     resolve({ content });
                 }
             },
             reject: () => {
                 pendingRequests.delete(requestId);
-                resolve({ content: [{ type: 'text', text: '用户取消了操作' }] });
+                resolve({ content: [{ type: 'text', text: tr('tool.userCanceled', {}, lang) }] });
             },
             timestamp: Date.now()
         });
@@ -397,6 +830,7 @@ async function handleAskUser(args: any): Promise<any> {
 
 async function handleNotify(args: any): Promise<any> {
     const { message, level = 'info' } = args;
+    const lang = getUiLanguage();
 
     if (level === 'error') {
         vscode.window.showErrorMessage(message);
@@ -406,16 +840,19 @@ async function handleNotify(args: any): Promise<any> {
         vscode.window.showInformationMessage(message);
     }
 
-    return { content: [{ type: 'text', text: `通知已发送: ${message}` }] };
+    const text = lang === 'en' ? `Notification sent: ${message}` : `通知已发送: ${message}`;
+    return { content: [{ type: 'text', text }] };
 }
 
 async function handleAskContinue(args: any): Promise<any> {
     const { reason } = args;
+    const lang = getUiLanguage();
+    const resolvedReason = String(reason || '').trim() || getDefaultReason(lang);
     
     const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
     return new Promise((resolve) => {
-        sidebarProvider?.showContinueDialog(requestId, reason);
+        sidebarProvider?.showContinueDialog(requestId, resolvedReason);
         
         pendingRequests.set(requestId, {
             resolve: (value: any) => {
@@ -423,9 +860,9 @@ async function handleAskContinue(args: any): Promise<any> {
                 // 格式化为 MCP 协议要求的响应格式
                 if (value && value.continue) {
                     const content: any[] = [];
-                    let text = '用户选择继续。';
+                    let text = tr('tool.userContinue', {}, lang);
                     if (value.instruction) {
-                        text += `\n新指令: ${value.instruction}`;
+                        text += tr('tool.newInstruction', { instruction: value.instruction }, lang);
                     }
                     content.push({ type: 'text', text });
                     // 处理图片（如果有）
@@ -447,16 +884,16 @@ async function handleAskContinue(args: any): Promise<any> {
                         }
                     }
                     if (images.length > 0) {
-                        content.push({ type: 'text', text: `[用户上传了图片 x${images.length}]` });
+                        content.push({ type: 'text', text: tr('tool.userUploadedImages', { count: images.length }, lang) });
                     }
                     resolve({ content });
                 } else {
-                    resolve({ content: [{ type: 'text', text: '用户选择结束对话。' }] });
+                    resolve({ content: [{ type: 'text', text: tr('tool.userEnd', {}, lang) }] });
                 }
             },
             reject: () => {
                 pendingRequests.delete(requestId);
-                resolve({ content: [{ type: 'text', text: '用户选择结束对话。' }] });
+                resolve({ content: [{ type: 'text', text: tr('tool.userEnd', {}, lang) }] });
             },
             timestamp: Date.now()
         });
@@ -493,11 +930,12 @@ function toggleDialog() {
     if (pendingRequests.size > 0) {
         const entries = Array.from(pendingRequests.entries());
         const [latestRequestId] = entries[entries.length - 1];
-        const reason = lastDialogReason || '请选择是否继续对话';
+        const lang = getUiLanguage();
+        const reason = lastDialogReason || (lang === 'en' ? 'Please choose whether to continue.' : '请选择是否继续对话');
         outputChannel.appendLine(`[toggleDialog] 打开对话框，请求ID: ${latestRequestId}`);
-        showDialogPanel(latestRequestId, 'continue', '继续对话', reason, true);
+        showDialogPanel(latestRequestId, 'continue', tr('panel.confirmTitle', {}, lang), reason, true);
     } else {
-        vscode.window.showInformationMessage('当前没有待处理的对话请求');
+        vscode.window.showInformationMessage(tr('ext.noPendingRequestsShort'));
     }
 }
 
@@ -513,7 +951,7 @@ function showDialogPanel(requestId: string, type: 'continue' | 'input', title: s
 
     dialogPanel = vscode.window.createWebviewPanel(
         'mcpDialog',
-        type === 'continue' ? '继续对话？' : title,
+        type === 'continue' ? tr('panel.confirmTitle') : title,
         vscode.ViewColumn.Two,
         {
             enableScripts: true,
@@ -523,7 +961,7 @@ function showDialogPanel(requestId: string, type: 'continue' | 'input', title: s
 
     dialogPanel.webview.html = getDialogHtml(requestId, type, title, message, allowImage);
 
-    dialogPanel.webview.onDidReceiveMessage(msg => {
+    dialogPanel.webview.onDidReceiveMessage(async (msg) => {
         outputChannel.appendLine(`[DialogPanel] 收到消息: ${msg.type}, requestId: ${msg.requestId}`);
         switch (msg.type) {
             case 'response':
@@ -534,6 +972,9 @@ function showDialogPanel(requestId: string, type: 'continue' | 'input', title: s
                 break;
             case 'imageUpload':
                 handleImageUpload();
+                break;
+            case 'setLanguage':
+                await setUiLanguage(msg.language === 'en' ? 'en' : 'zh');
                 break;
         }
     });
@@ -547,14 +988,26 @@ function showDialogPanel(requestId: string, type: 'continue' | 'input', title: s
 
 function getDialogHtml(requestId: string, type: 'continue' | 'input', title: string, message: string, allowImage: boolean): string {
     const isContinue = type === 'continue';
-    
-    return `<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${isContinue ? '继续对话？' : title}</title>
-    <style>
+    const lang = getUiLanguage();
+    const htmlLang = lang === 'en' ? 'en' : 'zh-CN';
+    const nonce = getNonce();
+    const csp = [
+        `default-src 'none'`,
+        `img-src data: blob:`,
+        `style-src 'unsafe-inline'`,
+        `script-src 'nonce-${nonce}'`,
+        `font-src 'none'`,
+        `connect-src 'none'`
+    ].join('; ');
+		    
+		    return `<!DOCTYPE html>
+	<html lang="${htmlLang}">
+	<head>
+		    <meta charset="UTF-8">
+		    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+		    <meta http-equiv="Content-Security-Policy" content="${csp}">
+		    <title>WindsurfAutoMcp</title>
+		    <style>
         :root {
             --bg-base: #0f0f0f;
             --bg-card: #1a1a1a;
@@ -598,16 +1051,37 @@ function getDialogHtml(requestId: string, type: 'continue' | 'input', title: str
             margin: 0 auto;
         }
         
-        .header {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            margin-bottom: 24px;
-            padding: 20px;
-            background: linear-gradient(135deg, var(--accent) 0%, #8b5cf6 100%);
-            border-radius: var(--radius-lg);
-            box-shadow: var(--shadow-md), 0 0 40px var(--accent-glow);
-        }
+	        .header {
+	            display: flex;
+	            align-items: center;
+	            justify-content: space-between;
+	            margin-bottom: 24px;
+	            padding: 20px;
+	            background: linear-gradient(135deg, var(--accent) 0%, #8b5cf6 100%);
+	            border-radius: var(--radius-lg);
+	            box-shadow: var(--shadow-md), 0 0 40px var(--accent-glow);
+	        }
+	        .header-left {
+	            display: flex;
+	            align-items: center;
+	            gap: 14px;
+	            min-width: 0;
+	        }
+	        .lang-btn {
+	            border: 1px solid rgba(255,255,255,0.25);
+	            background: rgba(255,255,255,0.14);
+	            color: #fff;
+	            border-radius: 999px;
+	            padding: 8px 12px;
+	            font-size: 12px;
+	            cursor: pointer;
+	            transition: var(--transition);
+	            flex: 0 0 auto;
+	        }
+	        .lang-btn:hover {
+	            background: rgba(255,255,255,0.22);
+	            border-color: rgba(255,255,255,0.35);
+	        }
         .header-icon {
             width: 48px;
             height: 48px;
@@ -624,11 +1098,11 @@ function getDialogHtml(requestId: string, type: 'continue' | 'input', title: str
             color: #fff;
             letter-spacing: -0.3px;
         }
-        .header-text p {
-            font-size: 12px;
-            color: rgba(255,255,255,0.8);
-            margin-top: 2px;
-        }
+	        .header-text p {
+	            font-size: 12px;
+	            color: rgba(255,255,255,0.8);
+	            margin-top: 2px;
+	        }
         
         .card {
             background: var(--bg-card);
@@ -647,15 +1121,17 @@ function getDialogHtml(requestId: string, type: 'continue' | 'input', title: str
             margin-bottom: 10px;
         }
         
-        .reason-box {
-            background: var(--bg-elevated);
-            padding: 16px;
-            border-radius: var(--radius-md);
-            color: var(--text-primary);
-            font-size: 14px;
-            line-height: 1.7;
-            border: 1px solid var(--border);
-        }
+	        .reason-box {
+	            background: var(--bg-elevated);
+	            padding: 16px;
+	            border-radius: var(--radius-md);
+	            color: var(--text-primary);
+	            font-size: 14px;
+	            line-height: 1.7;
+	            border: 1px solid var(--border);
+	            white-space: pre-wrap;
+	            word-break: break-word;
+	        }
         
         .input-label {
             display: block;
@@ -759,16 +1235,45 @@ function getDialogHtml(requestId: string, type: 'continue' | 'input', title: str
             gap: 10px;
             margin-bottom: 14px;
         }
-        .image-preview-grid.show {
-            display: grid;
-        }
-        .image-preview-grid img {
-            width: 100%;
-            height: 70px;
-            object-fit: cover;
-            border-radius: var(--radius-sm);
-            border: 1px solid var(--border);
-        }
+	        .image-preview-grid.show {
+	            display: grid;
+	        }
+	        .image-preview-item {
+	            position: relative;
+	            width: 100%;
+	            height: 70px;
+	            border-radius: var(--radius-sm);
+	            overflow: hidden;
+	            border: 1px solid var(--border);
+	            background: var(--bg-elevated);
+	        }
+	        .image-preview-item img {
+	            width: 100%;
+	            height: 70px;
+	            object-fit: cover;
+	            display: block;
+	        }
+	        .image-remove {
+	            position: absolute;
+	            top: 6px;
+	            right: 6px;
+	            width: 22px;
+	            height: 22px;
+	            border: 1px solid rgba(255,255,255,0.15);
+	            background: rgba(15,15,15,0.7);
+	            color: #fff;
+	            border-radius: 999px;
+	            cursor: pointer;
+	            display: inline-flex;
+	            align-items: center;
+	            justify-content: center;
+	            line-height: 1;
+	            transition: var(--transition);
+	        }
+	        .image-remove:hover {
+	            background: rgba(239,68,68,0.85);
+	            border-color: rgba(239,68,68,0.9);
+	        }
         
         .btn {
             padding: 14px 24px;
@@ -867,83 +1372,158 @@ function getDialogHtml(requestId: string, type: 'continue' | 'input', title: str
         }
     </style>
 </head>
-<body>
-    <div class="container">
-        <div class="header">
-            <div class="header-icon">${isContinue ? '💬' : '📝'}</div>
-            <div class="header-text">
-                <h1>${isContinue ? '继续对话？' : title}</h1>
-                <p>${isContinue ? 'AI 请求您的确认' : '请输入您的回复'}</p>
-            </div>
-        </div>
+	<body>
+	    <div class="container">
+	        <div class="header">
+	            <div class="header-left">
+	                <div class="header-icon">${isContinue ? '💬' : '📝'}</div>
+	                <div class="header-text">
+	                    <h1 id="panelTitle"></h1>
+	                    <p id="panelSubtitle"></p>
+	                </div>
+	            </div>
+	            <button class="lang-btn" id="langBtn" type="button"></button>
+	        </div>
 
-        <div class="card">
-            <div class="card-label">${isContinue ? '任务完成说明' : '消息内容'}</div>
-            <div class="reason-box">${message}</div>
-        </div>
+	        <div class="card">
+	            <div class="card-label" id="reasonLabel"></div>
+	            <div class="reason-box" id="reasonText"></div>
+	        </div>
 
-        <div class="card">
-            <label class="input-label">${isContinue ? '新指令（可选）' : '您的回复'}</label>
-            <textarea id="userInput" placeholder="${isContinue ? '输入新指令或留空继续...' : '输入内容...'}" autofocus></textarea>
+	        <div class="card">
+	            <label class="input-label" id="replyLabel"></label>
+	            <textarea id="userInput" autofocus></textarea>
 
-            ${allowImage ? `
-            <div class="image-section">
-                <label class="input-label">附加图片（可选）</label>
-                <div class="image-options">
-                    <label><input type="radio" name="imageType" value="base64" checked> 嵌入图片</label>
-                    <label><input type="radio" name="imageType" value="path"> 仅路径</label>
-                </div>
-                <div class="image-drop-zone" id="dropZone">
-                    <div class="icon">🖼️</div>
-                    <div>Ctrl+V 粘贴 或 拖放图片到此处</div>
-                </div>
-                <div id="imagePreviewGrid" class="image-preview-grid"></div>
-                <button class="btn btn-outline" onclick="selectImage()">📁 选择图片文件</button>
-                <input type="file" id="fileInput" accept="image/*" multiple style="display:none" />
-            </div>
-            ` : ''}
-        </div>
+	            ${allowImage ? `
+	            <div class="image-section">
+	                <label class="input-label" id="imageLabel"></label>
+	                <div class="image-drop-zone" id="dropZone">
+	                    <div class="icon">🖼️</div>
+	                    <div id="dropZoneHint"></div>
+	                </div>
+	                <div id="imagePreviewGrid" class="image-preview-grid"></div>
+	                <button class="btn btn-outline" id="chooseImageBtn" type="button"></button>
+	                <input type="file" id="fileInput" accept="image/*" multiple style="display:none" />
+	            </div>
+	            ` : ''}
+	        </div>
 
-        <div class="btn-row">
-            <button class="btn btn-success" onclick="submitResponse(true)">
-                ${isContinue ? '✓ 继续执行' : '✓ 提交'}
-            </button>
-            <button class="btn btn-ghost" onclick="submitResponse(false)">
-                ${isContinue ? '✗ 结束对话' : '✗ 取消'}
-            </button>
-        </div>
+	        <div class="btn-row">
+	            <button class="btn btn-success" id="primaryBtn" type="button"></button>
+	            <button class="btn btn-ghost" id="secondaryBtn" type="button"></button>
+	        </div>
 
-        <div class="shortcuts">
-            <kbd>Enter</kbd> 确认 · <kbd>Shift+Enter</kbd> 换行 · <kbd>Esc</kbd> 取消
-        </div>
-    </div>
+	        <div class="shortcuts" id="shortcuts"></div>
+	    </div>
 
-    <script>
-        const vscode = acquireVsCodeApi();
-        const requestId = '${requestId}';
-        const isContinue = ${isContinue};
-        let imagesData = [];
-        let imagePath = null;
+	    <script nonce="${nonce}">
+	        const vscode = acquireVsCodeApi();
+	        const requestId = '${requestId}';
+	        const isContinue = ${isContinue};
+	        const I18N = ${safeJson(WEBVIEW_I18N)};
+	        const rawTitle = ${safeJson(title ?? '')};
+	        const rawMessage = ${safeJson(message ?? '')};
+	        const initialLang = ${safeJson(lang)};
 
-        function showToast(msg) {
-            const existing = document.querySelector('.toast');
-            if (existing) existing.remove();
-            const toast = document.createElement('div');
-            toast.className = 'toast';
-            toast.textContent = msg;
-            document.body.appendChild(toast);
-            setTimeout(() => toast.remove(), 2000);
-        }
+	        const MAX_IMAGES = 6;
+	        const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 
-        // 快捷键
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                submitResponse(true);
-            } else if (e.key === 'Escape') {
-                submitResponse(false);
-            }
-        });
+	        let imagesData = [];
+	        let currentLang = (vscode.getState() && vscode.getState().lang) || initialLang;
+
+	        function t(key, vars = {}) {
+	            const template = (I18N[currentLang] && I18N[currentLang][key]) || (I18N.zh && I18N.zh[key]) || key;
+	            return template.replace(/\\{(\\w+)\\}/g, (_, name) => String(vars[name] ?? '{' + name + '}'));
+	        }
+
+	        function applyLanguage() {
+	            document.documentElement.lang = currentLang === 'en' ? 'en' : 'zh-CN';
+
+	            const titleText = isContinue ? t('panel.confirmTitle') : (rawTitle || 'WindsurfAutoMcp');
+	            document.title = titleText;
+
+	            const titleEl = document.getElementById('panelTitle');
+	            if (titleEl) titleEl.textContent = titleText;
+
+	            const subEl = document.getElementById('panelSubtitle');
+	            if (subEl) subEl.textContent = isContinue ? t('panel.confirmSub') : t('panel.inputSub');
+
+	            const reasonLabelEl = document.getElementById('reasonLabel');
+	            if (reasonLabelEl) reasonLabelEl.textContent = isContinue ? t('panel.reasonLabelContinue') : t('panel.reasonLabelInput');
+
+	            const reasonTextEl = document.getElementById('reasonText');
+	            if (reasonTextEl) reasonTextEl.textContent = rawMessage;
+
+	            const replyLabelEl = document.getElementById('replyLabel');
+	            if (replyLabelEl) replyLabelEl.textContent = isContinue ? t('panel.replyLabelContinue') : t('panel.replyLabelInput');
+
+	            const userInputEl = document.getElementById('userInput');
+	            if (userInputEl) userInputEl.placeholder = isContinue ? t('panel.replyPlaceholderContinue') : t('panel.replyPlaceholderInput');
+
+	            const imageLabelEl = document.getElementById('imageLabel');
+	            if (imageLabelEl) imageLabelEl.textContent = t('panel.imageLabel');
+
+	            const dropZoneHintEl = document.getElementById('dropZoneHint');
+	            if (dropZoneHintEl) dropZoneHintEl.textContent = t('panel.pasteOrDrop');
+
+	            const chooseBtn = document.getElementById('chooseImageBtn');
+	            if (chooseBtn) chooseBtn.textContent = t('panel.chooseImage');
+
+	            const primaryBtn = document.getElementById('primaryBtn');
+	            if (primaryBtn) primaryBtn.textContent = isContinue ? t('panel.submitContinue') : t('panel.submit');
+
+	            const secondaryBtn = document.getElementById('secondaryBtn');
+	            if (secondaryBtn) secondaryBtn.textContent = isContinue ? t('panel.end') : t('panel.cancel');
+
+	            const shortcuts = document.getElementById('shortcuts');
+	            if (shortcuts) {
+	                shortcuts.innerHTML = \`<kbd>Enter</kbd> \${t('panel.shortcutsConfirm')} · <kbd>Shift+Enter</kbd> \${t('panel.shortcutsNewline')} · <kbd>Esc</kbd> \${t('panel.shortcutsCancel')}\`;
+	            }
+
+	            const langBtn = document.getElementById('langBtn');
+	            if (langBtn) {
+	                langBtn.textContent = currentLang === 'en' ? t('ui.lang.zh') : t('ui.lang.en');
+	                langBtn.title = currentLang === 'en' ? t('ui.lang.toggleToZh') : t('ui.lang.toggleToEn');
+	            }
+
+	            renderPreviews();
+	        }
+
+	        function toggleLanguage() {
+	            currentLang = currentLang === 'en' ? 'zh' : 'en';
+	            vscode.setState({ ...(vscode.getState() || {}), lang: currentLang });
+	            vscode.postMessage({ type: 'setLanguage', language: currentLang });
+	            applyLanguage();
+	        }
+	
+	        function showToast(msg) {
+	            const existing = document.querySelector('.toast');
+	            if (existing) existing.remove();
+	            const toast = document.createElement('div');
+	            toast.className = 'toast';
+	            toast.textContent = msg;
+	            document.body.appendChild(toast);
+	            setTimeout(() => toast.remove(), 2000);
+	        }
+
+	        window.addEventListener('message', (event) => {
+	            const msg = event.data;
+	            if (msg && msg.type === 'languageChanged' && (msg.language === 'en' || msg.language === 'zh')) {
+	                currentLang = msg.language;
+	                vscode.setState({ ...(vscode.getState() || {}), lang: currentLang });
+	                applyLanguage();
+	            }
+	        });
+
+	        // 快捷键
+	        document.addEventListener('keydown', (e) => {
+	            if (e.key === 'Enter' && !e.shiftKey) {
+	                e.preventDefault();
+	                submitResponse(true);
+	            } else if (e.key === 'Escape') {
+	                submitResponse(false);
+	            }
+	        });
 
         // 粘贴图片
         document.addEventListener('paste', (e) => {
@@ -958,13 +1538,14 @@ function getDialogHtml(requestId: string, type: 'continue' | 'input', title: str
             }
         });
 
-        // 拖放图片
-        const dropZone = document.getElementById('dropZone');
-        if (dropZone) {
-            dropZone.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                dropZone.classList.add('dragover');
-            });
+	        // 拖放图片
+	        const dropZone = document.getElementById('dropZone');
+	        if (dropZone) {
+	            dropZone.addEventListener('click', () => selectImage());
+	            dropZone.addEventListener('dragover', (e) => {
+	                e.preventDefault();
+	                dropZone.classList.add('dragover');
+	            });
             dropZone.addEventListener('dragleave', () => {
                 dropZone.classList.remove('dragover');
             });
@@ -982,80 +1563,113 @@ function getDialogHtml(requestId: string, type: 'continue' | 'input', title: str
 
         // 文件选择
         const fileInput = document.getElementById('fileInput');
-        if (fileInput) {
-            fileInput.addEventListener('change', (e) => {
-                const files = Array.from(e.target.files || []);
-                for (const file of files) {
-                    if (file) handleImageFile(file);
-                }
-            });
-        }
+	        if (fileInput) {
+	            fileInput.addEventListener('change', (e) => {
+	                const files = Array.from(e.target.files || []);
+	                for (const file of files) {
+	                    if (file) handleImageFile(file);
+	                }
+	                e.target.value = '';
+	            });
+	        }
 
-        function selectImage() {
-            document.getElementById('fileInput')?.click();
-        }
+	        function selectImage() {
+	            document.getElementById('fileInput')?.click();
+	        }
 
-        function handleImageFile(file) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                const result = e.target?.result;
-                if (typeof result === 'string') {
-                    imagesData.push(result);
-                }
-                renderPreviews();
-                showToast('图片已加载');
-                vscode.postMessage({ type: 'imageUpload' });
-            };
-            reader.readAsDataURL(file);
-        }
+	        function handleImageFile(file) {
+	            if (imagesData.length >= MAX_IMAGES) {
+	                showToast(t('panel.toast.tooManyImages'));
+	                return;
+	            }
+	            if (file.size && file.size > MAX_IMAGE_BYTES) {
+	                showToast(t('panel.toast.imageTooLarge'));
+	                return;
+	            }
+	            const reader = new FileReader();
+	            reader.onload = (e) => {
+	                const result = e.target?.result;
+	                if (typeof result === 'string') {
+	                    imagesData.push(result);
+	                }
+	                renderPreviews();
+	                showToast(t('panel.toast.imageLoaded'));
+	                vscode.postMessage({ type: 'imageUpload' });
+	            };
+	            reader.readAsDataURL(file);
+	        }
+	
+	        function renderPreviews() {
+	            const grid = document.getElementById('imagePreviewGrid');
+	            if (!grid) return;
+	
+	            grid.innerHTML = '';
+	            imagesData.forEach((img, index) => {
+	                const item = document.createElement('div');
+	                item.className = 'image-preview-item';
 
-        function renderPreviews() {
-            const grid = document.getElementById('imagePreviewGrid');
-            if (!grid) return;
+	                const el = document.createElement('img');
+	                el.src = img;
+	                item.appendChild(el);
 
-            grid.innerHTML = '';
-            for (const img of imagesData) {
-                const el = document.createElement('img');
-                el.src = img;
-                grid.appendChild(el);
-            }
-            if (imagesData.length > 0) {
-                grid.classList.add('show');
-            } else {
-                grid.classList.remove('show');
-            }
-        }
+	                const remove = document.createElement('button');
+	                remove.type = 'button';
+	                remove.className = 'image-remove';
+	                remove.textContent = '×';
+	                remove.title = t('panel.removeImage');
+	                remove.setAttribute('aria-label', t('panel.removeImage'));
+	                remove.addEventListener('click', (e) => {
+	                    e.preventDefault();
+	                    e.stopPropagation();
+	                    imagesData.splice(index, 1);
+	                    renderPreviews();
+	                    showToast(t('panel.toast.imageRemoved'));
+	                });
+	                item.appendChild(remove);
 
-        function submitResponse(confirm) {
-            const input = document.getElementById('userInput')?.value || '';
-            const imageType = document.querySelector('input[name="imageType"]:checked')?.value || 'base64';
-            
-            let response;
-            if (isContinue) {
-                response = {
-                    continue: confirm,
-                    instruction: input,
-                    images: imageType === 'base64' ? imagesData : [],
-                    imagePath: imagePath
-                };
-            } else {
-                if (confirm) {
-                    response = {
-                        text: input,
-                        images: imageType === 'base64' ? imagesData : [],
-                        imagePath: imagePath
-                    };
-                } else {
-                    response = null;
-                }
-            }
-            
-            vscode.postMessage({ type: 'response', requestId, value: response });
-        }
-    </script>
-</body>
-</html>`;
-}
+	                grid.appendChild(item);
+	            });
+	            if (imagesData.length > 0) {
+	                grid.classList.add('show');
+	            } else {
+	                grid.classList.remove('show');
+	            }
+	        }
+	
+	        function submitResponse(confirm) {
+	            const input = document.getElementById('userInput')?.value || '';
+	            
+	            let response;
+	            if (isContinue) {
+	                response = {
+	                    continue: confirm,
+	                    instruction: input,
+	                    images: imagesData
+	                };
+	            } else {
+	                if (confirm) {
+	                    response = {
+	                        text: input,
+	                        images: imagesData
+	                    };
+	                } else {
+	                    response = null;
+	                }
+	            }
+	            
+	            vscode.postMessage({ type: 'response', requestId, value: response });
+	        }
+
+	        applyLanguage();
+
+	        document.getElementById('langBtn')?.addEventListener('click', () => toggleLanguage());
+	        document.getElementById('chooseImageBtn')?.addEventListener('click', () => selectImage());
+	        document.getElementById('primaryBtn')?.addEventListener('click', () => submitResponse(true));
+	        document.getElementById('secondaryBtn')?.addEventListener('click', () => submitResponse(false));
+	    </script>
+	</body>
+	</html>`;
+	}
 
 // ==================== Windsurf配置 ====================
 
@@ -1085,14 +1699,14 @@ function configureWindsurf() {
             };
 
             fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-            outputChannel.appendLine(`已配置Windsurf: ${configPath}`);
+            outputChannel.appendLine(`Configured Windsurf: ${configPath}`);
             
         } catch (e: any) {
-            outputChannel.appendLine(`配置Windsurf失败: ${e.message}`);
+            outputChannel.appendLine(`Configure Windsurf failed: ${e.message}`);
         }
     }
 
-    vscode.window.showInformationMessage(`WindsurfAutoMcp 已配置到 Windsurf (端口: ${currentPort})`);
+    vscode.window.showInformationMessage(tr('ext.configuredWindsurf', { port: currentPort }));
 }
 
 // ==================== 状态栏 ====================
@@ -1100,10 +1714,10 @@ function configureWindsurf() {
 function updateStatusBar() {
     if (mcpServer) {
         statusBarItem.text = `$(server) MCP: ${currentPort}`;
-        statusBarItem.tooltip = `WindsurfAutoMcp 运行中 - 端口 ${currentPort}\n调用次数: ${stats.totalCalls}`;
+        statusBarItem.tooltip = tr('ext.statusTooltipRunning', { port: currentPort, calls: stats.totalCalls });
     } else {
-        statusBarItem.text = '$(server) MCP: 停止';
-        statusBarItem.tooltip = 'WindsurfAutoMcp 已停止';
+        statusBarItem.text = tr('ext.statusTextStopped');
+        statusBarItem.tooltip = tr('ext.statusTooltipStopped');
     }
 }
 
@@ -1123,15 +1737,16 @@ function saveStats() {
 }
 
 function showStats() {
+    const lang = getUiLanguage();
     const uptime = Math.floor((Date.now() - stats.startTime) / 1000 / 60);
     vscode.window.showInformationMessage(
-        `WindsurfAutoMcp 统计:\n` +
-        `总调用: ${stats.totalCalls}\n` +
-        `ask_user: ${stats.askUserCalls}\n` +
-        `ask_continue: ${stats.askContinueCalls}\n` +
-        `notify: ${stats.notifyCalls}\n` +
-        `图片上传: ${stats.imageUploads}\n` +
-        `运行时间: ${uptime} 分钟`
+        tr('ext.statsTitle', {}, lang) +
+        tr('ext.statsLineTotal', { total: stats.totalCalls }, lang) +
+        tr('ext.statsLineAskUser', { askUser: stats.askUserCalls }, lang) +
+        tr('ext.statsLineAskContinue', { askContinue: stats.askContinueCalls }, lang) +
+        tr('ext.statsLineNotify', { notify: stats.notifyCalls }, lang) +
+        tr('ext.statsLineUploads', { uploads: stats.imageUploads }, lang) +
+        tr('ext.statsLineUptime', { uptime }, lang)
     );
 }
 
@@ -1140,7 +1755,7 @@ function showStats() {
 async function createWindsurfRules() {
     const workspaceFolders = vscode.workspace.workspaceFolders;
     if (!workspaceFolders || workspaceFolders.length === 0) {
-        vscode.window.showErrorMessage('请先打开一个工作区');
+        vscode.window.showErrorMessage(tr('ext.workspaceRequired'));
         return;
     }
 
@@ -1168,13 +1783,19 @@ async function createWindsurfRules() {
             fs.mkdirSync(rulesDir, { recursive: true });
         }
         fs.writeFileSync(rulesPath, rulesContent, 'utf-8');
-        vscode.window.showInformationMessage(`规则文件已创建: ${rulesPath}`);
+        {
+            const lang = getUiLanguage();
+            const msg = lang === 'en' ? `Rules file created: ${rulesPath}` : `规则文件已创建: ${rulesPath}`;
+            vscode.window.showInformationMessage(msg);
+        }
         
         // 打开文件
         const doc = await vscode.workspace.openTextDocument(rulesPath);
         await vscode.window.showTextDocument(doc);
     } catch (error) {
-        vscode.window.showErrorMessage(`创建规则文件失败: ${error}`);
+        const lang = getUiLanguage();
+        const msg = lang === 'en' ? `Failed to create rules file: ${error}` : `创建规则文件失败: ${error}`;
+        vscode.window.showErrorMessage(msg);
     }
 }
 
@@ -1219,32 +1840,44 @@ class SidebarProvider implements vscode.WebviewViewProvider {
                     break;
                 case 'startServer':
                     await startServer();
-                    this.refreshContent();
                     break;
                 case 'stopServer':
                     stopServer();
-                    this.refreshContent();
                     break;
                 case 'restartServer':
                     stopServer();
                     await startServer();
-                    this.refreshContent();
                     break;
                 case 'updatePort':
                     if (message.port >= 1024 && message.port <= 65535) {
-                        currentPort = message.port;
-                        vscode.window.showInformationMessage(`端口已更新为 ${currentPort}，重启服务器后生效`);
+                        const config = vscode.workspace.getConfiguration('mcpService');
+                        await config.update('port', message.port, vscode.ConfigurationTarget.Global);
+                        if (!mcpServer) {
+                            currentPort = message.port;
+                            updateStatusBar();
+                            this.updateStatus(false, currentPort);
+                        }
+                        vscode.window.showInformationMessage(tr('ext.portUpdatedRestart', { port: message.port }));
                     }
                     break;
                 case 'saveSettings':
-                    const config = vscode.workspace.getConfiguration('mcpService');
-                    await config.update('autoStart', message.autoStart, vscode.ConfigurationTarget.Global);
-                    await config.update('defaultReason', message.defaultReason, vscode.ConfigurationTarget.Global);
-                    vscode.window.showInformationMessage('设置已保存');
+                    {
+                        const config = vscode.workspace.getConfiguration('mcpService');
+                        await config.update('autoStart', !!message.autoStart, vscode.ConfigurationTarget.Global);
+                        await config.update('defaultReason', String(message.defaultReason ?? '').trim(), vscode.ConfigurationTarget.Global);
+                        if (message.language === 'en' || message.language === 'zh') {
+                            await setUiLanguage(message.language);
+                        }
+                        vscode.window.showInformationMessage(tr('ext.settingsSaved'));
+                    }
+                    break;
+                case 'setLanguage':
+                    await setUiLanguage(message.language === 'en' ? 'en' : 'zh');
                     break;
                 case 'openContinueDialog':
                     // 优先检查是否有待处理的请求
                     if (pendingRequests.size > 0) {
+                        const lang = getUiLanguage();
                         // 获取最新的 pending request
                         const entries = Array.from(pendingRequests.entries());
                         const [latestRequestId] = entries[entries.length - 1];
@@ -1252,25 +1885,34 @@ class SidebarProvider implements vscode.WebviewViewProvider {
                         // 检查是否有保存的 reason
                         const reason = currentDialogRequestId === latestRequestId && lastDialogReason 
                             ? lastDialogReason 
-                            : '请选择是否继续对话';
-                        showDialogPanel(latestRequestId, 'continue', '继续对话', reason, true);
+                            : (lang === 'en' ? 'Please choose whether to continue.' : '请选择是否继续对话');
+                        showDialogPanel(latestRequestId, 'continue', tr('panel.confirmTitle', {}, lang), reason, true);
                     } else if (currentDialogRequestId && pendingRequests.has(currentDialogRequestId)) {
+                        const lang = getUiLanguage();
                         // 重新打开之前关闭的对话框
                         outputChannel.appendLine(`[openContinueDialog] 重新打开之前的请求: ${currentDialogRequestId}`);
-                        showDialogPanel(currentDialogRequestId, 'continue', '继续对话', lastDialogReason || '请选择是否继续对话', true);
+                        showDialogPanel(
+                            currentDialogRequestId,
+                            'continue',
+                            tr('panel.confirmTitle', {}, lang),
+                            lastDialogReason || (lang === 'en' ? 'Please choose whether to continue.' : '请选择是否继续对话'),
+                            true
+                        );
                     } else {
-                        vscode.window.showInformationMessage('当前没有待处理的对话请求。AI 需要先调用 ask_continue 工具。');
+                        vscode.window.showInformationMessage(tr('ext.noPendingRequests'));
                     }
                     break;
                 case 'resetDefaults':
                     const configReset = vscode.workspace.getConfiguration('mcpService');
                     await configReset.update('autoStart', true, vscode.ConfigurationTarget.Global);
                     await configReset.update('port', 3456, vscode.ConfigurationTarget.Global);
-                    vscode.window.showInformationMessage('已恢复默认设置');
+                    await configReset.update('defaultReason', '', vscode.ConfigurationTarget.Global);
+                    vscode.window.showInformationMessage(tr('ext.defaultsRestored'));
                     this.refreshContent();
                     break;
                 case 'configWindsurf':
                     configureWindsurf();
+                    this.refreshContent();
                     break;
                 case 'showStats':
                     showStats();
@@ -1295,6 +1937,10 @@ class SidebarProvider implements vscode.WebviewViewProvider {
         this._view?.webview.postMessage({ type: 'status', running, port, stats });
     }
 
+    postMessage(message: any) {
+        this._view?.webview.postMessage(message);
+    }
+
     showInputDialog(requestId: string, title: string, message: string, allowImage: boolean) {
         // 使用独立的 Panel 显示对话框
         showDialogPanel(requestId, 'input', title, message, allowImage);
@@ -1302,14 +1948,27 @@ class SidebarProvider implements vscode.WebviewViewProvider {
 
     showContinueDialog(requestId: string, reason: string) {
         // 使用独立的 Panel 显示对话框
-        showDialogPanel(requestId, 'continue', '继续对话？', reason, true);
+        const lang = getUiLanguage();
+        showDialogPanel(requestId, 'continue', tr('panel.confirmTitle', {}, lang), reason, true);
     }
 
     private _getHtmlContent(): string {
         const isRunning = mcpServer !== null;
         const config = vscode.workspace.getConfiguration('mcpService');
+        const lang = getUiLanguage();
+        const htmlLang = lang === 'en' ? 'en' : 'zh-CN';
+        const configuredPort = config.get('port', 3456);
         const autoStart = config.get('autoStart', true);
-        const defaultReason = config.get('defaultReason', '任务已完成');
+        const defaultReason = getDefaultReason(lang);
+        const nonce = getNonce();
+        const csp = [
+            `default-src 'none'`,
+            `img-src data: blob:`,
+            `style-src 'unsafe-inline'`,
+            `script-src 'nonce-${nonce}'`,
+            `font-src 'none'`,
+            `connect-src 'none'`
+        ].join('; ');
         const configPath = path.join(os.homedir(), '.codeium', 'windsurf', 'mcp_config.json');
         
         // 检测是否已初始化配置
@@ -1324,12 +1983,13 @@ class SidebarProvider implements vscode.WebviewViewProvider {
         }
         
         return `<!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="${htmlLang}">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WindsurfAutoMcp</title>
-    <style>
+	    <meta charset="UTF-8">
+	    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+	    <meta http-equiv="Content-Security-Policy" content="${csp}">
+	    <title>WindsurfAutoMcp</title>
+	    <style>
         :root {
             --bg-base: #0f0f0f;
             --bg-card: #1a1a1a;
@@ -1377,10 +2037,31 @@ class SidebarProvider implements vscode.WebviewViewProvider {
         }
         ::-webkit-scrollbar-thumb:hover { background: var(--border-hover); }
         
-        .app {
-            padding: 16px;
-            min-height: 100vh;
-        }
+	        .app {
+	            padding: 16px;
+	            min-height: 100vh;
+	        }
+	        .topbar {
+	            display: flex;
+	            align-items: center;
+	            justify-content: space-between;
+	            gap: 10px;
+	            padding: 12px 14px;
+	            margin-bottom: 12px;
+	            background: var(--bg-card);
+	            border: 1px solid var(--border);
+	            border-radius: var(--radius-lg);
+	        }
+	        .topbar-title {
+	            font-size: 13px;
+	            font-weight: 600;
+	            color: var(--text-primary);
+	            letter-spacing: -0.2px;
+	        }
+	        .btn-small {
+	            padding: 6px 10px;
+	            font-size: 12px;
+	        }
         
         /* 卡片 */
         .card {
@@ -1731,277 +2412,337 @@ class SidebarProvider implements vscode.WebviewViewProvider {
     </style>
 </head>
 <body>
-    <div class="app">
-        <!-- 开源与免费 -->
-        <div class="card">
-            <div class="section-title">开源与免费</div>
-            <p style="font-size: 12px; color: var(--text-secondary); line-height: 1.7; margin-bottom: 12px;">
-                本插件完全免费。开源地址：
-                <span style="color: var(--accent-hover); word-break: break-all;">https://github.com/JiXiangKing80/windsurf-auto-mcp</span>
-            </p>
-            <div class="btn-group">
-                <button class="btn btn-primary" onclick="openRepo()">打开 GitHub</button>
-                <button class="btn btn-ghost" onclick="copyRepoUrl()">复制链接</button>
-            </div>
-        </div>
+	    <div class="app">
+	        <div class="topbar">
+	            <div class="topbar-title">WindsurfAutoMcp</div>
+	            <button class="btn btn-ghost btn-small" id="langToggle" type="button"></button>
+	        </div>
+	        <!-- 开源与免费 -->
+	        <div class="card">
+	            <div class="section-title" data-i18n="sidebar.openSourceTitle"></div>
+	            <p style="font-size: 12px; color: var(--text-secondary); line-height: 1.7; margin-bottom: 12px;">
+	                <span data-i18n="sidebar.openSourceDesc"></span>
+	                <span style="color: var(--accent-hover); word-break: break-all;">https://github.com/JiXiangKing80/windsurf-auto-mcp</span>
+	            </p>
+	            <div class="btn-group">
+	                <button class="btn btn-primary" id="openRepoBtn" type="button" data-i18n="sidebar.openGithub"></button>
+	                <button class="btn btn-ghost" id="copyRepoUrlBtn" type="button" data-i18n="sidebar.copyLink"></button>
+	            </div>
+	        </div>
 
-        <!-- 服务器状态 -->
-        <div class="card">
-            <div class="section-title">服务器</div>
-            
-            <div class="status-bar">
-                <div class="status-left">
-                    <span class="status-dot ${isRunning ? 'online' : 'offline'}"></span>
-                    <span class="status-label ${isRunning ? 'online' : 'offline'}">${isRunning ? '运行中' : '已停止'}</span>
-                </div>
-                ${isRunning ? `<span class="status-port">:${currentPort}</span>` : ''}
-            </div>
-            
-            <div class="input-group">
-                <label class="input-label">端口</label>
-                <div class="input-row">
-                    <input type="number" class="input" id="portInput" value="${currentPort}" min="1024" max="65535">
-                </div>
-            </div>
-            
-            <div class="btn-group">
-                <button class="btn ${isRunning ? 'btn-danger' : 'btn-success'}" onclick="${isRunning ? 'stopServer()' : 'startServer()'}">
-                    ${isRunning ? '停止' : '启动'}
-                </button>
-                <button class="btn btn-ghost" onclick="restartServer()">重启</button>
-            </div>
-        </div>
+	        <!-- 服务器状态 -->
+	        <div class="card">
+	            <div class="section-title" data-i18n="sidebar.serverTitle"></div>
+	            
+	            <div class="status-bar">
+	                <div class="status-left">
+	                    <span class="status-dot" id="statusDot"></span>
+	                    <span class="status-label" id="statusLabel"></span>
+	                </div>
+	                <span class="status-port" id="statusPort"></span>
+	            </div>
+	            
+	            <div class="input-group">
+	                <label class="input-label" data-i18n="sidebar.port"></label>
+	                <div class="input-row">
+	                    <input type="number" class="input" id="portInput" value="${configuredPort}" min="1024" max="65535">
+	                </div>
+	            </div>
+	            
+	            <div class="btn-group">
+	                <button class="btn" id="serverToggleBtn" type="button"></button>
+	                <button class="btn btn-ghost" id="restartServerBtn" type="button" data-i18n="sidebar.restart"></button>
+	            </div>
+	        </div>
 
-        <!-- 对话控制 -->
-        <div class="card">
-            <div class="section-title">对话</div>
-            <button class="btn btn-primary btn-full" onclick="openContinueDialog()">
-                打开对话窗口
-            </button>
-            <p style="font-size: 11px; color: var(--text-muted); margin-top: 10px; text-align: center;">
-                快捷键: <kbd style="background: var(--bg-elevated); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border);">Ctrl+M</kbd>
-            </p>
-        </div>
+	        <!-- 对话控制 -->
+	        <div class="card">
+	            <div class="section-title" data-i18n="sidebar.chatTitle"></div>
+	            <button class="btn btn-primary btn-full" id="openDialogBtn" type="button" data-i18n="sidebar.openDialog"></button>
+	            <p style="font-size: 11px; color: var(--text-muted); margin-top: 10px; text-align: center;">
+	                <span data-i18n="sidebar.shortcut"></span>
+	                <kbd style="background: var(--bg-elevated); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border);">Ctrl+M</kbd>
+	            </p>
+	        </div>
 
-        <!-- 提示语 -->
-        <div class="card">
-            <div class="section-title">提示语</div>
-            <div class="prompt-card">
-                <p class="prompt-text">
-                    当你完成一个任务时，必须调用 <code>WindsurfAutoMcp</code> 工具询问用户是否继续。
-                </p>
-            </div>
-            <button class="btn btn-ghost btn-full" onclick="copyPrompt()">
-                复制
-            </button>
-        </div>
+	        <!-- 提示语 -->
+	        <div class="card">
+	            <div class="section-title" data-i18n="sidebar.promptTitle"></div>
+	            <div class="prompt-card">
+	                <p class="prompt-text" data-i18n="sidebar.promptText"></p>
+	            </div>
+	            <button class="btn btn-ghost btn-full" id="copyPromptBtn" type="button" data-i18n="sidebar.copy"></button>
+	        </div>
 
-        <!-- 快捷操作 -->
-        <div class="card">
-            <div class="section-title">Windsurf 配置</div>
-            <div class="btn-group">
-                <button class="btn ${isConfigured ? 'btn-configured' : 'btn-primary'}" onclick="configWindsurf()" id="initBtn">
-                    ${isConfigured ? '✓ 已写入配置' : '写入 Windsurf 配置'}
-                </button>
-                <button class="btn btn-ghost" onclick="resetDefaults()">恢复默认端口</button>
-            </div>
-            <p style="font-size: 11px; color: var(--text-muted); margin-top: 10px;">
-                ${isConfigured ? '配置已写入，请重启 Windsurf 生效' : '点击按钮将 MCP 服务信息写入 Windsurf 配置文件'}
-            </p>
-        </div>
+	        <!-- 快捷操作 -->
+	        <div class="card">
+	            <div class="section-title" data-i18n="sidebar.windsurfConfigTitle"></div>
+	            <div class="btn-group">
+	                <button class="btn" id="initBtn" type="button"></button>
+	                <button class="btn btn-ghost" id="resetDefaultsBtn" type="button" data-i18n="sidebar.resetDefaultPort"></button>
+	            </div>
+	            <p style="font-size: 11px; color: var(--text-muted); margin-top: 10px;" id="configHint"></p>
+	        </div>
 
-        <!-- 统计 -->
-        <div class="card">
-            <div class="section-title">统计</div>
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-value">${stats.totalCalls}</div>
-                    <div class="stat-label">总调用</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value">${stats.askContinueCalls}</div>
-                    <div class="stat-label">ask_continue</div>
-                </div>
-            </div>
-        </div>
-    </div>
+		        <div class="card">
+		            <div class="section-title" data-i18n="sidebar.settingsTitle"></div>
+		            <div class="input-group">
+		                <label style="display:flex; align-items:center; gap:10px; color: var(--text-secondary); font-size: 12px;">
+		                    <input type="checkbox" id="autoStartToggle" ${autoStart ? 'checked' : ''} />
+		                    <span data-i18n="sidebar.autoStart"></span>
+		                </label>
+		            </div>
+	            <div class="input-group">
+	                <label class="input-label" data-i18n="sidebar.defaultReason"></label>
+	                <div class="input-row">
+	                    <input type="text" class="input" id="defaultReasonInput" />
+	                </div>
+	            </div>
+		            <button class="btn btn-primary btn-full" id="saveSettingsBtn" type="button" data-i18n="sidebar.saveSettings"></button>
+		        </div>
 
-    <script>
-        const vscode = acquireVsCodeApi();
-        let currentRequestId = null;
-        
-        // 显示 Toast 提示
-        function showToast(message, type = 'info') {
-            const existing = document.querySelector('.toast');
-            if (existing) existing.remove();
-            
-            const toast = document.createElement('div');
-            toast.className = 'toast ' + type;
-            toast.textContent = message;
-            document.body.appendChild(toast);
-            
-            setTimeout(() => toast.remove(), 2000);
-        }
-        
-        // 监听来自扩展的消息
-        window.addEventListener('message', event => {
-            const message = event.data;
-            switch (message.type) {
-                case 'continueDialog':
-                    currentRequestId = message.requestId;
-                    showDialog('继续对话？', message.reason);
-                    break;
-                case 'inputDialog':
-                    currentRequestId = message.requestId;
-                    showInputDialog(message.title, message.message, message.allowImage);
-                    break;
-                case 'status':
-                    // 状态更新时刷新页面
-                    break;
-            }
-        });
-        
-        function showDialog(title, reason) {
-            const dialog = document.createElement('div');
-            dialog.id = 'dialogOverlay';
-            dialog.innerHTML = \`
-                <div class="dialog-overlay" onclick="if(event.target===this)closeDialog()">
-                    <div class="dialog-box">
-                        <div class="dialog-title">\${title}</div>
-                        <div class="dialog-content">\${reason}</div>
-                        <textarea class="dialog-input" id="dialogInput" placeholder="输入新指令（可选）..."></textarea>
-                        <div class="dialog-actions">
-                            <button class="btn btn-success" onclick="respondContinue()">✓ 继续</button>
-                            <button class="btn btn-ghost" onclick="respondEnd()">✗ 结束</button>
-                        </div>
-                    </div>
-                </div>
-            \`;
-            document.body.appendChild(dialog);
-            document.getElementById('dialogInput')?.focus();
-        }
-        
-        function showInputDialog(title, message, allowImage) {
-            const dialog = document.createElement('div');
-            dialog.id = 'dialogOverlay';
-            dialog.innerHTML = \`
-                <div class="dialog-overlay" onclick="if(event.target===this)closeDialog()">
-                    <div class="dialog-box">
-                        <div class="dialog-title">\${title}</div>
-                        <div class="dialog-content">\${message}</div>
-                        <textarea class="dialog-input" id="dialogInput" placeholder="输入内容..."></textarea>
-                        <div class="dialog-actions">
-                            <button class="btn btn-primary" onclick="submitInput()">提交</button>
-                            <button class="btn btn-ghost" onclick="cancelInput()">取消</button>
-                        </div>
-                    </div>
-                </div>
-            \`;
-            document.body.appendChild(dialog);
-            document.getElementById('dialogInput')?.focus();
-        }
-        
-        function respondContinue() {
-            const input = document.getElementById('dialogInput')?.value || '';
-            vscode.postMessage({ type: 'response', requestId: currentRequestId, value: { continue: true, instruction: input } });
-            closeDialog();
-            showToast('已发送继续指令', 'success');
-        }
-        
-        function respondEnd() {
-            vscode.postMessage({ type: 'response', requestId: currentRequestId, value: { continue: false } });
-            closeDialog();
-            showToast('对话已结束');
-        }
-        
-        function submitInput() {
-            const input = document.getElementById('dialogInput')?.value || '';
-            vscode.postMessage({ type: 'response', requestId: currentRequestId, value: input });
-            closeDialog();
-            showToast('已提交', 'success');
-        }
-        
-        function cancelInput() {
-            vscode.postMessage({ type: 'response', requestId: currentRequestId, value: null });
-            closeDialog();
-        }
-        
-        function closeDialog() {
-            const overlay = document.getElementById('dialogOverlay');
-            if (overlay) overlay.remove();
-            currentRequestId = null;
-        }
-        
-        function startServer() {
-            vscode.postMessage({ type: 'startServer' });
-            showToast('正在启动服务器...', 'success');
-        }
-        
-        function stopServer() {
-            vscode.postMessage({ type: 'stopServer' });
-            showToast('服务器已停止');
-        }
-        
-        function restartServer() {
-            vscode.postMessage({ type: 'restartServer' });
-            showToast('正在重启服务器...', 'success');
-        }
-        
-        function copyPort() {
-            const port = document.getElementById('portInput').value;
-            navigator.clipboard.writeText(port).then(() => {
-                showToast('端口号已复制', 'success');
-            });
-        }
-        
-        function openContinueDialog() {
-            vscode.postMessage({ type: 'openContinueDialog' });
-            showToast('正在检查待处理请求...', 'info');
-        }
-        
-        function copyPrompt() {
-            const text = '当你完成一个任务时，必须调用 WindsurfAutoMcp 工具询问用户是否继续。没有例外情况，要一直等待响应不得提前终止任务。';
-            navigator.clipboard.writeText(text).then(() => {
-                showToast('提示语已复制', 'success');
-            });
-        }
+	        <!-- 统计 -->
+	        <div class="card">
+	            <div class="section-title" data-i18n="sidebar.statsTitle"></div>
+	            <div class="stats-grid">
+	                <div class="stat-card">
+	                    <div class="stat-value" id="statTotal">${stats.totalCalls}</div>
+	                    <div class="stat-label" data-i18n="sidebar.totalCalls"></div>
+	                </div>
+	                <div class="stat-card">
+	                    <div class="stat-value" id="statAskContinue">${stats.askContinueCalls}</div>
+	                    <div class="stat-label">ask_continue</div>
+	                </div>
+	            </div>
+	        </div>
+	    </div>
 
-        function openRepo() {
-            vscode.postMessage({ type: 'openRepo' });
-            showToast('正在打开 GitHub...', 'info');
-        }
+	    <script nonce="${nonce}">
+	        const vscode = acquireVsCodeApi();
+	        const I18N = ${safeJson(WEBVIEW_I18N)};
+	        const initialLang = ${safeJson(lang)};
+	        const initialDefaultReason = ${safeJson(defaultReason)};
+	        let currentLang = (vscode.getState() && vscode.getState().lang) || initialLang;
 
-        function copyRepoUrl() {
-            const text = 'https://github.com/JiXiangKing80/windsurf-auto-mcp';
-            navigator.clipboard.writeText(text).then(() => {
-                showToast('链接已复制', 'success');
-            });
-        }
-        
-        function configWindsurf() {
-            vscode.postMessage({ type: 'configWindsurf' });
-            showToast('正在初始化...', 'success');
-        }
-        
-        function resetDefaults() {
-            vscode.postMessage({ type: 'resetDefaults' });
-            showToast('已恢复默认设置', 'success');
-        }
-        
-        // 键盘快捷键
-        document.addEventListener('keydown', (e) => {
-            if (document.getElementById('dialogOverlay')) {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    if (currentRequestId) {
-                        respondContinue();
-                    }
-                } else if (e.key === 'Escape') {
-                    closeDialog();
-                }
-            }
-        });
-    </script>
+	        let runtime = {
+	            running: ${isRunning},
+	            port: ${isRunning ? currentPort : configuredPort},
+	            stats: ${safeJson(stats)}
+	        };
+
+	        let isConfigured = ${isConfigured ? 'true' : 'false'};
+
+	        function t(key, vars = {}) {
+	            const template = (I18N[currentLang] && I18N[currentLang][key]) || (I18N.zh && I18N.zh[key]) || key;
+	            return template.replace(/\\{(\\w+)\\}/g, (_, name) => String(vars[name] ?? '{' + name + '}'));
+	        }
+
+	        function showToast(message, type = 'info') {
+	            const existing = document.querySelector('.toast');
+	            if (existing) existing.remove();
+
+	            const toast = document.createElement('div');
+	            toast.className = 'toast ' + type;
+	            toast.textContent = message;
+	            document.body.appendChild(toast);
+
+	            setTimeout(() => toast.remove(), 2000);
+	        }
+
+	        function applyI18n() {
+	            document.documentElement.lang = currentLang === 'en' ? 'en' : 'zh-CN';
+
+	            document.querySelectorAll('[data-i18n]').forEach((el) => {
+	                const key = el.getAttribute('data-i18n');
+	                if (key) el.textContent = t(key);
+	            });
+
+	            const defaultReasonInput = document.getElementById('defaultReasonInput');
+	            if (defaultReasonInput) {
+	                defaultReasonInput.placeholder = t('sidebar.defaultReasonPlaceholder');
+	                if (!defaultReasonInput.value) defaultReasonInput.value = initialDefaultReason;
+	            }
+
+	            const langToggle = document.getElementById('langToggle');
+	            if (langToggle) {
+	                langToggle.textContent = currentLang === 'en' ? t('ui.lang.zh') : t('ui.lang.en');
+	                langToggle.title = currentLang === 'en' ? t('ui.lang.toggleToZh') : t('ui.lang.toggleToEn');
+	            }
+
+	            renderStatus();
+	            renderConfig();
+	        }
+
+	        function renderStatus() {
+	            const dot = document.getElementById('statusDot');
+	            const label = document.getElementById('statusLabel');
+	            const port = document.getElementById('statusPort');
+	            const toggleBtn = document.getElementById('serverToggleBtn');
+
+	            if (dot) {
+	                dot.classList.toggle('online', !!runtime.running);
+	                dot.classList.toggle('offline', !runtime.running);
+	            }
+	            if (label) {
+	                label.classList.toggle('online', !!runtime.running);
+	                label.classList.toggle('offline', !runtime.running);
+	                label.textContent = runtime.running ? t('sidebar.running') : t('sidebar.stopped');
+	            }
+	            if (port) {
+	                const fallbackPort = Number(document.getElementById('portInput')?.value) || runtime.port;
+	                port.textContent = ':' + String(runtime.running ? runtime.port : fallbackPort);
+	            }
+
+	            if (toggleBtn) {
+	                toggleBtn.className = 'btn ' + (runtime.running ? 'btn-danger' : 'btn-success');
+	                toggleBtn.textContent = runtime.running ? t('sidebar.stop') : t('sidebar.start');
+	            }
+	        }
+
+	        function renderConfig() {
+	            const initBtn = document.getElementById('initBtn');
+	            const hint = document.getElementById('configHint');
+
+	            if (initBtn) {
+	                initBtn.className = 'btn ' + (isConfigured ? 'btn-configured' : 'btn-primary');
+	                initBtn.textContent = isConfigured ? t('sidebar.configWritten') : t('sidebar.writeConfig');
+	            }
+	            if (hint) {
+	                hint.textContent = isConfigured ? t('sidebar.configHintWritten') : t('sidebar.configHintNotWritten');
+	            }
+	        }
+
+	        function renderStats() {
+	            const total = document.getElementById('statTotal');
+	            const askContinue = document.getElementById('statAskContinue');
+	            if (total) total.textContent = String(runtime.stats?.totalCalls ?? 0);
+	            if (askContinue) askContinue.textContent = String(runtime.stats?.askContinueCalls ?? 0);
+	        }
+
+	        function toggleLanguage() {
+	            currentLang = currentLang === 'en' ? 'zh' : 'en';
+	            vscode.setState({ ...(vscode.getState() || {}), lang: currentLang });
+	            vscode.postMessage({ type: 'setLanguage', language: currentLang });
+	            applyI18n();
+	        }
+
+	        function toggleServer() {
+	            if (runtime.running) {
+	                stopServer();
+	            } else {
+	                startServer();
+	            }
+	        }
+
+	        function startServer() {
+	            vscode.postMessage({ type: 'startServer' });
+	            showToast(t('toast.startingServer'), 'success');
+	        }
+
+	        function stopServer() {
+	            vscode.postMessage({ type: 'stopServer' });
+	            showToast(t('toast.serverStopped'), 'info');
+	        }
+
+	        function restartServer() {
+	            vscode.postMessage({ type: 'restartServer' });
+	            showToast(t('toast.restartingServer'), 'success');
+	        }
+
+	        function openContinueDialog() {
+	            vscode.postMessage({ type: 'openContinueDialog' });
+	            showToast(t('toast.checkingPending'), 'info');
+	        }
+
+	        function copyPrompt() {
+	            navigator.clipboard.writeText(t('sidebar.promptCopyText')).then(() => {
+	                showToast(t('toast.promptCopied'), 'success');
+	            });
+	        }
+
+	        function openRepo() {
+	            vscode.postMessage({ type: 'openRepo' });
+	            showToast(t('toast.openingGithub'), 'info');
+	        }
+
+	        function copyRepoUrl() {
+	            const text = 'https://github.com/JiXiangKing80/windsurf-auto-mcp';
+	            navigator.clipboard.writeText(text).then(() => {
+	                showToast(t('toast.linkCopied'), 'success');
+	            });
+	        }
+
+	        function configWindsurf() {
+	            vscode.postMessage({ type: 'configWindsurf' });
+	            showToast(t('toast.initializing'), 'success');
+	        }
+
+	        function resetDefaults() {
+	            vscode.postMessage({ type: 'resetDefaults' });
+	            showToast(t('toast.defaultsRestored'), 'success');
+	        }
+
+	        function saveSettings() {
+	            const autoStartToggle = document.getElementById('autoStartToggle');
+	            const defaultReasonInput = document.getElementById('defaultReasonInput');
+	            vscode.postMessage({
+	                type: 'saveSettings',
+	                autoStart: !!autoStartToggle?.checked,
+	                defaultReason: defaultReasonInput?.value || ''
+	            });
+	            showToast(t('toast.settingsSaved'), 'success');
+	        }
+
+	        const portInput = document.getElementById('portInput');
+	        if (portInput) {
+	            portInput.addEventListener('change', () => {
+	                const nextPort = Number(portInput.value);
+	                if (!Number.isFinite(nextPort) || nextPort < 1024 || nextPort > 65535) {
+	                    showToast(t('toast.invalidPort'), 'error');
+	                    return;
+	                }
+	                vscode.postMessage({ type: 'updatePort', port: nextPort });
+	                showToast(t('toast.portUpdated'), 'success');
+	                renderStatus();
+	            });
+	        }
+
+	        window.addEventListener('message', (event) => {
+	            const message = event.data;
+	            if (!message || !message.type) return;
+
+	            switch (message.type) {
+	                case 'status':
+	                    runtime.running = !!message.running;
+	                    runtime.port = Number(message.port) || runtime.port;
+	                    runtime.stats = message.stats || runtime.stats;
+	                    renderStatus();
+	                    renderStats();
+	                    break;
+	                case 'languageChanged':
+	                    if (message.language === 'en' || message.language === 'zh') {
+	                        currentLang = message.language;
+	                        vscode.setState({ ...(vscode.getState() || {}), lang: currentLang });
+	                        applyI18n();
+	                    }
+	                    break;
+	            }
+	        });
+
+	        applyI18n();
+	        renderStats();
+
+	        document.getElementById('langToggle')?.addEventListener('click', () => toggleLanguage());
+	        document.getElementById('openRepoBtn')?.addEventListener('click', () => openRepo());
+	        document.getElementById('copyRepoUrlBtn')?.addEventListener('click', () => copyRepoUrl());
+	        document.getElementById('serverToggleBtn')?.addEventListener('click', () => toggleServer());
+	        document.getElementById('restartServerBtn')?.addEventListener('click', () => restartServer());
+	        document.getElementById('openDialogBtn')?.addEventListener('click', () => openContinueDialog());
+	        document.getElementById('copyPromptBtn')?.addEventListener('click', () => copyPrompt());
+	        document.getElementById('initBtn')?.addEventListener('click', () => configWindsurf());
+	        document.getElementById('resetDefaultsBtn')?.addEventListener('click', () => resetDefaults());
+	        document.getElementById('saveSettingsBtn')?.addEventListener('click', () => saveSettings());
+	    </script>
 </body>
 </html>`;
     }
