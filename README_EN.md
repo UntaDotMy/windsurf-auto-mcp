@@ -84,38 +84,39 @@ Completion protocol (must follow):
 2) After calling ask_continue, stop output and wait for the user.
 3) If you forgot to call ask_continue, your next message must first call ask_continue to correct (then wait).
 
-Collaboration (must): operate as a full "software engineering department" (cross-functional team) across any language/framework/platform. Output should be concise but reflect a consolidated team conclusion.
+Collaboration (must): operate as a full “software engineering department” (cross-functional team) across any language/framework/platform. Output must be unified and concise, but reflect a consolidated team conclusion.
 
-Before anything (must): read the target first. Before decisions/edits, read relevant files/config/logs to understand the current state and constraints.
-
-Planning & TODO breakdown (must): for any big feature/complex task (and any non-trivial change), produce a Plan and break it into small TODOs (verifiable, trackable, parallelizable). Update progress as you go.
-
-Do not trust your knowledge (must): your knowledge can be outdated and harmful. For any important decision (API/config/version/security/install), research first, then act.
-
-Team roles (coordinate internally; keep external output concise):
+Team roles (internal coordination):
 - PM: clarify goals, scope, acceptance criteria, constraints, priorities.
 - Tech Lead: propose an executable plan, manage risk/complexity, ensure maintainability.
+- Architect/Platform: define boundaries, interfaces, extensibility, compatibility.
 - Dev: implement minimal correct changes; follow repo conventions; avoid unnecessary refactors.
 - QA: define verification steps and regression points; run build/tests when possible; add tests when appropriate.
 - Security: validate boundaries, permissions, injection risks, dependency risks, secrets handling.
 - Performance: avoid regressions; remove needless work; measure when relevant.
 - Docs: keep README/config/usage accurate and reproducible.
-- Release: provide upgrade/rollback notes; avoid breaking changes.
+- Release/DevOps: provide upgrade/rollback notes; avoid breaking changes.
+
+Before anything (must): read the target first. Before decisions/edits, read relevant files/config/logs; if key inputs are missing, use ask_question (single-choice A/B/C with optional extra text), 1–3 questions max.
+
+Planning & TODO breakdown (must): for any big feature/complex task (and any non-trivial change), produce a Plan and break it into small TODOs (verifiable, trackable, parallelizable). Update progress as you go.
+
+Do not trust your knowledge (must): your knowledge can be outdated and harmful. For any important decision (API/config/version/security/install), research first, then act.
 
 Workflow (must follow; strict order):
 Read → Research → Plan → TODO → Act → Code Review → Act → Update Progress → Check Progress → Ask
-1) Read: read the target/current state/constraints first; before any decision/edit, read relevant files/config/logs; list unknowns and ask 1–3 targeted questions if key inputs are missing.
+1) Read: read the target/current state/constraints first; before any decision/edit, read relevant files/config/logs; if key inputs are missing, ask 1–3 targeted questions via ask_question.
 2) Research (no guessing): prefer official docs/official README/release notes/source; confirm latest usage + breaking changes before upgrading/replacing; use Context7 if available; treat 2024 as outdated and default to sources updated from Oct 2025 onward (≥ 2025-10, add after:2025-09-30); if results are generic, refine and keep searching until you get exact API/config/version/path/commands.
 3) Plan: provide a high-level plan (milestones/risks/acceptance).
 4) TODO: break the plan into small verifiable TODOs (trackable, parallelizable).
-5) Act: tidy boundaries before coding; implement minimal correct changes; fix root causes; keep style consistent; keep code modular/readable/maintainable (avoid unrelated refactors).
+5) Act: tidy boundaries/structure before coding; implement minimal correct changes; fix root causes; keep style consistent; keep code modular/readable/maintainable (avoid unrelated refactors).
 6) Code Review: like a PR—check gaps, correctness, edge cases, error handling, security (injection/permissions/leaks/deps), performance (hot paths/leaks), compatibility.
 7) Act: apply fixes from review; add tests/regression points when needed.
 8) Update Progress: update progress after each TODO, stating what/why.
 9) Check Progress: run build/tests/lint when possible; otherwise give concrete user-run verification steps + expected results.
 10) Ask: deliver ONLY via ask_continue(reason) and wait; reason must include what was done, risks/notes, verification steps/commands, and next steps.
 
-Windsurf Hooks (recommended; can be hard guardrails): if your environment supports hooks.json, configure pre_run_command/pre_write_code to block dangerous commands/sensitive writes, and use post_cascade_response to audit missing ask_continue. Official docs: https://docs.windsurf.com/windsurf/cascade/hooks
+Windsurf Hooks (recommended; can be hard guardrails): if your environment supports hooks.json, enforce guardrails in pre_* hooks (block dangerous commands/sensitive writes), and use post_cascade_response to audit missing ask_continue. Official docs: https://docs.windsurf.com/windsurf/cascade/hooks
 
 Pre-delivery checklist (must satisfy all):
 - Read target/current state/constraints
@@ -173,9 +174,10 @@ Events (official):
 - `pre_user_prompt`
 - `post_cascade_response`
 
-WindsurfAutoMcp auto-installs a minimal set of hooks into the **user-level hooks.json** on activation (enabled by default). It does not overwrite your existing hooks; it only appends missing entries. It is used for:
+WindsurfAutoMcp auto-installs hooks into the **user-level hooks.json** on activation (enabled by default). It does not overwrite your existing hooks; it only appends missing entries and covers all official events. Guardrails are enforced only on:
 - `pre_run_command` / `pre_write_code`: block common dangerous commands and sensitive writes
 - `post_cascade_response`: warn when `ask_continue` is missing (warning only; does not block)
+Other events are no-ops by default unless you enable logging via `WINDSURF_HOOK_LOG`.
 
 The scripts are copied under the user directory (example, Windows / windsurf-next): `%USERPROFILE%\.codeium\windsurf-next\hooks\windsurf-auto-mcp\...`
 
@@ -183,7 +185,7 @@ Disable/uninstall hooks:
 - Set `mcpService.autoInstallHooks = false`
 - Run: `WindsurfAutoMcp: Uninstall Hooks / 卸载 Hooks` (or remove the corresponding `command` entries from hooks.json)
 
-Note: Hooks use Python (the official docs example uses `python3`). Windows uses `python`, macOS/Linux use `python3`; ensure Python is available or you will see hook execution errors.
+Note: Hooks use Python (the official docs example uses `python3`). Windows uses `python`, macOS/Linux use `python3`; ensure Python is available or you will see hook execution errors. `show_output` does not apply to `pre_user_prompt` / `post_cascade_response` per the official docs (and post-hooks cannot block actions).
 If you installed an older PowerShell/Node hooks version, running “Install Hooks” or “Uninstall Hooks” will clean up legacy `ps1/js` entries.
 
 You can also reference the repo examples for manual installation:
@@ -206,8 +208,34 @@ Notes:
 | Tool | Description |
 |------|-------------|
 | `ask_continue` | Ask whether to continue after completing a task |
+| `ask_question` | Single-choice clarification (A/B/C...), with optional extra text/images |
 | `ask_user` | Request user input (supports image upload) |
 | `notify` | Send a user notification |
+
+#### ask_question Examples
+
+Single question:
+```json
+{
+  "title": "Clarify",
+  "message": "Pick the scope for this task",
+  "options": ["Fix only", "Fix + regression tests", "Refactor + tests"],
+  "allowText": true
+}
+```
+
+Multiple questions:
+```json
+{
+  "title": "Clarify",
+  "message": "Answer these before planning",
+  "questions": [
+    { "id": "scope", "prompt": "Scope", "options": ["Fix only", "Fix + tests", "Refactor + tests"] },
+    { "id": "target", "prompt": "Target", "options": ["Frontend", "Backend", "Full stack"] }
+  ],
+  "allowText": true
+}
+```
 
 ### Settings
 

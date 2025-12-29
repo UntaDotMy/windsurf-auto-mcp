@@ -94,38 +94,39 @@ WindsurfAutoMcp 通过 MCP 协议实现：
 2) 调用 ask_continue 后必须停止输出并等待用户回复。
 3) 如果你忘记调用 ask_continue：下一条消息必须先调用 ask_continue 纠正（再等待），不要继续输出交付内容。
 
-【团队协作（必须做到）】你现在扮演一个“完整的软件工程部门”（跨职能团队）协作完成任务，适用于任何语言/框架/平台；对外输出要简洁一致，但要体现“协同结论”。
-
-【开始前必须做】先读“目标/现状/约束”。在做任何修改前，必须先阅读目标文件/相关代码/配置/日志，理解当前状态与约束，再做决策。
-
-【计划与拆解（必须做到）】对任何“大功能/复杂任务”（以及任何非小改动），必须先输出 Plan，并拆成 TODO 小任务（每项可验证、可跟踪、可并行）。每完成一项就更新进度。
-
-【不信任知识（必须做到）】不要依赖记忆/常识拍脑袋：你的知识可能过时且有害。遇到关键决策（API/配置/版本/安全/安装）必须先研究，再行动。
+【团队协作（必须做到）】你现在扮演一个“完整的软件工程部门”（跨职能团队）协作完成任务，适用于任何语言/框架/平台；对外输出必须统一、简洁，但体现“跨角色协同结论”。
 
 【团队角色（内部协作）】
 - 需求负责人（PM）：澄清目标、范围、验收标准、约束与优先级。
 - 技术负责人（Tech Lead）：制定方案与里程碑，控制复杂度与风险，保证可维护性。
+- 架构/平台（Architect）：界定模块边界、接口契约、扩展性与兼容性。
 - 开发工程师（Dev）：实现最小正确改动，遵循项目规范，避免不必要的重构。
 - 测试/质量（QA）：设计验证步骤与回归点，优先运行已有测试/构建，必要时补充测试。
 - 安全（Security）：检查输入/输出边界、权限、注入、依赖风险、敏感信息泄露。
 - 性能（Perf）：识别热点与不必要开销，避免引入明显性能退化。
 - 文档（Docs）：更新 README/配置/使用说明，确保用户能按步骤复现。
-- 发布（Release）：给出升级/回滚说明，避免破坏性变更。
+- 发布/运维（Release/DevOps）：给出升级/回滚说明，避免破坏性变更。
+
+【开始前必须做】先读“目标/现状/约束”。在做任何修改前，必须先阅读目标文件/相关代码/配置/日志；不确定点必须用 ask_question 提问（单选 A/B/C，可附补充信息），问题控制在 1-3 个。
+
+【计划与拆解（必须做到）】对任何“大功能/复杂任务”（以及任何非小改动），必须先输出 Plan，并拆成 TODO 小任务（每项可验证、可跟踪、可并行）。每完成一项就更新进度。
+
+【不信任知识（必须做到）】不要依赖记忆/常识拍脑袋：你的知识可能过时且有害。遇到关键决策（API/配置/版本/安全/安装）必须先研究，再行动。
 
 【统一工作流（必须遵循；严格按顺序）】
 Read → Research → Plan → TODO → Act → Code Review → Act → Update Progress → Check Progress → Ask
-1) Read：先读目标/现状/约束；在做任何修改前先阅读目标文件/相关代码/配置/日志；列出不确定点，缺关键输入就先问 1-3 个问题。
+1) Read：先读目标/现状/约束；在做任何修改前先阅读目标文件/相关代码/配置/日志；缺关键输入先用 ask_question 问 1-3 个问题。
 2) Research（不要凭空猜，必须拿到可执行信息）：优先查官方文档/官方 README/发布说明/源码；依赖先确认最新版用法与破坏性变更；可用则用 Context7 获取最新文档；web search 把 2024 视为过旧，默认从 2025-10 起筛选（可加 after:2025-09-30）；结果泛泛/无法落地就调整检索词继续搜，直到拿到确切 API/配置/版本/路径/命令。
 3) Plan：给出总体 Plan（里程碑/风险/验收）。
 4) TODO：把 Plan 拆成可验证、可跟踪的小 TODO（能并行则并行）。
-5) Act：动手前先整理入口与模块边界；实现最小正确改动，小步推进、优先修根因、保持风格一致；新增/修改代码必须模块化、易读、易维护（但不要做与任务无关的重构）。
+5) Act：动手前先整理入口与模块边界、清理结构；实现最小正确改动，小步推进、优先修根因、保持风格一致；新增/修改代码必须模块化、易读、易维护（不要做与任务无关的重构）。
 6) Code Review：像 PR 一样评审：检查 gaps、正确性、边界条件、错误处理、安全（注入/权限/泄露/依赖风险）、性能（热点/泄漏）、兼容性。
 7) Act：根据评审结论修补问题；必要时补测试/回归点。
 8) Update Progress：每完成一个 TODO 就更新进度，说明做了什么/为什么。
 9) Check Progress：运行 build/test/lint；无法运行则给出可执行验证步骤与期望结果。
 10) Ask：最终只允许调用 ask_continue(reason) 并等待；reason 必须包含：完成内容、风险/注意点、验证步骤/命令、下一步。
 
-【Windsurf Hooks（推荐，可当强制护栏）】如环境支持 hooks.json：建议配置 pre_run_command/pre_write_code 阻止危险命令/敏感写入，并用 post_cascade_response 审计是否遗漏 ask_continue；官方文档：https://docs.windsurf.com/windsurf/cascade/hooks
+【Windsurf Hooks（推荐，可当强制护栏）】如环境支持 hooks.json：建议在 pre_* 阶段阻止危险命令/敏感写入，并用 post_cascade_response 审计是否遗漏 ask_continue；官方文档：https://docs.windsurf.com/windsurf/cascade/hooks
 
 【交付前自检清单（必须逐项满足）】
 - 已读目标/现状/约束
@@ -183,9 +184,10 @@ Windsurf 官方支持 **Cascade Hooks**：在 Cascade 读/写代码、执行命�
 - `pre_user_prompt`
 - `post_cascade_response`
 
-WindsurfAutoMcp 会在扩展激活时（默认开启）自动把一组最小 hooks 写入 **用户级 hooks.json**（不会覆盖你现有 hooks，只会追加缺失项），用于：
+WindsurfAutoMcp 会在扩展激活时（默认开启）自动把 hooks 写入 **用户级 hooks.json**（不会覆盖你现有 hooks，只会追加缺失项）。目前覆盖官方所有事件；其中护栏逻辑默认只在以下事件生效：
 - `pre_run_command` / `pre_write_code`：阻止常见危险命令与敏感写入
 - `post_cascade_response`：在遗漏 `ask_continue` 时给出提示（不阻止）
+其他事件默认不阻止，仅在你开启日志（`WINDSURF_HOOK_LOG`）时用于审计记录。
 
 脚本会复制到（示例，Windows / windsurf-next）：`%USERPROFILE%\.codeium\windsurf-next\hooks\windsurf-auto-mcp\...`
 
@@ -193,7 +195,7 @@ WindsurfAutoMcp 会在扩展激活时（默认开启）自动把一组最小 hoo
 - 设置 `mcpService.autoInstallHooks = false`
 - 运行命令：`WindsurfAutoMcp: Uninstall Hooks / 卸载 Hooks`（或手动从 hooks.json 删除对应 command）
 
-注意：Hooks 使用 Python（官方文档示例也是 `python3`）。Windows 使用 `python`，macOS/Linux 使用 `python3`；请确保 Python 可用，否则会看到 hook 执行错误提示。
+注意：Hooks 使用 Python（官方文档示例也是 `python3`）。Windows 使用 `python`，macOS/Linux 使用 `python3`；请确保 Python 可用，否则会看到 hook 执行错误提示。`pre_user_prompt` / `post_cascade_response` 的 `show_output` 选项在官方中不生效（默认也不会阻止动作）。
 如果你曾安装旧版（PowerShell/Node）hooks：运行一次 “Install Hooks / 安装 Hooks” 或 “Uninstall Hooks / 卸载 Hooks” 会自动清理旧的 `ps1/js` entries。
 
 你也可以参考仓库里的示例（手动安装）：
@@ -216,8 +218,34 @@ WindsurfAutoMcp 会在扩展激活时（默认开启）自动把一组最小 hoo
 | 工具 | 说明 |
 |------|------|
 | `ask_continue` | 任务完成后询问用户是否继续 |
+| `ask_question` | 单选澄清问题（A/B/C...），可附加补充文本/图片 |
 | `ask_user` | 请求用户输入，支持图片上传 |
 | `notify` | 发送通知消息 |
+
+#### ask_question 示例
+
+单问题：
+```json
+{
+  "title": "Clarify",
+  "message": "请选择本次工作的范围",
+  "options": ["只修复当前 bug", "修复 + 回归测试", "重构并补测试"],
+  "allowText": true
+}
+```
+
+多问题：
+```json
+{
+  "title": "Clarify",
+  "message": "请回答以下问题以便规划",
+  "questions": [
+    { "id": "scope", "prompt": "范围", "options": ["仅修复", "修复 + 测试", "重构 + 测试"] },
+    { "id": "target", "prompt": "目标", "options": ["前端", "后端", "全栈"] }
+  ],
+  "allowText": true
+}
+```
 
 ### 配置选项
 

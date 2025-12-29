@@ -10,6 +10,11 @@ import * as path from 'path';
 import * as os from 'os';
 
 type UiLanguage = 'zh' | 'en';
+type ChoiceQuestion = {
+    id?: string;
+    prompt?: string;
+    options: string[];
+};
 
 const I18N: Record<UiLanguage, Record<string, string>> = {
     zh: {
@@ -44,11 +49,13 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'ext.hooksUninstalled': 'Hooks 已卸载（已从 hooks.json 移除并删除脚本）',
         'ext.hooksUninstallFailed': '卸载 Hooks 失败',
         'ext.invalidHooksJson': 'hooks.json JSON 无效: {path}。请修复 JSON 后重试。原始错误: {error}',
+        'ext.choiceRequired': '请先选择一个选项',
 
         // Tool responses
         'tool.confirmYes': '是',
         'tool.confirmNo': '否',
         'tool.userChoice': '用户选择: {choice}',
+        'tool.userChoices': '用户选择:',
         'tool.userConfirmed': '用户已确认',
         'tool.userCanceled': '用户取消了操作',
         'tool.userInput': '用户输入: {text}',
@@ -189,7 +196,15 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'panel.toast.imageRemoved': '已移除图片',
         'panel.toast.imageTooLarge': '图片过大，已跳过',
         'panel.toast.tooManyImages': '图片数量过多，已跳过',
-        'panel.removeImage': '移除图片'
+        'panel.removeImage': '移除图片',
+        'panel.choiceLabel': '请选择一个选项',
+        'panel.choiceHint': '单选，点击可选择，再次点击可取消。',
+        'panel.choiceClear': '清除选择',
+        'panel.choiceRequired': '请先选择一个选项再提交。',
+        'panel.choiceQuestion': '问题',
+        'panel.contextLabel': '上下文',
+        'panel.extraLabel': '补充信息（可选）',
+        'panel.extraPlaceholder': '如需补充，请填写'
     },
     en: {
         // Extension host
@@ -223,11 +238,13 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'ext.hooksUninstalled': 'Hooks uninstalled (removed from hooks.json and deleted scripts)',
         'ext.hooksUninstallFailed': 'Failed to uninstall Hooks',
         'ext.invalidHooksJson': 'Invalid JSON in hooks.json: {path}. Please fix the JSON then retry. Original error: {error}',
+        'ext.choiceRequired': 'Please select an option first',
 
         // Tool responses
         'tool.confirmYes': 'Yes',
         'tool.confirmNo': 'No',
         'tool.userChoice': 'User choice: {choice}',
+        'tool.userChoices': 'User choices:',
         'tool.userConfirmed': 'User confirmed',
         'tool.userCanceled': 'User canceled',
         'tool.userInput': 'User input: {text}',
@@ -368,7 +385,15 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'panel.toast.imageRemoved': 'Image removed',
         'panel.toast.imageTooLarge': 'Image too large, skipped',
         'panel.toast.tooManyImages': 'Too many images, skipped',
-        'panel.removeImage': 'Remove image'
+        'panel.removeImage': 'Remove image',
+        'panel.choiceLabel': 'Choose an option',
+        'panel.choiceHint': 'Single choice. Click to select, click again to unselect.',
+        'panel.choiceClear': 'Clear selection',
+        'panel.choiceRequired': 'Please select an option before submitting.',
+        'panel.choiceQuestion': 'Question',
+        'panel.contextLabel': 'Context',
+        'panel.extraLabel': 'Extra details (optional)',
+        'panel.extraPlaceholder': 'Add more information if needed'
     }
 };
 
@@ -434,6 +459,19 @@ function getWindsurfHooksConfigPaths(homeDir: string): Array<{ variant: string; 
     }));
 }
 
+const HOOK_EVENTS = [
+    'pre_read_code',
+    'post_read_code',
+    'pre_write_code',
+    'post_write_code',
+    'pre_run_command',
+    'post_run_command',
+    'pre_mcp_tool_use',
+    'post_mcp_tool_use',
+    'pre_user_prompt',
+    'post_cascade_response'
+] as const;
+
 function buildHooksCommand(variantHooksDir: string): string {
     const guardPath = path.join(variantHooksDir, 'windsurf-auto-mcp-guard.py');
     if (process.platform === 'win32') {
@@ -480,11 +518,9 @@ function installWindsurfHooks() {
             }
 
             const command = buildHooksCommand(scriptDir);
-            const desiredHooks = {
-                pre_run_command: [{ command, show_output: true }],
-                pre_write_code: [{ command, show_output: true }],
-                post_cascade_response: [{ command, show_output: true }]
-            } as Record<string, Array<{ command: string; show_output: boolean }>>;
+            const desiredHooks = Object.fromEntries(
+                HOOK_EVENTS.map((eventName) => [eventName, [{ command, show_output: true }]])
+            ) as Record<string, Array<{ command: string; show_output: boolean }>>;
 
             let config: any = {};
             if (fs.existsSync(hooksPath)) {
@@ -556,8 +592,7 @@ function uninstallWindsurfHooks() {
                         throw new Error(tr('ext.invalidHooksJson', { path: hooksPath, error: e?.message ?? String(e) }, lang));
                     }
                     if (config?.hooks && typeof config.hooks === 'object') {
-                        const events = ['pre_run_command', 'pre_write_code', 'post_cascade_response'];
-                        for (const ev of events) {
+                        for (const ev of HOOK_EVENTS) {
                             if (!Array.isArray(config.hooks[ev])) continue;
                             config.hooks[ev] = config.hooks[ev].filter(
                                 (h: any) => !h || (h.command !== command && !isLegacyHookCommand(h.command))
@@ -661,6 +696,45 @@ const TOOLS = [
                     type: 'string', 
                     enum: ['input', 'confirm', 'info'],
                     description: 'Dialog type: input/confirm/info / 对话框类型：input=输入框，confirm=确认框，info=信息提示'
+                },
+                allowImage: { type: 'boolean', description: 'Allow image upload / 是否允许上传图片' }
+            },
+            required: ['message']
+        }
+    },
+    {
+        name: 'ask_question',
+        description: 'Ask single-choice clarification questions (A/B/C/...) with optional extra text / 单选澄清问题（A/B/C...），可附加补充文本',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                title: { type: 'string', description: 'Dialog title / 对话框标题' },
+                message: { type: 'string', description: 'Context or prompt for the question(s) / 问题上下文或提示' },
+                options: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: 'Single-question options (A/B/C/...) / 单问题选项'
+                },
+                questions: {
+                    type: 'array',
+                    description: 'Multiple single-choice questions / 多问题单选',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            id: { type: 'string', description: 'Optional question id / 可选问题 ID' },
+                            prompt: { type: 'string', description: 'Question prompt / 问题内容' },
+                            options: {
+                                type: 'array',
+                                items: { type: 'string' },
+                                description: 'Options for the question / 问题选项'
+                            }
+                        },
+                        required: ['options']
+                    }
+                },
+                allowText: {
+                    type: 'boolean',
+                    description: 'Allow extra text input / 允许补充文本输入'
                 },
                 allowImage: { type: 'boolean', description: 'Allow image upload / 是否允许上传图片' }
             },
@@ -947,6 +1021,9 @@ async function handleToolCall(name: string, args: any): Promise<any> {
             stats.askUserCalls++;
             result = await handleAskUser(args);
             break;
+        case 'ask_question':
+            result = await handleAskQuestion(args);
+            break;
         case 'notify':
             stats.notifyCalls++;
             result = await handleNotify(args);
@@ -1068,6 +1145,116 @@ async function handleNotify(args: any): Promise<any> {
     return { content: [{ type: 'text', text }] };
 }
 
+async function handleAskQuestion(args: any): Promise<any> {
+    const { title, message, allowImage } = args;
+    const lang = getUiLanguage();
+    const options = Array.isArray(args?.options) ? args.options.filter((opt: any) => typeof opt === 'string') : [];
+    const rawQuestions = Array.isArray(args?.questions) ? args.questions : [];
+    const questions: ChoiceQuestion[] = rawQuestions
+        .map((q: any, index: number) => ({
+            id: typeof q?.id === 'string' ? q.id : `q_${index + 1}`,
+            prompt: typeof q?.prompt === 'string' ? q.prompt : '',
+            options: Array.isArray(q?.options) ? q.options.filter((opt: any) => typeof opt === 'string') : []
+        }))
+        .filter((q: ChoiceQuestion) => q.options.length > 0);
+
+    if (options.length === 0 && questions.length === 0) {
+        const msg = lang === 'en' ? 'ask_question requires options or questions.' : 'ask_question 需要提供 options 或 questions。';
+        throw new Error(msg);
+    }
+
+    const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const allowText = typeof args?.allowText === 'boolean' ? args.allowText : true;
+    const normalizedQuestions =
+        questions.length > 0
+            ? questions
+            : [
+                  {
+                      id: 'q_1',
+                      prompt: typeof message === 'string' ? message : '',
+                      options
+                  }
+              ];
+
+    return new Promise((resolve) => {
+        sidebarProvider?.showInputDialog(
+            requestId,
+            title || 'WindsurfAutoMcp',
+            message,
+            !!allowImage,
+            {
+                mode: 'choice',
+                questions: normalizedQuestions,
+                allowText
+            }
+        );
+
+        pendingRequests.set(requestId, {
+            resolve: (value: any) => {
+                pendingRequests.delete(requestId);
+                if (value === null || value === undefined) {
+                    resolve({ content: [{ type: 'text', text: tr('tool.userCanceled', {}, lang) }] });
+                } else {
+                    const content: any[] = [];
+                    const choices = Array.isArray(value?.choices) ? value.choices : [];
+                    if (choices.length > 0) {
+                        const lines: string[] = [];
+                        for (const [idx, choice] of choices.entries()) {
+                            const prompt = typeof choice?.prompt === 'string' ? choice.prompt : '';
+                            const label = typeof choice?.choiceLabel === 'string' ? choice.choiceLabel : '';
+                            const text = typeof choice?.choiceText === 'string' ? choice.choiceText : '';
+                            if (prompt) {
+                                lines.push(`${idx + 1}. ${prompt}`);
+                            }
+                            lines.push(`${label ? `${label} - ` : ''}${text}`);
+                        }
+                        content.push({ type: 'text', text: `${tr('tool.userChoices', {}, lang)}\n${lines.join('\n')}` });
+                    }
+                    const extraText = typeof value?.extraText === 'string' ? value.extraText.trim() : '';
+                    if (extraText) {
+                        content.push({ type: 'text', text: tr('tool.userInput', { text: extraText }, lang) });
+                    }
+                    const payload = {
+                        mode: 'choice',
+                        choices,
+                        extraText
+                    };
+                    content.push({ type: 'text', text: `CHOICE_JSON:\n${JSON.stringify(payload, null, 2)}` });
+
+                    // 处理图片（如果有）
+                    const images: any[] = Array.isArray(value.images)
+                        ? value.images
+                        : (value.image ? [value.image] : []);
+                    for (const img of images) {
+                        if (!img) continue;
+                        const imgStr = String(img);
+                        const base64Match = imgStr.match(/^data:image\/([^;]+);base64,(.+)$/);
+                        if (base64Match) {
+                            const mimeType = `image/${base64Match[1]}`;
+                            const base64Data = base64Match[2];
+                            content.push({ type: 'image', data: base64Data, mimeType });
+                        } else {
+                            content.push({ type: 'image', data: imgStr, mimeType: 'image/png' });
+                        }
+                    }
+                    if (images.length > 0) {
+                        content.push({ type: 'text', text: tr('tool.userUploadedImages', { count: images.length }, lang) });
+                    }
+                    if (content.length === 0) {
+                        content.push({ type: 'text', text: tr('tool.userEmpty', {}, lang) });
+                    }
+                    resolve({ content });
+                }
+            },
+            reject: () => {
+                pendingRequests.delete(requestId);
+                resolve({ content: [{ type: 'text', text: tr('tool.userCanceled', {}, lang) }] });
+            },
+            timestamp: Date.now()
+        });
+    });
+}
+
 async function handleAskContinue(args: any): Promise<any> {
     const { reason } = args;
     const lang = getUiLanguage();
@@ -1163,7 +1350,14 @@ function toggleDialog() {
     }
 }
 
-function showDialogPanel(requestId: string, type: 'continue' | 'input', title: string, message: string, allowImage: boolean = true) {
+function showDialogPanel(
+    requestId: string,
+    type: 'continue' | 'input',
+    title: string,
+    message: string,
+    allowImage: boolean = true,
+    dialogOptions?: { mode?: 'choice'; questions?: ChoiceQuestion[]; allowText?: boolean }
+) {
     // 如果已有 panel，先关闭
     if (dialogPanel) {
         dialogPanel.dispose();
@@ -1183,7 +1377,7 @@ function showDialogPanel(requestId: string, type: 'continue' | 'input', title: s
         }
     );
 
-    dialogPanel.webview.html = getDialogHtml(requestId, type, title, message, allowImage);
+    dialogPanel.webview.html = getDialogHtml(requestId, type, title, message, allowImage, dialogOptions);
 
     dialogPanel.webview.onDidReceiveMessage(async (msg) => {
         outputChannel.appendLine(`[DialogPanel] 收到消息: ${msg.type}, requestId: ${msg.requestId}`);
@@ -1210,8 +1404,18 @@ function showDialogPanel(requestId: string, type: 'continue' | 'input', title: s
     });
 }
 
-function getDialogHtml(requestId: string, type: 'continue' | 'input', title: string, message: string, allowImage: boolean): string {
+function getDialogHtml(
+    requestId: string,
+    type: 'continue' | 'input',
+    title: string,
+    message: string,
+    allowImage: boolean,
+    dialogOptions?: { mode?: 'choice'; questions?: ChoiceQuestion[]; allowText?: boolean }
+): string {
     const isContinue = type === 'continue';
+    const dialogMode = dialogOptions?.mode === 'choice' ? 'choice' : type;
+    const choiceQuestions = dialogOptions?.questions ?? [];
+    const allowExtraText = dialogOptions?.allowText !== false;
     const lang = getUiLanguage();
     const htmlLang = lang === 'en' ? 'en' : 'zh-CN';
     const nonce = getNonce();
@@ -1387,6 +1591,75 @@ function getDialogHtml(requestId: string, type: 'continue' | 'input', title: str
         }
         textarea::placeholder {
             color: var(--text-muted);
+        }
+
+        .choice-card {
+            display: none;
+        }
+        .choice-card.show {
+            display: block;
+        }
+        .choice-hint {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+        }
+        .choice-list {
+            display: grid;
+            gap: 10px;
+        }
+        .choice-option {
+            width: 100%;
+            border: 1px solid var(--border);
+            background: var(--bg-elevated);
+            color: var(--text-primary);
+            padding: 12px 14px;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            text-align: left;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            transition: var(--transition);
+        }
+        .choice-option:hover {
+            border-color: var(--border-hover);
+        }
+        .choice-option.selected {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 2px var(--accent-glow);
+        }
+        .choice-letter {
+            width: 28px;
+            height: 28px;
+            border-radius: 999px;
+            background: rgba(255,255,255,0.12);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 12px;
+        }
+        .choice-text {
+            flex: 1 1 auto;
+            font-size: 14px;
+        }
+        .choice-actions {
+            margin-top: 12px;
+            display: flex;
+            justify-content: flex-end;
+        }
+        .choice-group {
+            margin-bottom: 16px;
+        }
+        .choice-group:last-child {
+            margin-bottom: 0;
+        }
+        .choice-prompt {
+            font-size: 13px;
+            color: var(--text-primary);
+            margin-bottom: 10px;
+            font-weight: 600;
         }
         
         .image-section {
@@ -1614,23 +1887,32 @@ function getDialogHtml(requestId: string, type: 'continue' | 'input', title: str
 	            <div class="reason-box" id="reasonText"></div>
 	        </div>
 
-	        <div class="card">
-	            <label class="input-label" id="replyLabel"></label>
-	            <textarea id="userInput" autofocus></textarea>
+        <div class="card choice-card" id="choiceCard">
+            <div class="card-label" id="choiceLabel"></div>
+            <div class="choice-hint" id="choiceHint"></div>
+            <div id="choiceContainer"></div>
+            <div class="choice-actions">
+                <button class="btn btn-outline" id="choiceClearBtn" type="button"></button>
+            </div>
+        </div>
 
-	            ${allowImage ? `
-	            <div class="image-section">
-	                <label class="input-label" id="imageLabel"></label>
-	                <div class="image-drop-zone" id="dropZone">
-	                    <div class="icon">🖼️</div>
-	                    <div id="dropZoneHint"></div>
-	                </div>
-	                <div id="imagePreviewGrid" class="image-preview-grid"></div>
-	                <button class="btn btn-outline" id="chooseImageBtn" type="button"></button>
-	                <input type="file" id="fileInput" accept="image/*" multiple style="display:none" />
-	            </div>
-	            ` : ''}
-	        </div>
+        <div class="card" id="inputCard">
+            <label class="input-label" id="replyLabel"></label>
+            <textarea id="userInput" autofocus></textarea>
+
+            ${allowImage ? `
+            <div class="image-section" id="imageSection">
+                <label class="input-label" id="imageLabel"></label>
+                <div class="image-drop-zone" id="dropZone">
+                    <div class="icon">🖼️</div>
+                    <div id="dropZoneHint"></div>
+                </div>
+                <div id="imagePreviewGrid" class="image-preview-grid"></div>
+                <button class="btn btn-outline" id="chooseImageBtn" type="button"></button>
+                <input type="file" id="fileInput" accept="image/*" multiple style="display:none" />
+            </div>
+            ` : ''}
+        </div>
 
 	        <div class="btn-row">
 	            <button class="btn btn-success" id="primaryBtn" type="button"></button>
@@ -1641,13 +1923,20 @@ function getDialogHtml(requestId: string, type: 'continue' | 'input', title: str
 	    </div>
 
 	    <script nonce="${nonce}">
-	        const vscode = acquireVsCodeApi();
-	        const requestId = '${requestId}';
-	        const isContinue = ${isContinue};
-	        const I18N = ${safeJson(WEBVIEW_I18N)};
-	        const rawTitle = ${safeJson(title ?? '')};
-	        const rawMessage = ${safeJson(message ?? '')};
-	        const initialLang = ${safeJson(lang)};
+        const vscode = acquireVsCodeApi();
+        const requestId = '${requestId}';
+        const isContinue = ${isContinue};
+        const dialogMode = ${safeJson(dialogMode)};
+        const I18N = ${safeJson(WEBVIEW_I18N)};
+        const rawTitle = ${safeJson(title ?? '')};
+        const rawMessage = ${safeJson(message ?? '')};
+        const initialLang = ${safeJson(lang)};
+        const choiceQuestions = ${safeJson(choiceQuestions)};
+        const allowExtraText = ${safeJson(allowExtraText)};
+        const hasChoice = dialogMode === 'choice';
+        const normalizedQuestions = Array.isArray(choiceQuestions) ? choiceQuestions : [];
+        const choiceSelections = {};
+        const CHOICE_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
 	        const MAX_IMAGES = 6;
 	        const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
@@ -1660,32 +1949,88 @@ function getDialogHtml(requestId: string, type: 'continue' | 'input', title: str
 	            return template.replace(/\\{(\\w+)\\}/g, (_, name) => String(vars[name] ?? '{' + name + '}'));
 	        }
 
-	        function applyLanguage() {
-	            document.documentElement.lang = currentLang === 'en' ? 'en' : 'zh-CN';
+        function applyLanguage() {
+            document.documentElement.lang = currentLang === 'en' ? 'en' : 'zh-CN';
 
-	            const titleText = isContinue ? t('panel.confirmTitle') : (rawTitle || 'WindsurfAutoMcp');
-	            document.title = titleText;
+            const hasChoice = dialogMode === 'choice';
+            const hasQuestions = hasChoice && Array.isArray(choiceQuestions) && choiceQuestions.length > 0;
+            const firstPrompt = hasQuestions ? (choiceQuestions[0]?.prompt || rawMessage) : rawMessage;
+            const showContext =
+                hasChoice &&
+                !!rawMessage &&
+                hasQuestions &&
+                (choiceQuestions.length > 1 || (choiceQuestions[0]?.prompt && choiceQuestions[0]?.prompt !== rawMessage));
 
-	            const titleEl = document.getElementById('panelTitle');
-	            if (titleEl) titleEl.textContent = titleText;
+            const titleText = isContinue ? t('panel.confirmTitle') : (rawTitle || 'WindsurfAutoMcp');
+            document.title = titleText;
 
-	            const subEl = document.getElementById('panelSubtitle');
-	            if (subEl) subEl.textContent = isContinue ? t('panel.confirmSub') : t('panel.inputSub');
+            const titleEl = document.getElementById('panelTitle');
+            if (titleEl) titleEl.textContent = titleText;
 
-	            const reasonLabelEl = document.getElementById('reasonLabel');
-	            if (reasonLabelEl) reasonLabelEl.textContent = isContinue ? t('panel.reasonLabelContinue') : t('panel.reasonLabelInput');
+            const subEl = document.getElementById('panelSubtitle');
+            if (subEl) subEl.textContent = isContinue ? t('panel.confirmSub') : t('panel.inputSub');
 
-	            const reasonTextEl = document.getElementById('reasonText');
-	            if (reasonTextEl) reasonTextEl.textContent = rawMessage;
+            const reasonLabelEl = document.getElementById('reasonLabel');
+            if (reasonLabelEl) {
+                if (hasChoice) {
+                    reasonLabelEl.textContent = showContext ? t('panel.contextLabel') : t('panel.choiceQuestion');
+                } else {
+                    reasonLabelEl.textContent = isContinue ? t('panel.reasonLabelContinue') : t('panel.reasonLabelInput');
+                }
+            }
 
-	            const replyLabelEl = document.getElementById('replyLabel');
-	            if (replyLabelEl) replyLabelEl.textContent = isContinue ? t('panel.replyLabelContinue') : t('panel.replyLabelInput');
+            const reasonTextEl = document.getElementById('reasonText');
+            if (reasonTextEl) {
+                if (hasChoice) {
+                    reasonTextEl.textContent = showContext ? rawMessage : (firstPrompt || rawMessage);
+                } else {
+                    reasonTextEl.textContent = rawMessage;
+                }
+            }
 
-	            const userInputEl = document.getElementById('userInput');
-	            if (userInputEl) userInputEl.placeholder = isContinue ? t('panel.replyPlaceholderContinue') : t('panel.replyPlaceholderInput');
+            const replyLabelEl = document.getElementById('replyLabel');
+            if (replyLabelEl) {
+                if (hasChoice) {
+                    replyLabelEl.textContent = t('panel.extraLabel');
+                } else {
+                    replyLabelEl.textContent = isContinue ? t('panel.replyLabelContinue') : t('panel.replyLabelInput');
+                }
+            }
 
-	            const imageLabelEl = document.getElementById('imageLabel');
-	            if (imageLabelEl) imageLabelEl.textContent = t('panel.imageLabel');
+            const userInputEl = document.getElementById('userInput');
+            if (userInputEl) {
+                if (hasChoice) {
+                    userInputEl.placeholder = t('panel.extraPlaceholder');
+                } else {
+                    userInputEl.placeholder = isContinue ? t('panel.replyPlaceholderContinue') : t('panel.replyPlaceholderInput');
+                }
+            }
+
+            const inputCard = document.getElementById('inputCard');
+            if (inputCard) {
+                if (hasChoice && !allowExtraText) {
+                    inputCard.style.display = 'none';
+                } else {
+                    inputCard.style.display = '';
+                }
+            }
+
+            const choiceCard = document.getElementById('choiceCard');
+            if (choiceCard) {
+                choiceCard.classList.toggle('show', hasChoice);
+            }
+
+            const choiceLabelEl = document.getElementById('choiceLabel');
+            if (choiceLabelEl && hasChoice) choiceLabelEl.textContent = t('panel.choiceLabel');
+
+            const choiceHintEl = document.getElementById('choiceHint');
+            if (choiceHintEl && hasChoice) choiceHintEl.textContent = t('panel.choiceHint');
+
+            const clearBtn = document.getElementById('choiceClearBtn');
+            if (clearBtn && hasChoice) clearBtn.textContent = t('panel.choiceClear');
+
+            const imageLabelEl = document.getElementById('imageLabel');
+            if (imageLabelEl) imageLabelEl.textContent = t('panel.imageLabel');
 
 	            const dropZoneHintEl = document.getElementById('dropZoneHint');
 	            if (dropZoneHintEl) dropZoneHintEl.textContent = t('panel.pasteOrDrop');
@@ -1710,6 +2055,7 @@ function getDialogHtml(requestId: string, type: 'continue' | 'input', title: str
 	                langBtn.title = currentLang === 'en' ? t('ui.lang.toggleToZh') : t('ui.lang.toggleToEn');
 	            }
 
+	            renderChoiceQuestions();
 	            renderPreviews();
 	        }
 
@@ -1728,6 +2074,104 @@ function getDialogHtml(requestId: string, type: 'continue' | 'input', title: str
 	            toast.textContent = msg;
 	            document.body.appendChild(toast);
 	            setTimeout(() => toast.remove(), 2000);
+	        }
+
+	        function getChoiceLabel(index) {
+	            return CHOICE_LETTERS[index] || String(index + 1);
+	        }
+
+	        function buildChoiceGroup(question, questionIndex, showPrompt) {
+	            const group = document.createElement('div');
+	            group.className = 'choice-group';
+
+	            const promptText = (question && question.prompt && String(question.prompt).trim())
+	                ? String(question.prompt).trim()
+	                : \`\${t('panel.choiceQuestion')} \${questionIndex + 1}\`;
+
+	            if (showPrompt) {
+	                const prompt = document.createElement('div');
+	                prompt.className = 'choice-prompt';
+	                prompt.textContent = promptText;
+	                group.appendChild(prompt);
+	            }
+
+	            const list = document.createElement('div');
+	            list.className = 'choice-list';
+
+	            const options = Array.isArray(question?.options) ? question.options : [];
+	            const selection = choiceSelections[question?.id || String(questionIndex)];
+	            const selectedIndex = typeof selection?.choiceIndex === 'number' ? selection.choiceIndex : -1;
+
+	            options.forEach((optionText, optionIndex) => {
+	                const btn = document.createElement('button');
+	                btn.type = 'button';
+	                btn.className = 'choice-option';
+	                if (optionIndex === selectedIndex) {
+	                    btn.classList.add('selected');
+	                }
+
+	                const letter = getChoiceLabel(optionIndex);
+	                const letterEl = document.createElement('span');
+	                letterEl.className = 'choice-letter';
+	                letterEl.textContent = letter;
+
+	                const textEl = document.createElement('span');
+	                textEl.className = 'choice-text';
+	                textEl.textContent = String(optionText);
+
+	                if (selection && optionIndex === selectedIndex) {
+	                    selection.prompt = promptText;
+	                    selection.choiceLabel = letter;
+	                    selection.choiceText = String(optionText);
+	                }
+
+	                btn.appendChild(letterEl);
+	                btn.appendChild(textEl);
+
+	                btn.addEventListener('click', () => {
+	                    const qid = question?.id || String(questionIndex);
+	                    const current = choiceSelections[qid];
+	                    if (current && current.choiceIndex === optionIndex) {
+	                        delete choiceSelections[qid];
+	                    } else {
+	                        choiceSelections[qid] = {
+	                            id: qid,
+	                            prompt: promptText,
+	                            choiceIndex: optionIndex,
+	                            choiceLabel: letter,
+	                            choiceText: String(optionText)
+	                        };
+	                    }
+	                    renderChoiceQuestions();
+	                });
+
+	                list.appendChild(btn);
+	            });
+
+	            group.appendChild(list);
+	            return group;
+	        }
+
+	        function renderChoiceQuestions() {
+	            const container = document.getElementById('choiceContainer');
+	            if (!container) return;
+	            container.innerHTML = '';
+	            if (!hasChoice) return;
+
+	            const needsPrompt =
+	                normalizedQuestions.length > 1 ||
+	                (normalizedQuestions[0]?.prompt && normalizedQuestions[0]?.prompt !== rawMessage);
+
+	            normalizedQuestions.forEach((question, index) => {
+	                const showPrompt = normalizedQuestions.length > 1 || needsPrompt;
+	                const group = buildChoiceGroup(question || {}, index, showPrompt);
+	                container.appendChild(group);
+	            });
+	        }
+
+	        function clearChoiceSelections() {
+	            Object.keys(choiceSelections).forEach((key) => delete choiceSelections[key]);
+	            renderChoiceQuestions();
 	        }
 
 	        window.addEventListener('message', (event) => {
@@ -1872,10 +2316,26 @@ function getDialogHtml(requestId: string, type: 'continue' | 'input', title: str
 	                };
 	            } else {
 	                if (confirm) {
-	                    response = {
-	                        text: input,
-	                        images: imagesData
-	                    };
+	                    if (hasChoice) {
+	                        const selections = normalizedQuestions.map((question, index) => {
+	                            const qid = question?.id || String(index);
+	                            return choiceSelections[qid];
+	                        });
+	                        if (selections.some((item) => !item)) {
+	                            showToast(t('panel.choiceRequired'));
+	                            return;
+	                        }
+	                        response = {
+	                            choices: selections,
+	                            extraText: input,
+	                            images: imagesData
+	                        };
+	                    } else {
+	                        response = {
+	                            text: input,
+	                            images: imagesData
+	                        };
+	                    }
 	                } else {
 	                    response = null;
 	                }
@@ -1888,6 +2348,7 @@ function getDialogHtml(requestId: string, type: 'continue' | 'input', title: str
 
 	        document.getElementById('langBtn')?.addEventListener('click', () => toggleLanguage());
 	        document.getElementById('chooseImageBtn')?.addEventListener('click', () => selectImage());
+	        document.getElementById('choiceClearBtn')?.addEventListener('click', () => clearChoiceSelections());
 	        document.getElementById('primaryBtn')?.addEventListener('click', () => submitResponse(true));
 	        document.getElementById('secondaryBtn')?.addEventListener('click', () => submitResponse(false));
 	    </script>
@@ -2025,14 +2486,33 @@ async function createWindsurfRules() {
 Hard rule (highest priority): When you decide a task is done / ready to deliver, do NOT output a normal final response; you MUST call WindsurfAutoMcp ask_continue and put in reason: what was done, risks/notes, verification steps/commands, and next steps.
 硬规则（最高优先级）：当你判断“任务已完成/准备交付”时，不要直接输出最终答复；必须调用 WindsurfAutoMcp 的 ask_continue，并在 reason 中写清：完成内容、风险/注意点、验证步骤/命令、下一步。
 
+## Collaboration / 团队协作
+You are a full software engineering department (cross-functional team). Output must be unified and concise, but reflect a consolidated team conclusion.
+你是完整的软件工程部门（跨职能团队）。对外输出必须统一、简洁，但体现协作结论。
+
+## Roles / 角色
+- PM：澄清目标、范围、验收标准、约束与优先级。
+- Tech Lead：制定方案与里程碑，控制复杂度与风险，保证可维护性。
+- Architect：界定模块边界、接口契约、扩展性与兼容性。
+- Dev：实现最小正确改动，遵循规范，避免无关重构。
+- QA：设计验证步骤与回归点，优先运行已有测试/构建，必要时补测试。
+- Security：检查边界、权限、注入、依赖风险、敏感信息泄露。
+- Perf：识别热点与不必要开销，避免性能退化。
+- Docs：更新 README/配置/使用说明，确保可复现。
+- Release/DevOps：给出升级/回滚说明，避免破坏性变更。
+
+## Before you start / 开始前
+Read the target/current state/constraints first. Missing key inputs → ask 1–3 questions via ask_question (single choice A/B/C + optional extra text).
+先读目标/现状/约束。缺关键输入 → 用 ask_question 提问 1-3 个问题（单选 A/B/C，可附补充文本）。
+
 ## Workflow (must follow; strict order) / 工作流（必须严格按顺序）
 Read → Research → Plan → TODO → Act → Code Review → Act → Update Progress → Check Progress → Ask
 
-1) Read：先读目标/现状/约束；在做任何修改前先阅读目标文件/相关代码/配置/日志；列出不确定点，缺关键输入就先问 1-3 个问题。
+1) Read：先读目标/现状/约束；在做任何修改前先阅读目标文件/相关代码/配置/日志；缺关键输入先用 ask_question 问 1-3 个问题。
 2) Research：不要凭空猜，必须拿到可执行信息（官方文档/README/发布说明/源码优先；依赖先确认最新版与破坏性变更；可用则用 Context7 获取最新文档；web search 把 2024 视为过旧，默认从 2025-10 起筛选，必要时加 after:2025-09-30；结果泛泛就调整检索词继续搜直到拿到确切 API/配置/版本/路径/命令）。
 3) Plan：给出总体 Plan（里程碑/风险/验收）。
 4) TODO：把 Plan 拆成可验证、可跟踪的小 TODO（能并行则并行）。
-5) Act：动手前先整理入口与模块边界；实现最小正确改动，小步推进、优先修根因、保持风格一致；代码必须模块化、易读、易维护（避免无关重构）。
+5) Act：动手前先整理入口与模块边界、清理结构；实现最小正确改动，小步推进、优先修根因、保持风格一致；代码必须模块化、易读、易维护（避免无关重构）。
 6) Code Review：像 PR 一样评审：检查 gaps、正确性、边界条件、错误处理、安全（注入/权限/泄露/依赖风险）、性能（热点/泄漏）、兼容性。
 7) Act：根据评审结论修补问题；必要时补测试/回归点。
 8) Update Progress：每完成一个 TODO 就更新进度，说明做了什么/为什么。
@@ -2206,9 +2686,15 @@ class SidebarProvider implements vscode.WebviewViewProvider {
         this._view?.webview.postMessage(message);
     }
 
-    showInputDialog(requestId: string, title: string, message: string, allowImage: boolean) {
+    showInputDialog(
+        requestId: string,
+        title: string,
+        message: string,
+        allowImage: boolean,
+        dialogOptions?: { mode?: 'choice'; questions?: ChoiceQuestion[]; allowText?: boolean }
+    ) {
         // 使用独立的 Panel 显示对话框
-        showDialogPanel(requestId, 'input', title, message, allowImage);
+        showDialogPanel(requestId, 'input', title, message, allowImage, dialogOptions);
     }
 
     showContinueDialog(requestId: string, reason: string) {

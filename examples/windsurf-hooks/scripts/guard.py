@@ -155,11 +155,14 @@ def main():
 
     append_log(os.environ.get("WINDSURF_HOOK_LOG", ""), payload)
 
-    if not should_enforce_guards():
-        return 0
-
     action = payload.get("agent_action_name")
     tool_info = payload.get("tool_info") or {}
+
+    if action not in ("pre_run_command", "pre_write_code", "post_cascade_response"):
+        return 0
+
+    if not should_enforce_guards():
+        return 0
 
     if action == "pre_run_command":
         command_line = tool_info.get("command_line")
@@ -188,4 +191,3 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-

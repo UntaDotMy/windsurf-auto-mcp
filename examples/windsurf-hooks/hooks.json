@@ -1,12 +1,54 @@
 {
   "hooks": {
-    "pre_run_command": [
+    "pre_read_code": [
+      {
+        "command": "python3 /ABSOLUTE/PATH/TO/windsurf-auto-mcp/examples/windsurf-hooks/scripts/guard.py",
+        "show_output": true
+      }
+    ],
+    "post_read_code": [
       {
         "command": "python3 /ABSOLUTE/PATH/TO/windsurf-auto-mcp/examples/windsurf-hooks/scripts/guard.py",
         "show_output": true
       }
     ],
     "pre_write_code": [
+      {
+        "command": "python3 /ABSOLUTE/PATH/TO/windsurf-auto-mcp/examples/windsurf-hooks/scripts/guard.py",
+        "show_output": true
+      }
+    ],
+    "post_write_code": [
+      {
+        "command": "python3 /ABSOLUTE/PATH/TO/windsurf-auto-mcp/examples/windsurf-hooks/scripts/guard.py",
+        "show_output": true
+      }
+    ],
+    "pre_run_command": [
+      {
+        "command": "python3 /ABSOLUTE/PATH/TO/windsurf-auto-mcp/examples/windsurf-hooks/scripts/guard.py",
+        "show_output": true
+      }
+    ],
+    "post_run_command": [
+      {
+        "command": "python3 /ABSOLUTE/PATH/TO/windsurf-auto-mcp/examples/windsurf-hooks/scripts/guard.py",
+        "show_output": true
+      }
+    ],
+    "pre_mcp_tool_use": [
+      {
+        "command": "python3 /ABSOLUTE/PATH/TO/windsurf-auto-mcp/examples/windsurf-hooks/scripts/guard.py",
+        "show_output": true
+      }
+    ],
+    "post_mcp_tool_use": [
+      {
+        "command": "python3 /ABSOLUTE/PATH/TO/windsurf-auto-mcp/examples/windsurf-hooks/scripts/guard.py",
+        "show_output": true
+      }
+    ],
+    "pre_user_prompt": [
       {
         "command": "python3 /ABSOLUTE/PATH/TO/windsurf-auto-mcp/examples/windsurf-hooks/scripts/guard.py",
         "show_output": true
