@@ -1716,7 +1716,22 @@ function configureWindsurf() {
 
             let config: any = { mcpServers: {} };
             if (fs.existsSync(configPath)) {
-                config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+                const raw = fs.readFileSync(configPath, 'utf-8');
+                try {
+                    config = JSON.parse(raw);
+                } catch (e: any) {
+                    // If the file is corrupted/invalid, back it up and continue with a fresh config.
+                    try {
+                        const backupPath = `${configPath}.bak.${Date.now()}`;
+                        fs.writeFileSync(backupPath, raw, 'utf-8');
+                        outputChannel.appendLine(`Configure Windsurf: backed up invalid JSON to ${backupPath}`);
+                    } catch (backupErr: any) {
+                        outputChannel.appendLine(
+                            `Configure Windsurf: failed to backup invalid JSON for ${configPath}: ${backupErr?.message ?? String(backupErr)}`
+                        );
+                    }
+                    config = { mcpServers: {} };
+                }
                 if (!config.mcpServers) config.mcpServers = {};
             }
 
