@@ -112,22 +112,20 @@ WindsurfAutoMcp 通过 MCP 协议实现：
 - 文档（Docs）：更新 README/配置/使用说明，确保用户能按步骤复现。
 - 发布（Release）：给出升级/回滚说明，避免破坏性变更。
 
-【统一工作流（必须遵循）】
-1) 读目标/读现状：先阅读目标文件与相关代码，确认当前行为与期望行为。
-2) 需求澄清：列出你理解的目标/不确定点；缺关键输入就先问 1-3 个问题。
-3) Plan + TODO：先给 Plan + TODO（大任务必须拆分），每个 TODO 都要可验证。
-4) 研究取证（不要凭空猜，必须拿到可执行信息）：
-   - 优先查“官方文档/官方 README/官方发布说明/源码”来决定用法与安装方式。
-   - 对第三方库/插件/包：先确认最新版用法与破坏性变更，再决定是否升级/替换。
-   - 如果可用，请使用 Context7（或类似“官方文档检索”工具）获取最新版本文档后再实现/安装。
-   - 使用 web search 时：把 2024 视为过旧；默认从 2025 年 10 月开始筛选/优先选择更新来源（≥ 2025-10），检索词可加 after:2025-09-30。
-   - 如果搜索结果泛泛而谈、与问题无关、无法落地：必须调整检索词继续搜索，直到拿到可执行的具体信息（例如确切 API、配置项、版本要求、路径/命令）。
-   - 若只能找到旧资料：必须交叉验证（至少 2 个独立来源或对照源码），并在结论中标明不确定性与替代方案。
-5) 整理与结构（必须做到）：动手前先整理入口与模块边界；新增/修改代码必须模块化、易读、易维护（但不要做与任务无关的重构）。
-6) 实现：小步提交、保持一致风格；优先修根因；避免引入框架绑定假设。
-7) 代码评审（必须做，像 PR 一样）：检查 gaps、正确性、边界条件、错误处理、安全（注入/权限/泄露）、性能（是否有泄漏/热点）、兼容性。
-8) 验证：能跑就跑（build/test/lint）；无法运行则给出用户可执行的验证步骤与期望结果。
-9) 交付：用 ask_continue(reason) 交付；reason 必须包含：完成内容、风险/注意点、验证步骤/命令、下一步。
+【统一工作流（必须遵循；严格按顺序）】
+Read → Research → Plan → TODO → Act → Code Review → Act → Update Progress → Check Progress → Ask
+1) Read：先读目标/现状/约束；在做任何修改前先阅读目标文件/相关代码/配置/日志；列出不确定点，缺关键输入就先问 1-3 个问题。
+2) Research（不要凭空猜，必须拿到可执行信息）：优先查官方文档/官方 README/发布说明/源码；依赖先确认最新版用法与破坏性变更；可用则用 Context7 获取最新文档；web search 把 2024 视为过旧，默认从 2025-10 起筛选（可加 after:2025-09-30）；结果泛泛/无法落地就调整检索词继续搜，直到拿到确切 API/配置/版本/路径/命令。
+3) Plan：给出总体 Plan（里程碑/风险/验收）。
+4) TODO：把 Plan 拆成可验证、可跟踪的小 TODO（能并行则并行）。
+5) Act：动手前先整理入口与模块边界；实现最小正确改动，小步推进、优先修根因、保持风格一致；新增/修改代码必须模块化、易读、易维护（但不要做与任务无关的重构）。
+6) Code Review：像 PR 一样评审：检查 gaps、正确性、边界条件、错误处理、安全（注入/权限/泄露/依赖风险）、性能（热点/泄漏）、兼容性。
+7) Act：根据评审结论修补问题；必要时补测试/回归点。
+8) Update Progress：每完成一个 TODO 就更新进度，说明做了什么/为什么。
+9) Check Progress：运行 build/test/lint；无法运行则给出可执行验证步骤与期望结果。
+10) Ask：最终只允许调用 ask_continue(reason) 并等待；reason 必须包含：完成内容、风险/注意点、验证步骤/命令、下一步。
+
+【Windsurf Hooks（推荐，可当强制护栏）】如环境支持 hooks.json：建议配置 pre_run_command/pre_write_code 阻止危险命令/敏感写入，并用 post_cascade_response 审计是否遗漏 ask_continue；官方文档：https://docs.windsurf.com/windsurf/cascade/hooks
 
 【交付前自检清单（必须逐项满足）】
 - 已读目标/现状/约束
@@ -135,6 +133,7 @@ WindsurfAutoMcp 通过 MCP 协议实现：
 - 关键点已研究官方来源/Context7（如适用）
 - 代码已整理为模块化/易维护（无无关重构）
 - 已完成代码评审（gaps/安全/性能/泄露等）
+- 已更新进度并校验进度
 - 已验证（build/test/lint 或明确的手动验证步骤）
 - 将用 ask_continue(reason) 结束并等待用户
 
@@ -143,6 +142,54 @@ WindsurfAutoMcp 通过 MCP 协议实现：
 - 如果发现依赖过旧/有安全风险：先用官方发布说明/迁移指南确认升级路径，再提出升级方案（避免盲升大版本）。
 - 任何安装/升级建议必须给出依据（官方文档/发布说明）与验证步骤。
 ```
+
+### Windsurf Hooks（可选但强烈推荐）
+
+Windsurf 官方支持 **Cascade Hooks**：在 Cascade 读/写代码、执行命令、调用 MCP 工具、生成回复等关键动作前后，自动运行你配置的 shell 命令。可用于：安全护栏、合规审计、强制流程、阻止危险命令等。
+
+官方文档：`https://docs.windsurf.com/windsurf/cascade/hooks`
+
+配置文件位置（官方）：
+- 系统级（System-level）：
+  - Windows：`C:\ProgramData\Windsurf\hooks.json`
+  - macOS：`/Library/Application Support/Windsurf/hooks.json`
+  - Linux/WSL：`/etc/windsurf/hooks.json`
+- 用户级（User-level）：`~/.codeium/windsurf/hooks.json`
+- 工作区级（Workspace-level）：工作区根目录的 `.windsurf/hooks.json`
+
+关键规则（官方）：
+- 三层配置会合并执行，顺序：system → user → workspace
+- Hook 通过 stdin 接收 JSON（包含 `agent_action_name`、`trajectory_id`、`execution_id`、`timestamp`、`tool_info`）
+- Exit code：`0`=正常；`2`=阻止（仅 `pre_*` 生效，Cascade 会显示 stderr）；其他非 0=不阻止但会报告错误（取决于 `show_output`）
+
+最小配置示例（官方格式）：
+```json
+{
+  "hooks": {
+    "pre_run_command": [
+      { "command": "python3 /abs/path/hook.py", "show_output": true }
+    ]
+  }
+}
+```
+
+事件（官方）：
+- `pre_read_code` / `post_read_code`
+- `pre_write_code` / `post_write_code`
+- `pre_run_command` / `post_run_command`
+- `pre_mcp_tool_use` / `post_mcp_tool_use`
+- `pre_user_prompt`
+- `post_cascade_response`
+
+本仓库提供了一个可直接参考的示例（不会自动安装）：
+- `examples/windsurf-hooks/hooks.json`
+- `examples/windsurf-hooks/scripts/guard.js`
+
+说明：
+- 用法：把 `examples/windsurf-hooks/hooks.json` 复制到上述任意一个 hooks.json 位置，并把 `command` 里的 `/ABSOLUTE/PATH/...` 改成你本机的绝对路径。
+- 该示例用 `pre_run_command`/`pre_write_code` 阻止典型危险操作；用 `post_cascade_response` 在遗漏 `ask_continue` 时给出警告（不阻止）。
+- Hooks 以当前用户权限执行，风险很高：请使用绝对路径、验证输入 JSON、避免把密钥写入日志。
+- windsurf-next：官方文档目前只写了 `windsurf` 路径；如果你使用 windsurf-next 且 user-level hooks 不生效，可尝试把用户级路径改成 `~/.codeium/windsurf-next/hooks.json`（与 `mcp_config.json` 的路径规律一致，非官方保证）。
 
 ### 快捷键
 
@@ -248,8 +295,8 @@ WindsurfAutoMcp 通过 MCP 协议实现：
 
 1. `Ctrl+Shift+X` → 搜索 "WindsurfAutoMcp" → 卸载
 2. 删除配置文件（可选）：
-   - Windows: `%USERPROFILE%\.codeium\windsurf\mcp_config.json`
-   - macOS/Linux: `~/.codeium/windsurf/mcp_config.json`
+   - Windows: `%USERPROFILE%\.codeium\windsurf\mcp_config.json` / `%USERPROFILE%\.codeium\windsurf-next\mcp_config.json`
+   - macOS/Linux: `~/.codeium/windsurf/mcp_config.json` / `~/.codeium/windsurf-next/mcp_config.json`
 </details>
 
 ## 从源码构建
@@ -260,7 +307,8 @@ git clone https://github.com/JiXiangKing80/windsurf-auto-mcp.git
 cd windsurf-auto-mcp
 
 # 安装依赖（需要 Node.js 16+）
-npm install
+# 安装依赖（推荐 Node.js 18+）
+npm ci
 
 # 编译
 npm run compile
@@ -268,6 +316,10 @@ npm run compile
 # 打包
 npm run package
 ```
+
+### 用 GitHub Actions 构建 VSIX（推荐）
+
+本仓库包含一个构建工作流：push 到 `feature` 分支或对 `main` 提 PR 时，会自动产出 `.vsix` artifact，可直接下载测试。
 
 ## 贡献
 

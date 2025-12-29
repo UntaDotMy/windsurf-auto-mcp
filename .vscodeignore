@@ -1,8 +1,14 @@
 .vscode/**
 src/**
 node_modules/**
+.github/**
+.npm-cache/**
+dist/**
+*.vsix
 .gitignore
 *.ts
 tsconfig.json
 package-lock.json
 .vscodeignore
+examples/**
+!out/**

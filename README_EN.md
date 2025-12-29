@@ -102,22 +102,20 @@ Team roles (coordinate internally; keep external output concise):
 - Docs: keep README/config/usage accurate and reproducible.
 - Release: provide upgrade/rollback notes; avoid breaking changes.
 
-Workflow (must follow):
-1) Read target/current state: read the target files and related code to confirm current vs expected behavior.
-2) Clarify: restate goals + unknowns; if key inputs are missing, ask 1–3 targeted questions.
-3) Plan + TODOs: provide a plan and a TODO breakdown for big tasks; each TODO must be verifiable.
-4) Research (no guessing):
-   - Prefer official docs/official README/release notes/source code for usage and installation decisions.
-   - For any package/plugin/library: confirm latest usage + breaking changes before upgrading/replacing.
-   - If available, use Context7 (or an equivalent official-docs tool) to fetch the latest docs before implementing/installing.
-   - When using web search: treat 2024 as outdated; default to sources updated from Oct 2025 onward (≥ 2025-10). Add after:2025-09-30 to queries when helpful.
-   - If results are generic or not actionable: refine the query and keep searching until you get specific, executable details (exact API/config/version/path/commands).
-   - If only older sources exist: cross-check (2+ independent sources or confirm in code) and clearly label uncertainty + alternatives.
-5) Tidy & structure (must): before coding, identify boundaries and keep changes modular, readable, manageable, maintainable (avoid unrelated refactors).
-6) Implement: small, focused changes; fix root causes; avoid framework-specific assumptions.
-7) Code review (must, like a PR): check gaps, correctness, edge cases, error handling, security (injection/permissions/leaks), performance (leaks/hot paths), compatibility.
-8) Verify: run build/tests/lint when possible; otherwise provide concrete user-run verification steps and expected results.
-9) Deliver: deliver via ask_continue(reason); reason must include what was done, risks/notes, verification steps/commands, and next steps.
+Workflow (must follow; strict order):
+Read → Research → Plan → TODO → Act → Code Review → Act → Update Progress → Check Progress → Ask
+1) Read: read the target/current state/constraints first; before any decision/edit, read relevant files/config/logs; list unknowns and ask 1–3 targeted questions if key inputs are missing.
+2) Research (no guessing): prefer official docs/official README/release notes/source; confirm latest usage + breaking changes before upgrading/replacing; use Context7 if available; treat 2024 as outdated and default to sources updated from Oct 2025 onward (≥ 2025-10, add after:2025-09-30); if results are generic, refine and keep searching until you get exact API/config/version/path/commands.
+3) Plan: provide a high-level plan (milestones/risks/acceptance).
+4) TODO: break the plan into small verifiable TODOs (trackable, parallelizable).
+5) Act: tidy boundaries before coding; implement minimal correct changes; fix root causes; keep style consistent; keep code modular/readable/maintainable (avoid unrelated refactors).
+6) Code Review: like a PR—check gaps, correctness, edge cases, error handling, security (injection/permissions/leaks/deps), performance (hot paths/leaks), compatibility.
+7) Act: apply fixes from review; add tests/regression points when needed.
+8) Update Progress: update progress after each TODO, stating what/why.
+9) Check Progress: run build/tests/lint when possible; otherwise give concrete user-run verification steps + expected results.
+10) Ask: deliver ONLY via ask_continue(reason) and wait; reason must include what was done, risks/notes, verification steps/commands, and next steps.
+
+Windsurf Hooks (recommended; can be hard guardrails): if your environment supports hooks.json, configure pre_run_command/pre_write_code to block dangerous commands/sensitive writes, and use post_cascade_response to audit missing ask_continue. Official docs: https://docs.windsurf.com/windsurf/cascade/hooks
 
 Pre-delivery checklist (must satisfy all):
 - Read target/current state/constraints
@@ -125,6 +123,7 @@ Pre-delivery checklist (must satisfy all):
 - Key decisions researched via official sources/Context7 (if applicable)
 - Code tidied: modular/maintainable (no unrelated refactors)
 - Code review completed (gaps/security/perf/leaks/etc)
+- Progress updated and validated
 - Verification completed (build/tests/lint or explicit manual steps)
 - End with ask_continue(reason) and wait
 
@@ -133,6 +132,54 @@ Dependencies best practices:
 - If a dependency is outdated or risky: consult official release notes/migration guides before proposing upgrades (avoid blind major bumps).
 - Any install/upgrade recommendation must include evidence (official docs/release notes) and verification steps.
 ```
+
+### Windsurf Hooks (optional but strongly recommended)
+
+Windsurf officially supports **Cascade Hooks**: run your own shell commands automatically before/after key Cascade actions (read/write code, run commands, MCP tool use, responses). This is useful for safety guardrails, compliance/auditing, enforcing workflow, and blocking dangerous commands.
+
+Official docs: `https://docs.windsurf.com/windsurf/cascade/hooks`
+
+Config file locations (official):
+- System-level:
+  - Windows: `C:\ProgramData\Windsurf\hooks.json`
+  - macOS: `/Library/Application Support/Windsurf/hooks.json`
+  - Linux/WSL: `/etc/windsurf/hooks.json`
+- User-level: `~/.codeium/windsurf/hooks.json`
+- Workspace-level: `.windsurf/hooks.json` in your workspace root
+
+Key rules (official):
+- All three levels are merged, in order: system → user → workspace
+- Hooks receive JSON via stdin (includes `agent_action_name`, `trajectory_id`, `execution_id`, `timestamp`, `tool_info`)
+- Exit codes: `0`=success; `2`=blocking (only for `pre_*`, stderr is shown to Cascade); any other non-zero does not block but reports an error (depending on `show_output`)
+
+Minimal example (official format):
+```json
+{
+  "hooks": {
+    "pre_run_command": [
+      { "command": "python3 /abs/path/hook.py", "show_output": true }
+    ]
+  }
+}
+```
+
+Events (official):
+- `pre_read_code` / `post_read_code`
+- `pre_write_code` / `post_write_code`
+- `pre_run_command` / `post_run_command`
+- `pre_mcp_tool_use` / `post_mcp_tool_use`
+- `pre_user_prompt`
+- `post_cascade_response`
+
+Repo examples (not installed automatically):
+- `examples/windsurf-hooks/hooks.json`
+- `examples/windsurf-hooks/scripts/guard.js`
+
+Notes:
+- Usage: copy `examples/windsurf-hooks/hooks.json` to one of the hooks.json locations above, then replace `/ABSOLUTE/PATH/...` in `command` with your local absolute path.
+- The example blocks typical dangerous ops via `pre_run_command`/`pre_write_code`, and warns when `ask_continue` is missing via `post_cascade_response` (warning only; does not block).
+- Hooks run with your user’s full permissions: use absolute paths, validate input JSON, and don’t log secrets.
+- windsurf-next: official docs currently only mention `windsurf` paths; if you use windsurf-next and user-level hooks don’t apply, you can also try `~/.codeium/windsurf-next/hooks.json` (matches the `mcp_config.json` path pattern; not officially documented).
 
 ### Hotkey
 
@@ -178,10 +225,14 @@ Search `mcpService` in settings:
 ```bash
 git clone https://github.com/JiXiangKing80/windsurf-auto-mcp.git
 cd windsurf-auto-mcp
-npm install
+npm ci # Node.js 18+ recommended
 npm run compile
 npm run package
 ```
+
+### Build VSIX on GitHub Actions (recommended)
+
+This repo includes a workflow that builds a `.vsix` artifact on pushes to `feature` and on PRs targeting `main`.
 
 ## License
 

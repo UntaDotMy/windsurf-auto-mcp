@@ -38,6 +38,7 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'ext.statusTooltipRunning': 'WindsurfAutoMcp 运行中 - 端口 {port}\n调用次数: {calls}',
         'ext.statusTooltipStopped': 'WindsurfAutoMcp 已停止',
         'ext.statusTextStopped': '$(server) MCP: 停止',
+        'ext.invalidConfigJson': '配置文件 JSON 无效: {path}。请修复 JSON（或删除文件以重新生成）后重试。原始错误: {error}',
 
         // Tool responses
         'tool.confirmYes': '是',
@@ -101,31 +102,30 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
             '- 文档（Docs）：更新 README/配置/使用说明，确保用户能按步骤复现。',
             '- 发布（Release）：给出升级/回滚说明，避免破坏性变更。',
             '',
-            '【统一工作流（必须遵循）】',
-            '1) 读目标/读现状：先阅读目标文件与相关代码，确认当前行为与期望行为。',
-            '2) 需求澄清：列出你理解的目标/不确定点；缺关键输入就先问 1-3 个问题。',
-            '3) Plan + TODO：先给 Plan + TODO（大任务必须拆分），每个 TODO 都要可验证。',
-            '4) 研究取证（不要凭空猜，必须拿到可执行信息）：',
-            '   - 优先查“官方文档/官方 README/官方发布说明/源码”来决定用法与安装方式。',
-            '   - 对第三方库/插件/包：先确认最新版用法与破坏性变更，再决定是否升级/替换。',
-            '   - 如果可用，请使用 Context7（或类似“官方文档检索”工具）获取最新版本文档后再实现/安装。',
-            '   - 使用 web search 时：把 2024 视为过旧；默认从 2025 年 10 月开始筛选/优先选择更新来源（≥ 2025-10），检索词可加 after:2025-09-30。',
-            '   - 如果搜索结果泛泛而谈、与问题无关、无法落地：必须调整检索词继续搜索，直到拿到可执行的具体信息（例如确切 API、配置项、版本要求、路径/命令）。',
-            '   - 若只能找到旧资料：必须交叉验证（至少 2 个独立来源或对照源码），并在结论中标明不确定性与替代方案。',
-            '5) 整理与结构（必须做到）：动手前先整理入口与模块边界；新增/修改代码必须模块化、易读、易维护（但不要做与任务无关的重构）。',
-            '6) 实现：小步提交、保持一致风格；优先修根因；避免引入框架绑定假设。',
-            '7) 代码评审（必须做，像 PR 一样）：检查 gaps、正确性、边界条件、错误处理、安全（注入/权限/泄露）、性能（是否有泄漏/热点）、兼容性。',
-            '8) 验证：能跑就跑（build/test/lint）；无法运行则给出用户可执行的验证步骤与期望结果。',
-            '9) 交付：用 ask_continue(reason) 交付；reason 必须包含：完成内容、风险/注意点、验证步骤/命令、下一步。',
-            '',
-            '【交付前自检清单（必须逐项满足）】',
+	            '【统一工作流（必须遵循；严格按顺序）】',
+	            'Read → Research → Plan → TODO → Act → Code Review → Act → Update Progress → Check Progress → Ask',
+	            '1) Read：先读目标/现状/约束；在做任何修改前先阅读目标文件/相关代码/配置/日志；列出不确定点，缺关键输入就先问 1-3 个问题。',
+	            '2) Research（不要凭空猜，必须拿到可执行信息）：优先查官方文档/官方 README/发布说明/源码；依赖先确认最新版用法与破坏性变更；可用则用 Context7 获取最新文档；web search 把 2024 视为过旧，默认从 2025-10 起筛选（可加 after:2025-09-30）；结果泛泛/无法落地就调整检索词继续搜，直到拿到确切 API/配置/版本/路径/命令。',
+	            '3) Plan：给出总体 Plan（里程碑/风险/验收）。',
+	            '4) TODO：把 Plan 拆成可验证、可跟踪的小 TODO（能并行则并行）。',
+	            '5) Act：动手前先整理入口与模块边界；实现最小正确改动，小步推进、优先修根因、保持风格一致；新增/修改代码必须模块化、易读、易维护（但不要做与任务无关的重构）。',
+	            '6) Code Review：像 PR 一样评审：检查 gaps、正确性、边界条件、错误处理、安全（注入/权限/泄露/依赖风险）、性能（热点/泄漏）、兼容性。',
+	            '7) Act：根据评审结论修补问题；必要时补测试/回归点。',
+		            '8) Update Progress：每完成一个 TODO 就更新进度，说明做了什么/为什么。',
+		            '9) Check Progress：运行 build/test/lint；无法运行则给出可执行验证步骤与期望结果。',
+		            '10) Ask：最终只允许调用 ask_continue(reason) 并等待；reason 必须包含：完成内容、风险/注意点、验证步骤/命令、下一步。',
+		            '',
+		            '【Windsurf Hooks（推荐，可当强制护栏）】如环境支持 hooks.json：建议配置 pre_run_command/pre_write_code 阻止危险命令/敏感写入，并用 post_cascade_response 审计是否遗漏 ask_continue；官方文档：https://docs.windsurf.com/windsurf/cascade/hooks',
+	            '',
+	            '【交付前自检清单（必须逐项满足）】',
             '- 已读目标/现状/约束',
             '- 已给出 Plan + TODO（如适用）',
             '- 关键点已研究官方来源/Context7（如适用）',
             '- 代码已整理为模块化/易维护（无无关重构）',
             '- 已完成代码评审（gaps/安全/性能/泄露等）',
-            '- 已验证（build/test/lint 或明确的手动验证步骤）',
-            '- 将用 ask_continue(reason) 结束并等待用户'
+	            '- 已更新进度并校验进度',
+	            '- 已验证（build/test/lint 或明确的手动验证步骤）',
+	            '- 将用 ask_continue(reason) 结束并等待用户'
         ].join('\\n'),
         'sidebar.copy': '复制',
         'sidebar.windsurfConfigTitle': 'Windsurf 配置',
@@ -212,6 +212,7 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'ext.statusTooltipRunning': 'WindsurfAutoMcp running - port {port}\nCalls: {calls}',
         'ext.statusTooltipStopped': 'WindsurfAutoMcp stopped',
         'ext.statusTextStopped': '$(server) MCP: Stopped',
+        'ext.invalidConfigJson': 'Invalid JSON in existing config file: {path}. Please fix the JSON (or delete the file to recreate) then run Configure again. Original error: {error}',
 
         // Tool responses
         'tool.confirmYes': 'Yes',
@@ -275,32 +276,31 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
             '- Docs: keep README/config/usage accurate and reproducible.',
             '- Release: provide upgrade/rollback notes; avoid breaking changes.',
             '',
-            'Workflow (must follow):',
-            '1) Read target/current state: read the target files and related code to confirm current vs expected behavior.',
-            '2) Clarify: restate goals + unknowns; if key inputs are missing, ask 1–3 targeted questions.',
-            '3) Plan + TODOs: provide a plan and a TODO breakdown for big tasks; each TODO must be verifiable.',
-            '4) Research (no guessing):',
-            '   - Prefer official docs/official README/release notes/source code for usage and installation decisions.',
-            '   - For any package/plugin/library: confirm latest usage + breaking changes before upgrading/replacing.',
-            '   - If available, use Context7 (or an equivalent official-docs tool) to fetch the latest docs before implementing/installing.',
-            '   - When using web search: treat 2024 as outdated; default to sources updated from Oct 2025 onward (≥ 2025-10). Add after:2025-09-30 to queries when helpful.',
-            '   - If results are generic or not actionable: refine the query and keep searching until you get specific, executable details (exact API/config/version/path/commands).',
-            '   - If only older sources exist: cross-check (2+ independent sources or confirm in code) and clearly label uncertainty + alternatives.',
-            '5) Tidy & structure (must): before coding, identify boundaries and keep changes modular, readable, manageable, maintainable (avoid unrelated refactors).',
-            '6) Implement: small, focused changes; fix root causes; avoid framework-specific assumptions.',
-            '7) Code review (must, like a PR): check gaps, correctness, edge cases, error handling, security (injection/permissions/leaks), performance (leaks/hot paths), compatibility.',
-            '8) Verify: run build/tests/lint when possible; otherwise provide concrete user-run verification steps and expected results.',
-            '9) Deliver: deliver via ask_continue(reason); reason must include what was done, risks/notes, verification steps/commands, and next steps.',
-            '',
-            'Pre-delivery checklist (must satisfy all):',
+	            'Workflow (must follow; strict order):',
+	            'Read → Research → Plan → TODO → Act → Code Review → Act → Update Progress → Check Progress → Ask',
+	            '1) Read: read the target/current state/constraints first; before any decision/edit, read relevant files/config/logs; list unknowns and ask 1–3 targeted questions if key inputs are missing.',
+	            '2) Research (no guessing): prefer official docs/official README/release notes/source; confirm latest usage + breaking changes before upgrading/replacing; use Context7 if available; treat 2024 as outdated and default to sources updated from Oct 2025 onward (≥ 2025-10, add after:2025-09-30); if results are generic, refine and keep searching until you get exact API/config/version/path/commands.',
+	            '3) Plan: provide a high-level plan (milestones/risks/acceptance).',
+	            '4) TODO: break the plan into small verifiable TODOs (trackable, parallelizable).',
+	            '5) Act: tidy boundaries before coding; implement minimal correct changes; fix root causes; keep style consistent; keep code modular/readable/maintainable (avoid unrelated refactors).',
+	            '6) Code Review: like a PR—check gaps, correctness, edge cases, error handling, security (injection/permissions/leaks/deps), performance (hot paths/leaks), compatibility.',
+	            '7) Act: apply fixes from review; add tests/regression points when needed.',
+	            '8) Update Progress: update progress after each TODO, stating what/why.',
+	            '9) Check Progress: run build/tests/lint when possible; otherwise give concrete user-run verification steps + expected results.',
+	            '10) Ask: deliver ONLY via ask_continue(reason) and wait; reason must include what was done, risks/notes, verification steps/commands, and next steps.',
+	            '',
+	            'Windsurf Hooks (recommended; can be hard guardrails): if your environment supports hooks.json, configure pre_run_command/pre_write_code to block dangerous commands/sensitive writes, and use post_cascade_response to audit missing ask_continue. Official docs: https://docs.windsurf.com/windsurf/cascade/hooks',
+	            '',
+	            'Pre-delivery checklist (must satisfy all):',
             '- Read target/current state/constraints',
             '- Plan + TODOs provided (if applicable)',
             '- Key decisions researched via official sources/Context7 (if applicable)',
             '- Code tidied: modular/maintainable (no unrelated refactors)',
             '- Code review completed (gaps/security/perf/leaks/etc)',
-            '- Verification completed (build/tests/lint or explicit manual steps)',
-            '- End with ask_continue(reason) and wait'
-        ].join('\\n'),
+	            '- Progress updated and validated',
+	            '- Verification completed (build/tests/lint or explicit manual steps)',
+	            '- End with ask_continue(reason) and wait'
+	        ].join('\\n'),
         'sidebar.copy': 'Copy',
         'sidebar.windsurfConfigTitle': 'Windsurf Config',
         'sidebar.writeConfig': 'Write Windsurf config',
@@ -764,7 +764,11 @@ async function handleToolCall(name: string, args: any): Promise<any> {
             result = await handleAskContinue(args);
             break;
         default:
-            throw new Error(`未知工具: ${name}`);
+            {
+                const lang = getUiLanguage();
+                const msg = lang === 'en' ? `Unknown tool: ${name}` : `未知工具: ${name}`;
+                throw new Error(msg);
+            }
     }
     
     // 保存统计数据并刷新界面
@@ -1720,17 +1724,14 @@ function configureWindsurf() {
                 try {
                     config = JSON.parse(raw);
                 } catch (e: any) {
-                    // If the file is corrupted/invalid, back it up and continue with a fresh config.
-                    try {
-                        const backupPath = `${configPath}.bak.${Date.now()}`;
-                        fs.writeFileSync(backupPath, raw, 'utf-8');
-                        outputChannel.appendLine(`Configure Windsurf: backed up invalid JSON to ${backupPath}`);
-                    } catch (backupErr: any) {
-                        outputChannel.appendLine(
-                            `Configure Windsurf: failed to backup invalid JSON for ${configPath}: ${backupErr?.message ?? String(backupErr)}`
-                        );
-                    }
-                    config = { mcpServers: {} };
+                    const lang = getUiLanguage();
+                    throw new Error(
+                        tr(
+                            'ext.invalidConfigJson',
+                            { path: configPath, error: e?.message ?? String(e) },
+                            lang
+                        )
+                    );
                 }
                 if (!config.mcpServers) config.mcpServers = {};
             }
@@ -1819,20 +1820,24 @@ async function createWindsurfRules() {
         return;
     }
 
-    const rulesContent = `# Windsurf Rules - WindsurfAutoMcp
+	    const rulesContent = `# Windsurf Rules - WindsurfAutoMcp
 
-## 任务完成规则
-当你完成一个任务时，必须调用 \`ask_continue\` 工具询问用户是否继续。
+Hard rule (highest priority): When you decide a task is done / ready to deliver, do NOT output a normal final response; you MUST call WindsurfAutoMcp ask_continue and put in reason: what was done, risks/notes, verification steps/commands, and next steps.
+硬规则（最高优先级）：当你判断“任务已完成/准备交付”时，不要直接输出最终答复；必须调用 WindsurfAutoMcp 的 ask_continue，并在 reason 中写清：完成内容、风险/注意点、验证步骤/命令、下一步。
 
-## 使用示例
-- 完成代码修改后，调用 ask_continue
-- 完成文件创建后，调用 ask_continue  
-- 完成调试分析后，调用 ask_continue
+## Workflow (must follow; strict order) / 工作流（必须严格按顺序）
+Read → Research → Plan → TODO → Act → Code Review → Act → Update Progress → Check Progress → Ask
 
-## 注意事项
-- 不要在中途频繁询问，只在任务完成时询问
-- 提供清晰的任务完成原因
-- 等待用户确认后再继续下一个任务
+1) Read：先读目标/现状/约束；在做任何修改前先阅读目标文件/相关代码/配置/日志；列出不确定点，缺关键输入就先问 1-3 个问题。
+2) Research：不要凭空猜，必须拿到可执行信息（官方文档/README/发布说明/源码优先；依赖先确认最新版与破坏性变更；可用则用 Context7 获取最新文档；web search 把 2024 视为过旧，默认从 2025-10 起筛选，必要时加 after:2025-09-30；结果泛泛就调整检索词继续搜直到拿到确切 API/配置/版本/路径/命令）。
+3) Plan：给出总体 Plan（里程碑/风险/验收）。
+4) TODO：把 Plan 拆成可验证、可跟踪的小 TODO（能并行则并行）。
+5) Act：动手前先整理入口与模块边界；实现最小正确改动，小步推进、优先修根因、保持风格一致；代码必须模块化、易读、易维护（避免无关重构）。
+6) Code Review：像 PR 一样评审：检查 gaps、正确性、边界条件、错误处理、安全（注入/权限/泄露/依赖风险）、性能（热点/泄漏）、兼容性。
+7) Act：根据评审结论修补问题；必要时补测试/回归点。
+8) Update Progress：每完成一个 TODO 就更新进度，说明做了什么/为什么。
+9) Check Progress：运行 build/test/lint；无法运行则给出可执行验证步骤与期望结果。
+10) Ask：最终只允许调用 ask_continue(reason) 并等待；reason 必须包含：完成内容、风险/注意点、验证步骤/命令、下一步。
 `;
 
     const rulesPath = path.join(workspaceFolders[0].uri.fsPath, '.windsurf', 'rules.md');

@@ -32,7 +32,7 @@ jobs:
       - name: Package VSIX
         run: |
           mkdir -p dist
-          npx --yes @vscode/vsce package --out dist/windsurf-auto-mcp.vsix
+          npx --yes @vscode/vsce package --no-dependencies --out dist/windsurf-auto-mcp.vsix
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

@@ -103,7 +103,10 @@
         },
         "mcpService.mode": {
           "type": "string",
-          "enum": ["http", "stdio"],
+          "enum": [
+            "http",
+            "stdio"
+          ],
           "default": "http",
           "description": "MCP server mode: http or stdio / MCP 服务器模式：http 或 stdio"
         }
@@ -113,11 +116,12 @@
   "scripts": {
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "package": "vsce package"
+    "package": "vsce package --no-dependencies"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@types/vscode": "^1.80.0",
+    "@vscode/vsce": "^3.7.1",
     "typescript": "^5.0.0"
   }
 }
