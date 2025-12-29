@@ -15,6 +15,33 @@ type ChoiceQuestion = {
     prompt?: string;
     options: string[];
 };
+type TrackerItemStatus = 'todo' | 'doing' | 'done';
+type TrackerItem = {
+    id: string;
+    text: string;
+    status: TrackerItemStatus;
+    updatedAt: string;
+};
+type ProjectTracker = {
+    rootPath: string;
+    name: string;
+    prd: {
+        content: string;
+        status: 'draft' | 'approved';
+        approvedBy?: string;
+        approvedAt?: string;
+        updatedAt?: string;
+    };
+    plan: { items: TrackerItem[] };
+    todos: { items: TrackerItem[] };
+    checklist: { items: TrackerItem[] };
+    updatedAt: string;
+};
+type TrackerData = {
+    schemaVersion: 1;
+    activeProject?: string;
+    projects: Record<string, ProjectTracker>;
+};
 
 const I18N: Record<UiLanguage, Record<string, string>> = {
     zh: {
@@ -98,25 +125,28 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
             '',
             '【团队协作（必须做到）】你现在扮演一个“完整的软件工程部门”（跨职能团队）协作完成任务，适用于任何语言/框架/平台；对外输出要简洁一致，但要体现“协同结论”。',
             '',
-            '【开始前必须做】先读“目标/现状/约束”。在做任何修改前，必须先阅读目标文件/相关代码/配置/日志，理解当前状态与约束，再做决策。',
+            '【开始前必须做】先读“目标/现状/约束”。在做任何修改前，必须先阅读目标文件/相关代码/配置/日志；缺关键输入先用 ask_question 提问（单选 A/B/C，可附补充信息）。',
             '',
-            '【计划与拆解（必须做到）】对任何“大功能/复杂任务”（以及任何非小改动），必须先输出 Plan，并拆成 TODO 小任务（每项可验证、可跟踪、可并行）。每完成一项就更新进度。',
+            '【PRD 与审批（必须）】先输出 PRD 草案 → 用户确认/补充 → 审批通过后才能输出 Plan；未审批不得开始实现（写代码/运行命令/调用外部工具）。',
+            '',
+            '【计划与拆解（必须做到）】对任何“大功能/复杂任务”（以及任何非小改动），必须先输出 Plan，并拆成 TODO 小任务（每项可验证、可跟踪、可并行）。每完成一项就更新进度并同步项目跟踪。',
             '',
             '【不信任知识（必须做到）】不要依赖记忆/常识拍脑袋：你的知识可能过时且有害。遇到关键决策（API/配置/版本/安全/安装）必须先研究，再行动。',
             '',
             '【团队角色（内部协作）】',
             '- 需求负责人（PM）：澄清目标、范围、验收标准、约束与优先级。',
             '- 技术负责人（Tech Lead）：制定方案与里程碑，控制复杂度与风险，保证可维护性。',
+            '- 架构/平台（Architect）：界定模块边界、接口契约、扩展性与兼容性。',
             '- 开发工程师（Dev）：实现最小正确改动，遵循项目规范，避免不必要的重构。',
             '- 测试/质量（QA）：设计验证步骤与回归点，优先运行已有测试/构建，必要时补充测试。',
             '- 安全（Security）：检查输入/输出边界、权限、注入、依赖风险、敏感信息泄露。',
             '- 性能（Perf）：识别热点与不必要开销，避免引入明显性能退化。',
             '- 文档（Docs）：更新 README/配置/使用说明，确保用户能按步骤复现。',
-            '- 发布（Release）：给出升级/回滚说明，避免破坏性变更。',
+            '- 发布/运维（Release/DevOps）：给出升级/回滚说明，避免破坏性变更。',
             '',
 	            '【统一工作流（必须遵循；严格按顺序）】',
 	            'Read → Research → Plan → TODO → Act → Code Review → Act → Update Progress → Check Progress → Ask',
-	            '1) Read：先读目标/现状/约束；在做任何修改前先阅读目标文件/相关代码/配置/日志；列出不确定点，缺关键输入就先问 1-3 个问题。',
+	            '1) Read：先读目标/现状/约束；在做任何修改前先阅读目标文件/相关代码/配置/日志；缺关键输入先用 ask_question 问 1-3 个问题。',
 	            '2) Research（不要凭空猜，必须拿到可执行信息）：优先查官方文档/官方 README/发布说明/源码；依赖先确认最新版用法与破坏性变更；可用则用 Context7 获取最新文档；web search 把 2024 视为过旧，默认从 2025-10 起筛选（可加 after:2025-09-30）；结果泛泛/无法落地就调整检索词继续搜，直到拿到确切 API/配置/版本/路径/命令。',
 	            '3) Plan：给出总体 Plan（里程碑/风险/验收）。',
 	            '4) TODO：把 Plan 拆成可验证、可跟踪的小 TODO（能并行则并行）。',
@@ -135,10 +165,24 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
             '- 关键点已研究官方来源/Context7（如适用）',
             '- 代码已整理为模块化/易维护（无无关重构）',
             '- 已完成代码评审（gaps/安全/性能/泄露等）',
-	            '- 已更新进度并校验进度',
-	            '- 已验证（build/test/lint 或明确的手动验证步骤）',
-	            '- 将用 ask_continue(reason) 结束并等待用户'
+            '- 已更新进度并校验进度',
+            '- 已验证（build/test/lint 或明确的手动验证步骤）',
+            '- 将用 ask_continue(reason) 结束并等待用户'
         ].join('\\n'),
+        'sidebar.trackerTitle': '项目跟踪',
+        'sidebar.trackerProject': '项目',
+        'sidebar.trackerProgress': '进度',
+        'sidebar.prdLabel': 'PRD（需求说明）',
+        'sidebar.prdStatus': 'PRD 状态',
+        'sidebar.prdDraft': '草案',
+        'sidebar.prdApproved': '已审批',
+        'sidebar.prdSave': '保存 PRD',
+        'sidebar.prdApprove': '审批 PRD',
+        'sidebar.planLabel': '计划（Plan）',
+        'sidebar.todoLabel': 'TODO（子任务）',
+        'sidebar.checklistLabel': '检查清单',
+        'sidebar.trackerSave': '保存',
+        'sidebar.trackerHint': '列表支持 [ ] / [~] / [x] 状态',
         'sidebar.copy': '复制',
         'sidebar.windsurfConfigTitle': 'Windsurf 配置',
         'sidebar.writeConfig': '写入 Windsurf 配置',
@@ -285,9 +329,11 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
             '2) After calling ask_continue, stop output and wait for the user.',
             '3) If you forgot to call ask_continue, your next message must first call ask_continue to correct (then wait).',
             '',
-            'Collaboration (must): operate as a full "software engineering department" (cross-functional team) across any language/framework/platform. Output should be concise but reflect a consolidated team conclusion.',
+            'Collaboration (must): operate as a full "software engineering department" (cross-functional team) across any language/framework/platform. Output must be unified and concise, but reflect a consolidated team conclusion.',
             '',
-            'Before anything (must): read the target first. Before decisions/edits, read relevant files/config/logs to understand the current state and constraints.',
+            'Before anything (must): read the target first. Before decisions/edits, read relevant files/config/logs; if key inputs are missing, use ask_question (single choice A/B/C with optional extra text).',
+            '',
+            'PRD & approval (must): produce a PRD draft → user review/adjust → approval before any Plan; do not implement (write code/run commands/use external tools) before approval.',
             '',
             'Planning & TODO breakdown (must): for any big feature/complex task (and any non-trivial change), produce a Plan and break it into small TODOs (verifiable, trackable, parallelizable). Update progress as you go.',
             '',
@@ -296,16 +342,17 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
             'Team roles (internal coordination; keep external output concise):',
             '- PM: clarify goals, scope, acceptance criteria, constraints, priorities.',
             '- Tech Lead: propose an executable plan, manage risk/complexity, ensure maintainability.',
+            '- Architect/Platform: define boundaries, interfaces, extensibility, compatibility.',
             '- Dev: implement minimal correct changes; follow repo conventions; avoid unnecessary refactors.',
             '- QA: define verification steps and regression points; run build/tests when possible; add tests when appropriate.',
             '- Security: validate boundaries, permissions, injection risks, dependency risks, secrets handling.',
             '- Performance: avoid regressions; remove needless work; measure when relevant.',
             '- Docs: keep README/config/usage accurate and reproducible.',
-            '- Release: provide upgrade/rollback notes; avoid breaking changes.',
+            '- Release/DevOps: provide upgrade/rollback notes; avoid breaking changes.',
             '',
 	            'Workflow (must follow; strict order):',
 	            'Read → Research → Plan → TODO → Act → Code Review → Act → Update Progress → Check Progress → Ask',
-	            '1) Read: read the target/current state/constraints first; before any decision/edit, read relevant files/config/logs; list unknowns and ask 1–3 targeted questions if key inputs are missing.',
+	            '1) Read: read the target/current state/constraints first; before any decision/edit, read relevant files/config/logs; if key inputs are missing, ask 1–3 targeted questions via ask_question.',
 	            '2) Research (no guessing): prefer official docs/official README/release notes/source; confirm latest usage + breaking changes before upgrading/replacing; use Context7 if available; treat 2024 as outdated and default to sources updated from Oct 2025 onward (≥ 2025-10, add after:2025-09-30); if results are generic, refine and keep searching until you get exact API/config/version/path/commands.',
 	            '3) Plan: provide a high-level plan (milestones/risks/acceptance).',
 	            '4) TODO: break the plan into small verifiable TODOs (trackable, parallelizable).',
@@ -324,10 +371,24 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
             '- Key decisions researched via official sources/Context7 (if applicable)',
             '- Code tidied: modular/maintainable (no unrelated refactors)',
             '- Code review completed (gaps/security/perf/leaks/etc)',
-	            '- Progress updated and validated',
-	            '- Verification completed (build/tests/lint or explicit manual steps)',
-	            '- End with ask_continue(reason) and wait'
-	        ].join('\\n'),
+            '- Progress updated and validated',
+            '- Verification completed (build/tests/lint or explicit manual steps)',
+            '- End with ask_continue(reason) and wait'
+        ].join('\\n'),
+        'sidebar.trackerTitle': 'Project Tracker',
+        'sidebar.trackerProject': 'Project',
+        'sidebar.trackerProgress': 'Progress',
+        'sidebar.prdLabel': 'PRD',
+        'sidebar.prdStatus': 'PRD Status',
+        'sidebar.prdDraft': 'Draft',
+        'sidebar.prdApproved': 'Approved',
+        'sidebar.prdSave': 'Save PRD',
+        'sidebar.prdApprove': 'Approve PRD',
+        'sidebar.planLabel': 'Plan',
+        'sidebar.todoLabel': 'TODOs',
+        'sidebar.checklistLabel': 'Checklist',
+        'sidebar.trackerSave': 'Save',
+        'sidebar.trackerHint': 'Lists support [ ] / [~] / [x] status',
         'sidebar.copy': 'Copy',
         'sidebar.windsurfConfigTitle': 'Windsurf Config',
         'sidebar.writeConfig': 'Write Windsurf config',
@@ -471,6 +532,208 @@ const HOOK_EVENTS = [
     'pre_user_prompt',
     'post_cascade_response'
 ] as const;
+
+const TRACKER_FILE_NAME = 'windsurf-auto-mcp-tracker.json';
+
+function nowIso(): string {
+    return new Date().toISOString();
+}
+
+function getTrackerPaths(homeDir: string): Array<{ variant: string; trackerPath: string }> {
+    const variants = ['windsurf', 'windsurf-next'];
+    return variants.map((variant) => ({
+        variant,
+        trackerPath: path.join(homeDir, '.codeium', variant, TRACKER_FILE_NAME)
+    }));
+}
+
+function readTrackerFile(trackerPath: string): TrackerData | null {
+    try {
+        if (!fs.existsSync(trackerPath)) return null;
+        const raw = fs.readFileSync(trackerPath, 'utf-8');
+        if (!raw.trim()) return null;
+        const data = JSON.parse(raw);
+        if (!data || typeof data !== 'object') return null;
+        if (data.schemaVersion !== 1 || typeof data.projects !== 'object') return null;
+        return data as TrackerData;
+    } catch {
+        return null;
+    }
+}
+
+function loadTrackerData(): TrackerData {
+    const homeDir = os.homedir();
+    const paths = getTrackerPaths(homeDir);
+    for (const { trackerPath } of paths) {
+        const data = readTrackerFile(trackerPath);
+        if (data) return data;
+    }
+    return { schemaVersion: 1, projects: {} };
+}
+
+function saveTrackerData(data: TrackerData): void {
+    const homeDir = os.homedir();
+    const paths = getTrackerPaths(homeDir);
+    for (const { trackerPath } of paths) {
+        const dir = path.dirname(trackerPath);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(trackerPath, JSON.stringify(data, null, 2));
+    }
+}
+
+function getWorkspaceRootPath(): string | null {
+    const workspaceFolders = vscode.workspace.workspaceFolders;
+    if (!workspaceFolders || workspaceFolders.length === 0) return null;
+    return workspaceFolders[0].uri.fsPath;
+}
+
+function getProjectNameFromPath(rootPath: string): string {
+    const base = path.basename(rootPath);
+    return base || rootPath;
+}
+
+function defaultPrdTemplate(lang: UiLanguage): string {
+    if (lang === 'en') {
+        return [
+            '# PRD',
+            '## Problem',
+            '## Goals',
+            '## Non-goals',
+            '## Requirements (functional + non-functional)',
+            '## Constraints',
+            '## Dependencies / Integrations',
+            '## Risks / Mitigations',
+            '## Acceptance Criteria',
+            '## Open Questions',
+            '## References (official docs / Context7)',
+            ''
+        ].join('\n');
+    }
+    return [
+        '# PRD',
+        '## 问题/背景',
+        '## 目标',
+        '## 非目标',
+        '## 需求（功能 + 非功能）',
+        '## 约束',
+        '## 依赖/集成',
+        '## 风险/缓解',
+        '## 验收标准',
+        '## 未决问题',
+        '## 参考资料（官方文档/Context7）',
+        ''
+    ].join('\n');
+}
+
+function ensureProjectTracker(data: TrackerData, rootPath: string, lang: UiLanguage): ProjectTracker {
+    const existing = data.projects[rootPath];
+    if (existing) return existing;
+    const project: ProjectTracker = {
+        rootPath,
+        name: getProjectNameFromPath(rootPath),
+        prd: {
+            content: defaultPrdTemplate(lang),
+            status: 'draft',
+            updatedAt: nowIso()
+        },
+        plan: { items: [] },
+        todos: { items: [] },
+        checklist: { items: [] },
+        updatedAt: nowIso()
+    };
+    data.projects[rootPath] = project;
+    data.activeProject = rootPath;
+    return project;
+}
+
+function computeProgress(project: ProjectTracker): { done: number; total: number; percent: number } {
+    const source =
+        project.checklist.items.length > 0
+            ? project.checklist.items
+            : project.todos.items.length > 0
+                ? project.todos.items
+                : project.plan.items;
+    const total = source.length;
+    const done = source.filter((item) => item.status === 'done').length;
+    const percent = total > 0 ? Math.round((done / total) * 100) : 0;
+    return { done, total, percent };
+}
+
+function normalizeTrackerItems(rawItems: any): TrackerItem[] {
+    const items: TrackerItem[] = [];
+    if (!Array.isArray(rawItems)) return items;
+    for (const entry of rawItems) {
+        if (!entry) continue;
+        if (typeof entry === 'string') {
+            const text = entry.trim();
+            if (!text) continue;
+            items.push({ id: `item_${Math.random().toString(36).slice(2, 10)}`, text, status: 'todo', updatedAt: nowIso() });
+            continue;
+        }
+        if (typeof entry?.text === 'string') {
+            const text = entry.text.trim();
+            if (!text) continue;
+            const status = entry.status === 'doing' || entry.status === 'done' ? entry.status : 'todo';
+            items.push({ id: String(entry.id || `item_${Math.random().toString(36).slice(2, 10)}`), text, status, updatedAt: nowIso() });
+        }
+    }
+    return items;
+}
+
+function parseChecklistText(text: string): TrackerItem[] {
+    const lines = String(text || '')
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean);
+    const items: TrackerItem[] = [];
+    for (const line of lines) {
+        let status: TrackerItemStatus = 'todo';
+        let content = line;
+        if (line.startsWith('[x]') || line.startsWith('[X]')) {
+            status = 'done';
+            content = line.slice(3).trim();
+        } else if (line.startsWith('[~]')) {
+            status = 'doing';
+            content = line.slice(3).trim();
+        } else if (line.startsWith('[ ]')) {
+            status = 'todo';
+            content = line.slice(3).trim();
+        }
+        if (!content) continue;
+        items.push({
+            id: `item_${Math.random().toString(36).slice(2, 10)}`,
+            text: content,
+            status,
+            updatedAt: nowIso()
+        });
+    }
+    return items;
+}
+
+function formatChecklistText(items: TrackerItem[]): string {
+    return items
+        .map((item) => {
+            const mark = item.status === 'done' ? 'x' : item.status === 'doing' ? '~' : ' ';
+            return `[${mark}] ${item.text}`;
+        })
+        .join('\n');
+}
+
+function buildTrackerSnapshot(project: ProjectTracker) {
+    const progress = computeProgress(project);
+    return {
+        rootPath: project.rootPath,
+        name: project.name,
+        prd: {
+            status: project.prd.status,
+            content: project.prd.content || ''
+        },
+        planText: formatChecklistText(project.plan.items),
+        todoText: formatChecklistText(project.todos.items),
+        checklistText: formatChecklistText(project.checklist.items),
+        progress
+    };
+}
 
 function buildHooksCommand(variantHooksDir: string): string {
     const guardPath = path.join(variantHooksDir, 'windsurf-auto-mcp-guard.py');
@@ -742,6 +1005,104 @@ const TOOLS = [
         }
     },
     {
+        name: 'set_prd',
+        description: 'Create/update PRD draft for current project / 创建或更新当前项目 PRD 草案',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                content: { type: 'string', description: 'PRD content / PRD 内容' }
+            },
+            required: ['content']
+        }
+    },
+    {
+        name: 'approve_prd',
+        description: 'Approve PRD for current project / 审批当前项目 PRD',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                approver: { type: 'string', description: 'Approver name / 审批人' },
+                note: { type: 'string', description: 'Approval note / 审批说明' }
+            }
+        }
+    },
+    {
+        name: 'update_plan',
+        description: 'Set/replace plan checklist after PRD approval / 在 PRD 审批后设置计划清单',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                items: {
+                    type: 'array',
+                    description: 'Plan items / 计划条目',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            text: { type: 'string' },
+                            status: { type: 'string', enum: ['todo', 'doing', 'done'] }
+                        },
+                        required: ['text']
+                    }
+                },
+                text: { type: 'string', description: 'Plan text lines (supports [x]/[~]/[ ]) / 计划文本（支持 [x]/[~]/[ ]）' }
+            }
+        }
+    },
+    {
+        name: 'update_todos',
+        description: 'Set/replace TODO checklist after plan / 在计划后设置 TODO 清单',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                items: {
+                    type: 'array',
+                    description: 'TODO items / TODO 条目',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            text: { type: 'string' },
+                            status: { type: 'string', enum: ['todo', 'doing', 'done'] }
+                        },
+                        required: ['text']
+                    }
+                },
+                text: { type: 'string', description: 'TODO text lines (supports [x]/[~]/[ ]) / TODO 文本（支持 [x]/[~]/[ ]）' }
+            }
+        }
+    },
+    {
+        name: 'update_checklist',
+        description: 'Set/replace delivery checklist / 设置交付检查清单',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                items: {
+                    type: 'array',
+                    description: 'Checklist items / 检查条目',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            text: { type: 'string' },
+                            status: { type: 'string', enum: ['todo', 'doing', 'done'] }
+                        },
+                        required: ['text']
+                    }
+                },
+                text: { type: 'string', description: 'Checklist text lines (supports [x]/[~]/[ ]) / 清单文本（支持 [x]/[~]/[ ]）' }
+            }
+        }
+    },
+    {
+        name: 'get_project_status',
+        description: 'Get tracker summary for current project / 获取当前项目跟踪状态',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
+            }
+        }
+    },
+    {
         name: 'notify',
         description: 'Send a notification to the user / 向用户发送通知消息',
         inputSchema: {
@@ -775,6 +1136,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     // 加载统计数据
     loadStats(context);
+    initializeTracker();
 
     // 创建状态栏
     statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
@@ -1024,6 +1386,24 @@ async function handleToolCall(name: string, args: any): Promise<any> {
         case 'ask_question':
             result = await handleAskQuestion(args);
             break;
+        case 'set_prd':
+            result = await handleSetPrd(args);
+            break;
+        case 'approve_prd':
+            result = await handleApprovePrd(args);
+            break;
+        case 'update_plan':
+            result = await handleUpdatePlan(args);
+            break;
+        case 'update_todos':
+            result = await handleUpdateTodos(args);
+            break;
+        case 'update_checklist':
+            result = await handleUpdateChecklist(args);
+            break;
+        case 'get_project_status':
+            result = await handleGetProjectStatus(args);
+            break;
         case 'notify':
             stats.notifyCalls++;
             result = await handleNotify(args);
@@ -1143,6 +1523,128 @@ async function handleNotify(args: any): Promise<any> {
 
     const text = lang === 'en' ? `Notification sent: ${message}` : `通知已发送: ${message}`;
     return { content: [{ type: 'text', text }] };
+}
+
+function resolveProjectTracker(rootPathOverride?: string): { data: TrackerData; project: ProjectTracker; rootPath: string } {
+    const lang = getUiLanguage();
+    const rootPath = rootPathOverride || getWorkspaceRootPath();
+    if (!rootPath) {
+        const msg = lang === 'en' ? 'Workspace is required for project tracking.' : '项目跟踪需要打开工作区。';
+        throw new Error(msg);
+    }
+    const data = loadTrackerData();
+    const project = ensureProjectTracker(data, rootPath, lang);
+    data.activeProject = rootPath;
+    return { data, project, rootPath };
+}
+
+function saveTrackerAndNotify(data: TrackerData, project: ProjectTracker) {
+    saveTrackerData(data);
+    const snapshot = buildTrackerSnapshot(project);
+    sidebarProvider?.postMessage({ type: 'tracker', data: snapshot });
+}
+
+async function handleSetPrd(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const content = typeof args?.content === 'string' ? args.content.trim() : '';
+    if (!content) {
+        const msg = lang === 'en' ? 'set_prd requires content.' : 'set_prd 需要提供内容。';
+        throw new Error(msg);
+    }
+    const { data, project } = resolveProjectTracker();
+    project.prd.content = content;
+    project.prd.status = 'draft';
+    project.prd.updatedAt = nowIso();
+    project.prd.approvedAt = undefined;
+    project.prd.approvedBy = undefined;
+    project.updatedAt = nowIso();
+    saveTrackerAndNotify(data, project);
+    const text = lang === 'en' ? 'PRD updated (draft).' : 'PRD 已更新（草案）。';
+    return { content: [{ type: 'text', text }, { type: 'text', text: `PRD_JSON:\n${JSON.stringify(buildTrackerSnapshot(project), null, 2)}` }] };
+}
+
+async function handleApprovePrd(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const { data, project } = resolveProjectTracker();
+    project.prd.status = 'approved';
+    project.prd.approvedBy = typeof args?.approver === 'string' ? args.approver.trim() : undefined;
+    project.prd.approvedAt = nowIso();
+    project.updatedAt = nowIso();
+    saveTrackerAndNotify(data, project);
+    const text = lang === 'en' ? 'PRD approved.' : 'PRD 已审批。';
+    return { content: [{ type: 'text', text }, { type: 'text', text: `PRD_JSON:\n${JSON.stringify(buildTrackerSnapshot(project), null, 2)}` }] };
+}
+
+function extractItemsFromArgs(args: any): TrackerItem[] {
+    if (typeof args?.text === 'string' && args.text.trim()) {
+        return parseChecklistText(args.text);
+    }
+    if (Array.isArray(args?.items)) {
+        return normalizeTrackerItems(args.items);
+    }
+    return [];
+}
+
+async function handleUpdatePlan(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const { data, project } = resolveProjectTracker();
+    if (project.prd.status !== 'approved') {
+        const msg = lang === 'en' ? 'PRD must be approved before creating a plan.' : 'PRD 审批后才能创建计划。';
+        throw new Error(msg);
+    }
+    const items = extractItemsFromArgs(args);
+    if (items.length === 0) {
+        const msg = lang === 'en' ? 'update_plan requires items or text.' : 'update_plan 需要 items 或 text。';
+        throw new Error(msg);
+    }
+    project.plan.items = items;
+    project.updatedAt = nowIso();
+    saveTrackerAndNotify(data, project);
+    const text = lang === 'en' ? 'Plan updated.' : '计划已更新。';
+    return { content: [{ type: 'text', text }, { type: 'text', text: `PLAN_JSON:\n${JSON.stringify(buildTrackerSnapshot(project), null, 2)}` }] };
+}
+
+async function handleUpdateTodos(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const { data, project } = resolveProjectTracker();
+    if (project.plan.items.length === 0) {
+        const msg = lang === 'en' ? 'Plan is required before TODOs.' : '需要先有计划再创建 TODO。';
+        throw new Error(msg);
+    }
+    const items = extractItemsFromArgs(args);
+    if (items.length === 0) {
+        const msg = lang === 'en' ? 'update_todos requires items or text.' : 'update_todos 需要 items 或 text。';
+        throw new Error(msg);
+    }
+    project.todos.items = items;
+    project.updatedAt = nowIso();
+    saveTrackerAndNotify(data, project);
+    const text = lang === 'en' ? 'TODOs updated.' : 'TODO 已更新。';
+    return { content: [{ type: 'text', text }, { type: 'text', text: `TODO_JSON:\n${JSON.stringify(buildTrackerSnapshot(project), null, 2)}` }] };
+}
+
+async function handleUpdateChecklist(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const { data, project } = resolveProjectTracker();
+    const items = extractItemsFromArgs(args);
+    if (items.length === 0) {
+        const msg = lang === 'en' ? 'update_checklist requires items or text.' : 'update_checklist 需要 items 或 text。';
+        throw new Error(msg);
+    }
+    project.checklist.items = items;
+    project.updatedAt = nowIso();
+    saveTrackerAndNotify(data, project);
+    const text = lang === 'en' ? 'Checklist updated.' : '检查清单已更新。';
+    return { content: [{ type: 'text', text }, { type: 'text', text: `CHECKLIST_JSON:\n${JSON.stringify(buildTrackerSnapshot(project), null, 2)}` }] };
+}
+
+async function handleGetProjectStatus(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const rootPath = typeof args?.rootPath === 'string' ? args.rootPath : undefined;
+    const { project } = resolveProjectTracker(rootPath);
+    const snapshot = buildTrackerSnapshot(project);
+    const text = lang === 'en' ? 'Project status:' : '项目状态：';
+    return { content: [{ type: 'text', text }, { type: 'text', text: `STATUS_JSON:\n${JSON.stringify(snapshot, null, 2)}` }] };
 }
 
 async function handleAskQuestion(args: any): Promise<any> {
@@ -2505,6 +3007,10 @@ You are a full software engineering department (cross-functional team). Output m
 Read the target/current state/constraints first. Missing key inputs → ask 1–3 questions via ask_question (single choice A/B/C + optional extra text).
 先读目标/现状/约束。缺关键输入 → 用 ask_question 提问 1-3 个问题（单选 A/B/C，可附补充文本）。
 
+## PRD & Approval / PRD 与审批
+Create a PRD draft → user review/adjust → approval before any Plan. Do not implement (write code/run commands/use external tools) before approval.
+先输出 PRD 草案 → 用户确认/补充 → 审批通过后才能输出 Plan。未审批不得开始实现（写代码/运行命令/调用外部工具）。
+
 ## Workflow (must follow; strict order) / 工作流（必须严格按顺序）
 Read → Research → Plan → TODO → Act → Code Review → Act → Update Progress → Check Progress → Ask
 
@@ -2542,6 +3048,35 @@ Read → Research → Plan → TODO → Act → Code Review → Act → Update P
         const msg = lang === 'en' ? `Failed to create rules file: ${error}` : `创建规则文件失败: ${error}`;
         vscode.window.showErrorMessage(msg);
     }
+}
+
+function initializeTracker() {
+    const rootPath = getWorkspaceRootPath();
+    if (!rootPath) return;
+    const data = loadTrackerData();
+    ensureProjectTracker(data, rootPath, getUiLanguage());
+    data.activeProject = rootPath;
+    saveTrackerData(data);
+}
+
+function getTrackerSnapshotForSidebar() {
+    const rootPath = getWorkspaceRootPath();
+    if (!rootPath) {
+        return {
+            rootPath: '',
+            name: '',
+            prd: { status: 'draft', content: '' },
+            planText: '',
+            todoText: '',
+            checklistText: '',
+            progress: { done: 0, total: 0, percent: 0 }
+        };
+    }
+    const data = loadTrackerData();
+    const project = ensureProjectTracker(data, rootPath, getUiLanguage());
+    data.activeProject = rootPath;
+    saveTrackerData(data);
+    return buildTrackerSnapshot(project);
 }
 
 // ==================== 侧边栏提供者 ====================
@@ -2655,6 +3190,34 @@ class SidebarProvider implements vscode.WebviewViewProvider {
                     vscode.window.showInformationMessage(tr('ext.defaultsRestored'));
                     this.refreshContent();
                     break;
+                case 'trackerSetPrd':
+                    try {
+                        await handleSetPrd({ content: message.content });
+                    } catch (e: any) {
+                        vscode.window.showErrorMessage(e?.message ?? String(e));
+                    }
+                    break;
+                case 'trackerApprovePrd':
+                    try {
+                        await handleApprovePrd({ approver: 'user' });
+                    } catch (e: any) {
+                        vscode.window.showErrorMessage(e?.message ?? String(e));
+                    }
+                    break;
+                case 'trackerUpdate':
+                    try {
+                        const field = String(message.field || '');
+                        if (field === 'plan') {
+                            await handleUpdatePlan({ items: message.items });
+                        } else if (field === 'todos') {
+                            await handleUpdateTodos({ items: message.items });
+                        } else if (field === 'checklist') {
+                            await handleUpdateChecklist({ items: message.items });
+                        }
+                    } catch (e: any) {
+                        vscode.window.showErrorMessage(e?.message ?? String(e));
+                    }
+                    break;
                 case 'configWindsurf':
                     configureWindsurf();
                     this.refreshContent();
@@ -2722,6 +3285,7 @@ class SidebarProvider implements vscode.WebviewViewProvider {
         ].join('; ');
         const homeDir = os.homedir();
         const configPaths = getWindsurfMcpConfigPaths(homeDir);
+        const trackerSnapshot = getTrackerSnapshotForSidebar();
         
         // 检测是否已初始化配置
         let isConfigured = false;
@@ -3029,6 +3593,50 @@ class SidebarProvider implements vscode.WebviewViewProvider {
             font-family: 'SF Mono', Monaco, monospace;
             font-size: 11px;
         }
+
+        /* Tracker */
+        .tracker-meta {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+        .tracker-badge {
+            padding: 2px 8px;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            font-size: 11px;
+        }
+        .tracker-badge.approved {
+            color: var(--success);
+            border-color: rgba(34, 197, 94, 0.4);
+        }
+        .tracker-badge.draft {
+            color: var(--warning);
+            border-color: rgba(245, 158, 11, 0.4);
+        }
+        .tracker-textarea {
+            min-height: 90px;
+            margin-bottom: 8px;
+        }
+        .tracker-actions {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        .tracker-progress {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 6px;
+        }
+        .tracker-hint {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 6px;
+        }
         
         /* 统计网格 */
         .stats-grid {
@@ -3221,14 +3829,45 @@ class SidebarProvider implements vscode.WebviewViewProvider {
 	            </p>
 	        </div>
 
-	        <!-- 提示语 -->
-	        <div class="card">
-	            <div class="section-title" data-i18n="sidebar.promptTitle"></div>
-	            <div class="prompt-card">
-	                <p class="prompt-text" data-i18n="sidebar.promptText"></p>
-	            </div>
-	            <button class="btn btn-ghost btn-full" id="copyPromptBtn" type="button" data-i18n="sidebar.copy"></button>
-	        </div>
+        <!-- 提示语 -->
+        <div class="card">
+            <div class="section-title" data-i18n="sidebar.promptTitle"></div>
+            <div class="prompt-card">
+                <p class="prompt-text" data-i18n="sidebar.promptText"></p>
+            </div>
+            <button class="btn btn-ghost btn-full" id="copyPromptBtn" type="button" data-i18n="sidebar.copy"></button>
+        </div>
+
+        <!-- 项目跟踪 -->
+        <div class="card">
+            <div class="section-title" data-i18n="sidebar.trackerTitle"></div>
+            <div class="tracker-meta">
+                <span><span data-i18n="sidebar.trackerProject"></span>: <span id="trackerProjectName"></span></span>
+                <span class="tracker-badge" id="trackerPrdStatus"></span>
+            </div>
+
+            <label class="input-label" data-i18n="sidebar.prdLabel"></label>
+            <textarea class="input tracker-textarea" id="prdInput"></textarea>
+            <div class="tracker-actions">
+                <button class="btn btn-ghost btn-small" id="savePrdBtn" type="button" data-i18n="sidebar.prdSave"></button>
+                <button class="btn btn-primary btn-small" id="approvePrdBtn" type="button" data-i18n="sidebar.prdApprove"></button>
+            </div>
+
+            <label class="input-label" data-i18n="sidebar.planLabel"></label>
+            <textarea class="input tracker-textarea" id="planInput"></textarea>
+            <button class="btn btn-ghost btn-full" id="savePlanBtn" type="button" data-i18n="sidebar.trackerSave"></button>
+
+            <label class="input-label" data-i18n="sidebar.todoLabel"></label>
+            <textarea class="input tracker-textarea" id="todoInput"></textarea>
+            <button class="btn btn-ghost btn-full" id="saveTodoBtn" type="button" data-i18n="sidebar.trackerSave"></button>
+
+            <label class="input-label" data-i18n="sidebar.checklistLabel"></label>
+            <textarea class="input tracker-textarea" id="checklistInput"></textarea>
+            <button class="btn btn-ghost btn-full" id="saveChecklistBtn" type="button" data-i18n="sidebar.trackerSave"></button>
+
+            <div class="tracker-progress" id="trackerProgress"></div>
+            <div class="tracker-hint" data-i18n="sidebar.trackerHint"></div>
+        </div>
 
 	        <!-- 快捷操作 -->
 	        <div class="card">
@@ -3278,6 +3917,7 @@ class SidebarProvider implements vscode.WebviewViewProvider {
 	        const I18N = ${safeJson(WEBVIEW_I18N)};
 	        const initialLang = ${safeJson(lang)};
 	        const initialDefaultReason = ${safeJson(defaultReason)};
+	        const initialTracker = ${safeJson(trackerSnapshot)};
 	        let currentLang = (vscode.getState() && vscode.getState().lang) || initialLang;
 
 	        let runtime = {
@@ -3287,6 +3927,7 @@ class SidebarProvider implements vscode.WebviewViewProvider {
 	        };
 
 	        let isConfigured = ${isConfigured ? 'true' : 'false'};
+	        let trackerData = initialTracker;
 
 	        function t(key, vars = {}) {
 	            const template = (I18N[currentLang] && I18N[currentLang][key]) || (I18N.zh && I18N.zh[key]) || key;
@@ -3320,14 +3961,15 @@ class SidebarProvider implements vscode.WebviewViewProvider {
 	            }
 
 	            const langToggle = document.getElementById('langToggle');
-	            if (langToggle) {
-	                langToggle.textContent = currentLang === 'en' ? t('ui.lang.zh') : t('ui.lang.en');
-	                langToggle.title = currentLang === 'en' ? t('ui.lang.toggleToZh') : t('ui.lang.toggleToEn');
-	            }
+            if (langToggle) {
+                langToggle.textContent = currentLang === 'en' ? t('ui.lang.zh') : t('ui.lang.en');
+                langToggle.title = currentLang === 'en' ? t('ui.lang.toggleToZh') : t('ui.lang.toggleToEn');
+            }
 
-	            renderStatus();
-	            renderConfig();
-	        }
+            renderStatus();
+            renderConfig();
+            renderTracker();
+        }
 
 	        function renderStatus() {
 	            const dot = document.getElementById('statusDot');
@@ -3373,6 +4015,72 @@ class SidebarProvider implements vscode.WebviewViewProvider {
 	            const askContinue = document.getElementById('statAskContinue');
 	            if (total) total.textContent = String(runtime.stats?.totalCalls ?? 0);
 	            if (askContinue) askContinue.textContent = String(runtime.stats?.askContinueCalls ?? 0);
+	        }
+
+	        function formatTrackerList(items) {
+	            if (!Array.isArray(items)) return '';
+	            return items.map((item) => {
+	                const status = item?.status === 'done' ? 'x' : item?.status === 'doing' ? '~' : ' ';
+	                const text = String(item?.text || '').trim();
+	                if (!text) return '';
+                return '[' + status + '] ' + text;
+	            }).filter(Boolean).join('\\n');
+	        }
+
+	        function parseTrackerList(text) {
+	            const lines = String(text || '').split('\\n').map((line) => line.trim()).filter(Boolean);
+	            const items = [];
+	            lines.forEach((line) => {
+	                let status = 'todo';
+	                let content = line;
+	                if (line.startsWith('[x]') || line.startsWith('[X]')) {
+	                    status = 'done';
+	                    content = line.slice(3).trim();
+	                } else if (line.startsWith('[~]')) {
+	                    status = 'doing';
+	                    content = line.slice(3).trim();
+	                } else if (line.startsWith('[ ]')) {
+	                    status = 'todo';
+	                    content = line.slice(3).trim();
+	                }
+	                if (!content) return;
+	                items.push({ text: content, status });
+	            });
+	            return items;
+	        }
+
+	        function renderTracker() {
+	            const nameEl = document.getElementById('trackerProjectName');
+	            const statusEl = document.getElementById('trackerPrdStatus');
+	            const prdInput = document.getElementById('prdInput');
+	            const planInput = document.getElementById('planInput');
+	            const todoInput = document.getElementById('todoInput');
+	            const checklistInput = document.getElementById('checklistInput');
+	            const progressEl = document.getElementById('trackerProgress');
+
+	            if (nameEl) nameEl.textContent = trackerData?.name || '-';
+	            if (statusEl) {
+	                const approved = trackerData?.prd?.status === 'approved';
+	                statusEl.textContent = approved ? t('sidebar.prdApproved') : t('sidebar.prdDraft');
+	                statusEl.classList.toggle('approved', approved);
+	                statusEl.classList.toggle('draft', !approved);
+	            }
+	            if (prdInput && typeof trackerData?.prd?.content === 'string') prdInput.value = trackerData.prd.content;
+	            if (planInput) planInput.value = trackerData?.planText || '';
+	            if (todoInput) todoInput.value = trackerData?.todoText || '';
+	            if (checklistInput) checklistInput.value = trackerData?.checklistText || '';
+	            if (progressEl) {
+	                const progress = trackerData?.progress || { done: 0, total: 0, percent: 0 };
+                progressEl.textContent =
+                    t('sidebar.trackerProgress') +
+                    ': ' +
+                    progress.done +
+                    '/' +
+                    progress.total +
+                    ' (' +
+                    progress.percent +
+                    '%)';
+	            }
 	        }
 
 	        function toggleLanguage() {
@@ -3449,6 +4157,25 @@ class SidebarProvider implements vscode.WebviewViewProvider {
 	            showToast(t('toast.settingsSaved'), 'success');
 	        }
 
+	        function savePrd() {
+	            const prdInput = document.getElementById('prdInput');
+	            const content = prdInput?.value || '';
+	            vscode.postMessage({ type: 'trackerSetPrd', content });
+	            showToast(t('toast.submitted'), 'success');
+	        }
+
+	        function approvePrd() {
+	            vscode.postMessage({ type: 'trackerApprovePrd' });
+	            showToast(t('toast.submitted'), 'success');
+	        }
+
+	        function saveTrackerList(field, textareaId) {
+	            const textarea = document.getElementById(textareaId);
+	            const items = parseTrackerList(textarea?.value || '');
+	            vscode.postMessage({ type: 'trackerUpdate', field, items });
+	            showToast(t('toast.submitted'), 'success');
+	        }
+
 	        const portInput = document.getElementById('portInput');
 	        if (portInput) {
 	            portInput.addEventListener('change', () => {
@@ -3475,6 +4202,10 @@ class SidebarProvider implements vscode.WebviewViewProvider {
 	                    renderStatus();
 	                    renderStats();
 	                    break;
+	                case 'tracker':
+	                    trackerData = message.data || trackerData;
+	                    renderTracker();
+	                    break;
 	                case 'languageChanged':
 	                    if (message.language === 'en' || message.language === 'zh') {
 	                        currentLang = message.language;
@@ -3495,6 +4226,11 @@ class SidebarProvider implements vscode.WebviewViewProvider {
 	        document.getElementById('restartServerBtn')?.addEventListener('click', () => restartServer());
 	        document.getElementById('openDialogBtn')?.addEventListener('click', () => openContinueDialog());
 	        document.getElementById('copyPromptBtn')?.addEventListener('click', () => copyPrompt());
+	        document.getElementById('savePrdBtn')?.addEventListener('click', () => savePrd());
+	        document.getElementById('approvePrdBtn')?.addEventListener('click', () => approvePrd());
+	        document.getElementById('savePlanBtn')?.addEventListener('click', () => saveTrackerList('plan', 'planInput'));
+	        document.getElementById('saveTodoBtn')?.addEventListener('click', () => saveTrackerList('todos', 'todoInput'));
+	        document.getElementById('saveChecklistBtn')?.addEventListener('click', () => saveTrackerList('checklist', 'checklistInput'));
 	        document.getElementById('initBtn')?.addEventListener('click', () => configWindsurf());
 	        document.getElementById('resetDefaultsBtn')?.addEventListener('click', () => resetDefaults());
 	        document.getElementById('saveSettingsBtn')?.addEventListener('click', () => saveSettings());

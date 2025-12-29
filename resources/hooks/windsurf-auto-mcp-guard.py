@@ -8,6 +8,8 @@ from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
 
+TRACKER_FILE_NAME = "windsurf-auto-mcp-tracker.json"
+
 
 def read_stdin(max_bytes=5 * 1024 * 1024):
     data = sys.stdin.buffer.read(max_bytes + 1)
@@ -123,6 +125,72 @@ def check_health(server_url, timeout_sec=0.35):
         return False
 
 
+def find_tracker_path():
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        variant_root = os.path.dirname(os.path.dirname(script_dir))
+        candidate = os.path.join(variant_root, TRACKER_FILE_NAME)
+        if os.path.exists(candidate):
+            return candidate
+    except Exception:
+        pass
+    home = os.path.expanduser("~")
+    return os.path.join(home, ".codeium", "windsurf", TRACKER_FILE_NAME)
+
+
+def load_tracker():
+    path = find_tracker_path()
+    try:
+        if not os.path.exists(path):
+            return None
+        with open(path, "r", encoding="utf-8") as f:
+            raw = f.read()
+        if not raw.strip():
+            return None
+        data = json.loads(raw)
+        if not isinstance(data, dict):
+            return None
+        return data
+    except Exception:
+        return None
+
+
+def select_project(tracker, file_path=None, cwd=None):
+    if not tracker:
+        return None
+    projects = tracker.get("projects") or {}
+    if not isinstance(projects, dict) or not projects:
+        return None
+    target = normalize_path(file_path or cwd)
+    if target:
+        best = None
+        best_len = -1
+        for root, project in projects.items():
+            root_norm = normalize_path(root)
+            if root_norm and target.startswith(root_norm) and len(root_norm) > best_len:
+                best = project
+                best_len = len(root_norm)
+        if best:
+            return best
+    active = tracker.get("activeProject")
+    if active and active in projects:
+        return projects.get(active)
+    return None
+
+
+def check_prd_gate(project):
+    prd = project.get("prd") or {}
+    if prd.get("status") != "approved":
+        return "Blocked: PRD is not approved. Create PRD → user approve → then Plan/TODO."
+    plan_items = ((project.get("plan") or {}).get("items")) or []
+    if not plan_items:
+        return "Blocked: Plan is missing. Create Plan before implementation."
+    todo_items = ((project.get("todos") or {}).get("items")) or []
+    if not todo_items:
+        return "Blocked: TODOs are missing. Create TODOs before implementation."
+    return None
+
+
 def should_enforce_guards():
     if os.environ.get("WINDSURF_AUTO_MCP_GUARD_ALWAYS") == "1":
         return True
@@ -172,6 +240,13 @@ def main():
 
     if action == "pre_write_code":
         file_path = tool_info.get("file_path")
+        tracker = load_tracker()
+        project = select_project(tracker, file_path=file_path)
+        if project:
+            gate = check_prd_gate(project)
+            if gate:
+                print(gate, file=sys.stderr)
+                return 2
         if looks_sensitive_write_path(file_path):
             print(f"Blocked write to sensitive path: {file_path}", file=sys.stderr)
             return 2

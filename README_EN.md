@@ -99,6 +99,8 @@ Team roles (internal coordination):
 
 Before anything (must): read the target first. Before decisions/edits, read relevant files/config/logs; if key inputs are missing, use ask_question (single-choice A/B/C with optional extra text), 1–3 questions max.
 
+PRD & approval (must): create a PRD draft → user review/adjust → approval before any Plan. Do not implement (write code/run commands/use external tools) before approval.
+
 Planning & TODO breakdown (must): for any big feature/complex task (and any non-trivial change), produce a Plan and break it into small TODOs (verifiable, trackable, parallelizable). Update progress as you go.
 
 Do not trust your knowledge (must): your knowledge can be outdated and harmful. For any important decision (API/config/version/security/install), research first, then act.
@@ -197,6 +199,12 @@ Notes:
 - Disable/uninstall behavior: the bundled hook script reads `mcp_config.json` and probes `http://localhost:<port>/health`; if `windsurf_auto_mcp` is not configured/disabled/unreachable (e.g., extension disabled or uninstalled), it exits 0 and will not block/audit actions.
 - windsurf-next: official Hooks docs currently only mention `windsurf` paths, but windsurf-next’s MCP config is `%USERPROFILE%\.codeium\windsurf-next\mcp_config.json`. This extension also writes user-level hooks into `%USERPROFILE%\.codeium\windsurf-next\hooks.json` using the same pattern (best-effort/inferred; not officially documented).
 
+### Project Tracker (PRD / Plan / TODO / Checklist)
+
+- Tracker files (user-level): `%USERPROFILE%\.codeium\windsurf\windsurf-auto-mcp-tracker.json` and `%USERPROFILE%\.codeium\windsurf-next\windsurf-auto-mcp-tracker.json`
+- The sidebar provides an editable PRD/Plan/TODO/Checklist with live progress.
+- Hooks validate PRD approval + Plan/TODO before `pre_write_code`; if missing, writes are blocked with a warning.
+
 ### Hotkey
 
 | Hotkey | Action |
@@ -210,6 +218,12 @@ Notes:
 | `ask_continue` | Ask whether to continue after completing a task |
 | `ask_question` | Single-choice clarification (A/B/C...), with optional extra text/images |
 | `ask_user` | Request user input (supports image upload) |
+| `set_prd` | Create/update PRD draft |
+| `approve_prd` | Approve PRD |
+| `update_plan` | Set/update plan checklist |
+| `update_todos` | Set/update TODO checklist |
+| `update_checklist` | Set/update delivery checklist |
+| `get_project_status` | Get current project tracking status |
 | `notify` | Send a user notification |
 
 #### ask_question Examples

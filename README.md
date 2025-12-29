@@ -109,6 +109,8 @@ WindsurfAutoMcp 通过 MCP 协议实现：
 
 【开始前必须做】先读“目标/现状/约束”。在做任何修改前，必须先阅读目标文件/相关代码/配置/日志；不确定点必须用 ask_question 提问（单选 A/B/C，可附补充信息），问题控制在 1-3 个。
 
+【PRD 与审批（必须）】先输出 PRD 草案 → 用户确认/补充 → 审批通过后才能输出 Plan；未审批不得开始实现（写代码/运行命令/调用外部工具）。
+
 【计划与拆解（必须做到）】对任何“大功能/复杂任务”（以及任何非小改动），必须先输出 Plan，并拆成 TODO 小任务（每项可验证、可跟踪、可并行）。每完成一项就更新进度。
 
 【不信任知识（必须做到）】不要依赖记忆/常识拍脑袋：你的知识可能过时且有害。遇到关键决策（API/配置/版本/安全/安装）必须先研究，再行动。
@@ -207,6 +209,12 @@ WindsurfAutoMcp 会在扩展激活时（默认开启）自动把 hooks 写入 **
 - “禁用/卸载扩展”联动：WindsurfAutoMcp 自带的 hook 脚本会读取 `mcp_config.json` 并探测 `http://localhost:<port>/health`；如果 `windsurf_auto_mcp` 未配置/被禁用/服务不可达（例如扩展已禁用或卸载），脚本会直接退出 0，不再阻止/审计任何动作。
 - windsurf-next：官方 Hooks 文档目前只写了 `windsurf` 路径；但 windsurf-next 的 MCP 配置实际使用 `%USERPROFILE%\.codeium\windsurf-next\mcp_config.json`。本扩展会按相同规律在 `%USERPROFILE%\.codeium\windsurf-next\hooks.json` 写入用户级 hooks（属于“推断支持”，非官方承诺）。
 
+### 项目跟踪（PRD / Plan / TODO / Checklist）
+
+- 跟踪文件位置（用户级）：`%USERPROFILE%\.codeium\windsurf\windsurf-auto-mcp-tracker.json` 与 `%USERPROFILE%\.codeium\windsurf-next\windsurf-auto-mcp-tracker.json`
+- 侧边栏提供可编辑的 PRD/Plan/TODO/Checklist，并实时计算进度。
+- Hooks 在 `pre_write_code` 阶段会校验 PRD 已审批、Plan 与 TODO 已建立；不满足将阻止写入并提示。
+
 ### 快捷键
 
 | 快捷键 | 功能 |
@@ -220,6 +228,12 @@ WindsurfAutoMcp 会在扩展激活时（默认开启）自动把 hooks 写入 **
 | `ask_continue` | 任务完成后询问用户是否继续 |
 | `ask_question` | 单选澄清问题（A/B/C...），可附加补充文本/图片 |
 | `ask_user` | 请求用户输入，支持图片上传 |
+| `set_prd` | 创建/更新 PRD 草案 |
+| `approve_prd` | 审批 PRD |
+| `update_plan` | 设置/更新计划清单 |
+| `update_todos` | 设置/更新 TODO 清单 |
+| `update_checklist` | 设置/更新交付检查清单 |
+| `get_project_status` | 获取当前项目跟踪状态 |
 | `notify` | 发送通知消息 |
 
 #### ask_question 示例
