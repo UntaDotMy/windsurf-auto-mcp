@@ -144,7 +144,13 @@ Config file locations (official):
   - Windows: `C:\ProgramData\Windsurf\hooks.json`
   - macOS: `/Library/Application Support/Windsurf/hooks.json`
   - Linux/WSL: `/etc/windsurf/hooks.json`
-- User-level: `~/.codeium/windsurf/hooks.json`
+- User-level:
+  - Windsurf (official):
+    - Windows: `%USERPROFILE%\.codeium\windsurf\hooks.json`
+    - macOS/Linux: `~/.codeium/windsurf/hooks.json`
+  - Windsurf-next (not officially documented, but matches `mcp_config.json` path patterns):
+    - Windows: `%USERPROFILE%\.codeium\windsurf-next\hooks.json`
+    - macOS/Linux: `~/.codeium/windsurf-next/hooks.json`
 - Workspace-level: `.windsurf/hooks.json` in your workspace root
 
 Key rules (official):
@@ -179,6 +185,7 @@ Notes:
 - Usage: copy `examples/windsurf-hooks/hooks.json` to one of the hooks.json locations above, then replace `/ABSOLUTE/PATH/...` in `command` with your local absolute path.
 - The example blocks typical dangerous ops via `pre_run_command`/`pre_write_code`, and warns when `ask_continue` is missing via `post_cascade_response` (warning only; does not block).
 - Hooks run with your user’s full permissions: use absolute paths, validate input JSON, and don’t log secrets.
+- Disable/uninstall behavior: the example script reads `mcp_config.json` and probes `http://localhost:<port>/health`; if `windsurf_auto_mcp` is not configured/disabled/unreachable (e.g., extension disabled or uninstalled), it exits 0 and will not block/audit actions.
 - windsurf-next: official docs currently only mention `windsurf` paths; if you use windsurf-next and user-level hooks don’t apply, you can also try `~/.codeium/windsurf-next/hooks.json` (matches the `mcp_config.json` path pattern; not officially documented).
 
 ### Hotkey

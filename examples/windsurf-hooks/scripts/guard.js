@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 /* eslint-disable no-console */
 
+const http = require('http');
+const https = require('https');
+const os = require('os');
+const path = require('path');
 const fs = require('fs');
 
 function parseArgs(argv) {
@@ -96,6 +100,103 @@ function appendLog(logFile, payload) {
   fs.appendFileSync(logFile, text, 'utf8');
 }
 
+function getMcpConfigPaths(homeDir) {
+  const baseDirs = ['.windsurf', '.codeium'];
+  const variants = ['windsurf', 'windsurf-next'];
+  const paths = [];
+
+  for (const base of baseDirs) {
+    for (const variant of variants) {
+      paths.push(path.join(homeDir, base, variant, 'mcp_config.json'));
+    }
+  }
+
+  return paths;
+}
+
+function tryReadJson(filePath) {
+  try {
+    if (!fs.existsSync(filePath)) return null;
+    const raw = fs.readFileSync(filePath, 'utf8');
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+function getAutoMcpServerEntry(config) {
+  const entry = config?.mcpServers?.windsurf_auto_mcp;
+  if (!entry || typeof entry !== 'object') return null;
+  return entry;
+}
+
+async function checkHealth(serverUrl, timeoutMs = 350) {
+  let url;
+  try {
+    url = new URL(String(serverUrl));
+  } catch {
+    return false;
+  }
+
+  url.pathname = '/health';
+  url.search = '';
+  const lib = url.protocol === 'https:' ? https : http;
+
+  return await new Promise((resolve) => {
+    const req = lib.request(
+      {
+        method: 'GET',
+        hostname: url.hostname,
+        port: url.port || (url.protocol === 'https:' ? 443 : 80),
+        path: url.pathname,
+        headers: { Accept: 'application/json' },
+        timeout: timeoutMs,
+      },
+      (res) => {
+        let body = '';
+        res.setEncoding('utf8');
+        res.on('data', (chunk) => (body += chunk));
+        res.on('end', () => {
+          if (res.statusCode !== 200) return resolve(false);
+          try {
+            const json = JSON.parse(body);
+            return resolve(json?.service === 'windsurf_auto_mcp' && json?.status === 'ok');
+          } catch {
+            return resolve(false);
+          }
+        });
+      }
+    );
+
+    req.on('timeout', () => {
+      req.destroy(new Error('timeout'));
+    });
+    req.on('error', () => resolve(false));
+    req.end();
+  });
+}
+
+async function shouldEnforceGuards() {
+  if (process.env.WINDSURF_AUTO_MCP_GUARD_ALWAYS === '1') return true;
+
+  const homeDir = os.homedir();
+  const configPaths = getMcpConfigPaths(homeDir);
+
+  for (const configPath of configPaths) {
+    const config = tryReadJson(configPath);
+    if (!config) continue;
+    const entry = getAutoMcpServerEntry(config);
+    if (!entry) continue;
+    if (entry.disabled === true) continue;
+    if (!entry.url) continue;
+
+    const ok = await checkHealth(entry.url);
+    if (ok) return true;
+  }
+
+  return false;
+}
+
 async function main() {
   const args = parseArgs(process.argv);
   const logFile = args.log || process.env.WINDSURF_HOOK_LOG || '';
@@ -110,6 +211,11 @@ async function main() {
   }
 
   appendLog(logFile, payload);
+
+  const enforce = await shouldEnforceGuards();
+  if (!enforce) {
+    process.exit(0);
+  }
 
   const action = payload?.agent_action_name;
   const toolInfo = payload?.tool_info ?? {};
@@ -148,4 +254,3 @@ main().catch((e) => {
   console.error(e?.stack ?? String(e));
   process.exit(1);
 });
-
