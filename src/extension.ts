@@ -22,6 +22,14 @@ type TrackerItem = {
     status: TrackerItemStatus;
     updatedAt: string;
 };
+type ProjectTrackerStats = {
+    prdUpdates: number;
+    prdApprovals: number;
+    planUpdates: number;
+    todoUpdates: number;
+    checklistUpdates: number;
+    updatedAt?: string;
+};
 type ProjectTracker = {
     rootPath: string;
     name: string;
@@ -35,6 +43,7 @@ type ProjectTracker = {
     plan: { items: TrackerItem[] };
     todos: { items: TrackerItem[] };
     checklist: { items: TrackerItem[] };
+    stats: ProjectTrackerStats;
     updatedAt: string;
 };
 type TrackerData = {
@@ -72,6 +81,7 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'ext.statusTextStopped': '$(server) MCP: 停止',
         'ext.invalidConfigJson': '配置文件 JSON 无效: {path}。请修复 JSON（或删除文件以重新生成）后重试。原始错误: {error}',
         'ext.hooksInstalled': 'Hooks 已安装/更新（Windsurf / windsurf-next）',
+        'ext.hooksAlreadyInstalled': 'Hooks 已是最新，无需更新',
         'ext.hooksInstallFailed': '安装 Hooks 失败',
         'ext.hooksUninstalled': 'Hooks 已卸载（已从 hooks.json 移除并删除脚本）',
         'ext.hooksUninstallFailed': '卸载 Hooks 失败',
@@ -183,6 +193,12 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'sidebar.checklistLabel': '检查清单',
         'sidebar.trackerSave': '保存',
         'sidebar.trackerHint': '列表支持 [ ] / [~] / [x] 状态',
+        'sidebar.trackerStats': '统计',
+        'sidebar.trackerStatsPrd': 'PRD 更新',
+        'sidebar.trackerStatsApprovals': '审批',
+        'sidebar.trackerStatsPlan': '计划更新',
+        'sidebar.trackerStatsTodo': 'TODO 更新',
+        'sidebar.trackerStatsChecklist': '清单更新',
         'sidebar.copy': '复制',
         'sidebar.windsurfConfigTitle': 'Windsurf 配置',
         'sidebar.writeConfig': '写入 Windsurf 配置',
@@ -278,6 +294,7 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'ext.statusTextStopped': '$(server) MCP: Stopped',
         'ext.invalidConfigJson': 'Invalid JSON in existing config file: {path}. Please fix the JSON (or delete the file to recreate) then run Configure again. Original error: {error}',
         'ext.hooksInstalled': 'Hooks installed/updated (Windsurf / windsurf-next)',
+        'ext.hooksAlreadyInstalled': 'Hooks already installed (no changes needed)',
         'ext.hooksInstallFailed': 'Failed to install Hooks',
         'ext.hooksUninstalled': 'Hooks uninstalled (removed from hooks.json and deleted scripts)',
         'ext.hooksUninstallFailed': 'Failed to uninstall Hooks',
@@ -389,6 +406,12 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'sidebar.checklistLabel': 'Checklist',
         'sidebar.trackerSave': 'Save',
         'sidebar.trackerHint': 'Lists support [ ] / [~] / [x] status',
+        'sidebar.trackerStats': 'Activity',
+        'sidebar.trackerStatsPrd': 'PRD updates',
+        'sidebar.trackerStatsApprovals': 'Approvals',
+        'sidebar.trackerStatsPlan': 'Plan updates',
+        'sidebar.trackerStatsTodo': 'TODO updates',
+        'sidebar.trackerStatsChecklist': 'Checklist updates',
         'sidebar.copy': 'Copy',
         'sidebar.windsurfConfigTitle': 'Windsurf Config',
         'sidebar.writeConfig': 'Write Windsurf config',
@@ -625,9 +648,36 @@ function defaultPrdTemplate(lang: UiLanguage): string {
     ].join('\n');
 }
 
+function createDefaultTrackerStats(): ProjectTrackerStats {
+    return {
+        prdUpdates: 0,
+        prdApprovals: 0,
+        planUpdates: 0,
+        todoUpdates: 0,
+        checklistUpdates: 0
+    };
+}
+
+function normalizeTrackerStats(raw: any): ProjectTrackerStats {
+    const base = createDefaultTrackerStats();
+    if (!raw || typeof raw !== 'object') return base;
+    const safe = (value: any) => (Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0);
+    return {
+        prdUpdates: safe(raw.prdUpdates),
+        prdApprovals: safe(raw.prdApprovals),
+        planUpdates: safe(raw.planUpdates),
+        todoUpdates: safe(raw.todoUpdates),
+        checklistUpdates: safe(raw.checklistUpdates),
+        updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined
+    };
+}
+
 function ensureProjectTracker(data: TrackerData, rootPath: string, lang: UiLanguage): ProjectTracker {
     const existing = data.projects[rootPath];
-    if (existing) return existing;
+    if (existing) {
+        existing.stats = normalizeTrackerStats(existing.stats);
+        return existing;
+    }
     const project: ProjectTracker = {
         rootPath,
         name: getProjectNameFromPath(rootPath),
@@ -639,6 +689,7 @@ function ensureProjectTracker(data: TrackerData, rootPath: string, lang: UiLangu
         plan: { items: [] },
         todos: { items: [] },
         checklist: { items: [] },
+        stats: createDefaultTrackerStats(),
         updatedAt: nowIso()
     };
     data.projects[rootPath] = project;
@@ -731,8 +782,22 @@ function buildTrackerSnapshot(project: ProjectTracker) {
         planText: formatChecklistText(project.plan.items),
         todoText: formatChecklistText(project.todos.items),
         checklistText: formatChecklistText(project.checklist.items),
-        progress
+        progress,
+        stats: normalizeTrackerStats(project.stats)
     };
+}
+
+type TrackerStatKey =
+    | 'prdUpdates'
+    | 'prdApprovals'
+    | 'planUpdates'
+    | 'todoUpdates'
+    | 'checklistUpdates';
+
+function bumpProjectStat(project: ProjectTracker, key: TrackerStatKey) {
+    project.stats = normalizeTrackerStats(project.stats);
+    project.stats[key] = (project.stats[key] || 0) + 1;
+    project.stats.updatedAt = nowIso();
 }
 
 function buildHooksCommand(variantHooksDir: string): string {
@@ -748,10 +813,23 @@ function isLegacyHookCommand(command: unknown): boolean {
     return /windsurf-auto-mcp-guard\.(ps1|js)/i.test(command);
 }
 
+function hooksContainCommand(config: any, command: string): boolean {
+    if (!config || typeof config !== 'object') return false;
+    if (!config.hooks || typeof config.hooks !== 'object') return false;
+    for (const eventName of HOOK_EVENTS) {
+        const list = config.hooks[eventName];
+        if (!Array.isArray(list) || !list.some((h: any) => h && h.command === command)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 function installWindsurfHooks() {
     const homeDir = os.homedir();
     const items = getWindsurfHooksConfigPaths(homeDir);
     const installed: string[] = [];
+    const skipped: string[] = [];
     const failed: Array<{ path: string; error: string }> = [];
 
     const guardPySource = path.join(extensionContext.extensionPath, 'resources', 'hooks', 'windsurf-auto-mcp-guard.py');
@@ -759,31 +837,9 @@ function installWindsurfHooks() {
     for (const { variant, hooksPath } of items) {
         try {
             const variantDir = path.dirname(hooksPath);
-            if (!fs.existsSync(variantDir)) {
-                fs.mkdirSync(variantDir, { recursive: true });
-            }
-
             const scriptDir = path.join(variantDir, 'hooks', 'windsurf-auto-mcp');
-            if (!fs.existsSync(scriptDir)) {
-                fs.mkdirSync(scriptDir, { recursive: true });
-            }
-
-            // Copy guard script (Python)
-            fs.copyFileSync(guardPySource, path.join(scriptDir, 'windsurf-auto-mcp-guard.py'));
-            // Remove legacy scripts if present.
-            try {
-                const legacyPs1 = path.join(scriptDir, 'windsurf-auto-mcp-guard.ps1');
-                if (fs.existsSync(legacyPs1)) fs.unlinkSync(legacyPs1);
-                const legacyJs = path.join(scriptDir, 'windsurf-auto-mcp-guard.js');
-                if (fs.existsSync(legacyJs)) fs.unlinkSync(legacyJs);
-            } catch {
-                // ignore cleanup failures
-            }
-
+            const guardTarget = path.join(scriptDir, 'windsurf-auto-mcp-guard.py');
             const command = buildHooksCommand(scriptDir);
-            const desiredHooks = Object.fromEntries(
-                HOOK_EVENTS.map((eventName) => [eventName, [{ command, show_output: true }]])
-            ) as Record<string, Array<{ command: string; show_output: boolean }>>;
 
             let config: any = {};
             if (fs.existsSync(hooksPath)) {
@@ -797,6 +853,36 @@ function installWindsurfHooks() {
                     }
                 }
             }
+
+            const alreadyInstalled = hooksContainCommand(config, command) && fs.existsSync(guardTarget);
+            if (alreadyInstalled) {
+                skipped.push(`${variant}: ${hooksPath}`);
+                outputChannel.appendLine(`Hooks already installed (${variant}): ${hooksPath}`);
+                continue;
+            }
+
+            if (!fs.existsSync(variantDir)) {
+                fs.mkdirSync(variantDir, { recursive: true });
+            }
+            if (!fs.existsSync(scriptDir)) {
+                fs.mkdirSync(scriptDir, { recursive: true });
+            }
+
+            // Copy guard script (Python)
+            fs.copyFileSync(guardPySource, guardTarget);
+            // Remove legacy scripts if present.
+            try {
+                const legacyPs1 = path.join(scriptDir, 'windsurf-auto-mcp-guard.ps1');
+                if (fs.existsSync(legacyPs1)) fs.unlinkSync(legacyPs1);
+                const legacyJs = path.join(scriptDir, 'windsurf-auto-mcp-guard.js');
+                if (fs.existsSync(legacyJs)) fs.unlinkSync(legacyJs);
+            } catch {
+                // ignore cleanup failures
+            }
+
+            const desiredHooks = Object.fromEntries(
+                HOOK_EVENTS.map((eventName) => [eventName, [{ command, show_output: true }]])
+            ) as Record<string, Array<{ command: string; show_output: boolean }>>;
 
             if (!config.hooks || typeof config.hooks !== 'object') config.hooks = {};
 
@@ -829,6 +915,8 @@ function installWindsurfHooks() {
         vscode.window.showErrorMessage(
             tr('ext.hooksInstallFailed', {}, lang) + '\n' + failed.map((f) => `${f.path}: ${f.error}`).join('\n')
         );
+    } else if (skipped.length > 0) {
+        vscode.window.showInformationMessage(tr('ext.hooksAlreadyInstalled'));
     }
 }
 
@@ -1557,6 +1645,7 @@ async function handleSetPrd(args: any): Promise<any> {
     project.prd.updatedAt = nowIso();
     project.prd.approvedAt = undefined;
     project.prd.approvedBy = undefined;
+    bumpProjectStat(project, 'prdUpdates');
     project.updatedAt = nowIso();
     saveTrackerAndNotify(data, project);
     const text = lang === 'en' ? 'PRD updated (draft).' : 'PRD 已更新（草案）。';
@@ -1569,6 +1658,7 @@ async function handleApprovePrd(args: any): Promise<any> {
     project.prd.status = 'approved';
     project.prd.approvedBy = typeof args?.approver === 'string' ? args.approver.trim() : undefined;
     project.prd.approvedAt = nowIso();
+    bumpProjectStat(project, 'prdApprovals');
     project.updatedAt = nowIso();
     saveTrackerAndNotify(data, project);
     const text = lang === 'en' ? 'PRD approved.' : 'PRD 已审批。';
@@ -1598,6 +1688,7 @@ async function handleUpdatePlan(args: any): Promise<any> {
         throw new Error(msg);
     }
     project.plan.items = items;
+    bumpProjectStat(project, 'planUpdates');
     project.updatedAt = nowIso();
     saveTrackerAndNotify(data, project);
     const text = lang === 'en' ? 'Plan updated.' : '计划已更新。';
@@ -1617,6 +1708,7 @@ async function handleUpdateTodos(args: any): Promise<any> {
         throw new Error(msg);
     }
     project.todos.items = items;
+    bumpProjectStat(project, 'todoUpdates');
     project.updatedAt = nowIso();
     saveTrackerAndNotify(data, project);
     const text = lang === 'en' ? 'TODOs updated.' : 'TODO 已更新。';
@@ -1632,6 +1724,7 @@ async function handleUpdateChecklist(args: any): Promise<any> {
         throw new Error(msg);
     }
     project.checklist.items = items;
+    bumpProjectStat(project, 'checklistUpdates');
     project.updatedAt = nowIso();
     saveTrackerAndNotify(data, project);
     const text = lang === 'en' ? 'Checklist updated.' : '检查清单已更新。';
@@ -3069,7 +3162,8 @@ function getTrackerSnapshotForSidebar() {
             planText: '',
             todoText: '',
             checklistText: '',
-            progress: { done: 0, total: 0, percent: 0 }
+            progress: { done: 0, total: 0, percent: 0 },
+            stats: createDefaultTrackerStats()
         };
     }
     const data = loadTrackerData();
@@ -3632,6 +3726,12 @@ class SidebarProvider implements vscode.WebviewViewProvider {
             color: var(--text-secondary);
             margin-top: 6px;
         }
+        .tracker-stats {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-top: 6px;
+            line-height: 1.4;
+        }
         .tracker-hint {
             font-size: 11px;
             color: var(--text-muted);
@@ -3866,6 +3966,7 @@ class SidebarProvider implements vscode.WebviewViewProvider {
             <button class="btn btn-ghost btn-full" id="saveChecklistBtn" type="button" data-i18n="sidebar.trackerSave"></button>
 
             <div class="tracker-progress" id="trackerProgress"></div>
+            <div class="tracker-stats" id="trackerStats"></div>
             <div class="tracker-hint" data-i18n="sidebar.trackerHint"></div>
         </div>
 
@@ -4056,7 +4157,8 @@ class SidebarProvider implements vscode.WebviewViewProvider {
 	            const planInput = document.getElementById('planInput');
 	            const todoInput = document.getElementById('todoInput');
 	            const checklistInput = document.getElementById('checklistInput');
-	            const progressEl = document.getElementById('trackerProgress');
+            const progressEl = document.getElementById('trackerProgress');
+            const statsEl = document.getElementById('trackerStats');
 
 	            if (nameEl) nameEl.textContent = trackerData?.name || '-';
 	            if (statusEl) {
@@ -4069,8 +4171,8 @@ class SidebarProvider implements vscode.WebviewViewProvider {
 	            if (planInput) planInput.value = trackerData?.planText || '';
 	            if (todoInput) todoInput.value = trackerData?.todoText || '';
 	            if (checklistInput) checklistInput.value = trackerData?.checklistText || '';
-	            if (progressEl) {
-	                const progress = trackerData?.progress || { done: 0, total: 0, percent: 0 };
+            if (progressEl) {
+                const progress = trackerData?.progress || { done: 0, total: 0, percent: 0 };
                 progressEl.textContent =
                     t('sidebar.trackerProgress') +
                     ': ' +
@@ -4080,8 +4182,38 @@ class SidebarProvider implements vscode.WebviewViewProvider {
                     ' (' +
                     progress.percent +
                     '%)';
-	            }
-	        }
+            }
+            if (statsEl) {
+                const stats = trackerData?.stats || {};
+                const prdUpdates = Number.isFinite(stats.prdUpdates) ? stats.prdUpdates : 0;
+                const prdApprovals = Number.isFinite(stats.prdApprovals) ? stats.prdApprovals : 0;
+                const planUpdates = Number.isFinite(stats.planUpdates) ? stats.planUpdates : 0;
+                const todoUpdates = Number.isFinite(stats.todoUpdates) ? stats.todoUpdates : 0;
+                const checklistUpdates = Number.isFinite(stats.checklistUpdates) ? stats.checklistUpdates : 0;
+                statsEl.textContent =
+                    t('sidebar.trackerStats') +
+                    ': ' +
+                    t('sidebar.trackerStatsPrd') +
+                    ' ' +
+                    prdUpdates +
+                    ' | ' +
+                    t('sidebar.trackerStatsApprovals') +
+                    ' ' +
+                    prdApprovals +
+                    ' | ' +
+                    t('sidebar.trackerStatsPlan') +
+                    ' ' +
+                    planUpdates +
+                    ' | ' +
+                    t('sidebar.trackerStatsTodo') +
+                    ' ' +
+                    todoUpdates +
+                    ' | ' +
+                    t('sidebar.trackerStatsChecklist') +
+                    ' ' +
+                    checklistUpdates;
+            }
+        }
 
 	        function toggleLanguage() {
 	            currentLang = currentLang === 'en' ? 'zh' : 'en';

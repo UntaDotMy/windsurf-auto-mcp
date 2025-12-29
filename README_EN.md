@@ -2,296 +2,217 @@
 
 <p align="center">
   <strong>Windsurf MCP Automation</strong><br>
-  Task completion confirmation · User interaction · One‑click setup<br><br>
-  🆓 <strong>Free & open source</strong><br>
-  <strong>Repo:</strong> <a href="https://github.com/JiXiangKing80/windsurf-auto-mcp">https://github.com/JiXiangKing80/windsurf-auto-mcp</a><br>
-  💎 <strong>Use MCP to improve interaction and reduce wasted Windsurf credits</strong>
+  Task completion confirmation · User interaction · One-click setup<br><br>
+  🆓 <strong>Free & Open Source</strong><br>
+  <strong>Repo:</strong> <a href="https://github.com/JiXiangKing80/windsurf-auto-mcp">https://github.com/JiXiangKing80/windsurf-auto-mcp</a>
 </p>
 
-**Language / 语言**
+**Language**
 - English: `README_EN.md`
 - 中文：`README.md`
 
+<p align="center">
+  <a href="#overview">Overview</a> •
+  <a href="#features">Features</a> •
+  <a href="#installation">Installation</a> •
+  <a href="#quick-start">Quick Start</a> •
+  <a href="#recommended-global-rules--prompt">Rules</a> •
+  <a href="#project-tracker-prd--plan--todo--checklist">Project Tracker</a> •
+  <a href="#windsurf-hooks">Hooks</a> •
+  <a href="#mcp-tools">Tools</a> •
+  <a href="#faq">FAQ</a>
+</p>
+
 ---
 
-## Why WindsurfAutoMcp?
+## Overview
 
-In the default workflow, after the AI finishes a task it may “idle” while waiting for your next message — and **Windsurf credits can keep being consumed**.
-
-WindsurfAutoMcp uses MCP to:
-- ✅ **Pause after completion**: the AI asks whether to continue instead of idling
-- ✅ **Batch work**: chain multiple tasks with fewer back‑and‑forth messages
-- ✅ **Stay in control**: you can intervene, adjust direction, or end at any time
+WindsurfAutoMcp standardizes task completion with MCP: when the AI finishes a task, it must call `ask_continue` instead of continuing to spend credits. It also provides a control panel and a project tracker (PRD/Plan/TODO/Checklist).
 
 ## Features
 
-- 💎 **Save credits** by avoiding idle completion loops
-- 🔌 **HTTP MCP server** (stable connection)
-- ✅ **Task completion confirmation** via `ask_continue`
-- 🖼️ **Multi‑image upload** in dialogs (paste/drag/drop/file picker)
-- 🗑️ **Remove wrong images** before sending (click **×** on the preview)
-- ⚙️ **One‑click Windsurf config** (writes MCP config automatically)
-- ⚙️ **Windsurf-next supported** (writes MCP config for both Windsurf and Windsurf-next)
-- 🎨 **Sidebar control panel**
-- 🌐 **Bilingual UI** (EN/中文 toggle in sidebar + dialogs)
-- ⌨️ **Hotkey**: `Ctrl+M` toggles the dialog
-- 📊 **Usage stats**
-- 🧩 **Auto‑install global rules** to avoid pasting prompts every chat
+- ✅ Task completion confirmation via `ask_continue`
+- 🔌 MCP HTTP server
+- 🖼️ Image upload & delete before send
+- ⚙️ One-click MCP config for Windsurf / windsurf-next
+- 🧭 Project tracker: PRD/Plan/TODO/Checklist + progress + stats
+- 🛡️ Optional hooks guardrails for commands/writes
+- 🌐 EN/中文 UI
+- ⌨️ Shortcut: `Ctrl+M`
 
 ## Requirements
 
-| Item | Notes |
-|------|------|
+| Requirement | Details |
+|------------|---------|
 | Windsurf / VS Code | 1.80.0+ |
-| Node.js | Not required (extension is packaged) |
+| Node.js | Not required (extension is bundled) |
 
-## Install
+## Installation
 
-### Option A: Install from Release (recommended)
+### Option A: Release (recommended)
 
 1. Download the latest `.vsix` from [Releases](https://github.com/JiXiangKing80/windsurf-auto-mcp/releases)
-2. Open Windsurf / VS Code
+2. Open Windsurf/VS Code
 3. `Ctrl+Shift+P` → `Extensions: Install from VSIX...`
 4. Select the `.vsix`
-5. **Restart Windsurf / VS Code**
+5. **Restart Windsurf/VS Code**
 
-### Option B: Drag & drop
+### Option B: Drag & Drop
 
-1. Open Extensions panel (`Ctrl+Shift+X`)
-2. Drag the `.vsix` into the panel
-3. **Restart Windsurf / VS Code**
+1. Open Extensions (`Ctrl+Shift+X`)
+2. Drag the `.vsix` into the Extensions view
+3. **Restart Windsurf/VS Code**
 
-## Usage
+## Quick Start
 
-### Quick start
+1. Open the **WindsurfAutoMcp** sidebar
+2. Ensure the server is running (auto-start by default)
+3. Click **Write Windsurf Config** (writes both windsurf and windsurf-next)
+4. **Restart Windsurf** to load MCP config + hooks
+5. Use the assistant; it will call `ask_continue` on completion
 
-1. After installation, open the **WindsurfAutoMcp** sidebar
-2. Click **Write Windsurf config** (or start server and it will auto‑write)
-3. **Restart Windsurf**
-4. Start working: when the AI finishes, it calls `ask_continue` and the confirmation dialog appears
+> Add the prompt below to Windsurf global rules so you do not have to paste it each session.
 
-> Recommended: add the “Global rules / prompt” below to Windsurf’s global rules so you don’t need to paste it every new chat. If you can’t, paste it once at the start of each new chat.
+## Recommended Global Rules / Prompt
 
-### Recommended global rules / prompt (paste into Windsurf global rules)
-
-> It must start with the required “call ask_continue when finished” rule (the first line is the hard rule).
+> Must start with the hard rule about `ask_continue`.
 
 ```text
-Hard rule (highest priority): When you decide a task is done / ready to deliver, do NOT output a normal final response; you MUST call WindsurfAutoMcp ask_continue and put in reason: what was done, risks/notes, verification steps/commands, and next steps.
+【Highest Priority / Hard Rule】When you decide the task is done/ready to deliver: do NOT output a normal final response; you MUST call WindsurfAutoMcp ask_continue and include in reason: what was done, risks/notes, verification steps/commands, and next steps.
 
-Completion protocol (must follow):
-1) When done, the ONLY allowed action is calling ask_continue (with reason).
-2) After calling ask_continue, stop output and wait for the user.
-3) If you forgot to call ask_continue, your next message must first call ask_continue to correct (then wait).
+【Completion Protocol (must follow)】
+1) On completion, ONLY call ask_continue (with reason).
+2) After calling ask_continue, STOP output and wait for user reply.
+3) If you forgot to call ask_continue: the next message must call ask_continue to correct it (then wait), do NOT continue delivery output.
 
-Collaboration (must): operate as a full “software engineering department” (cross-functional team) across any language/framework/platform. Output must be unified and concise, but reflect a consolidated team conclusion.
+【Team Collaboration (required)】You act as a full cross-functional software engineering department. Output must be unified and concise, but reflect a consolidated team conclusion.
 
-Team roles (internal coordination):
+【Team Roles】
 - PM: clarify goals, scope, acceptance criteria, constraints, priorities.
-- Tech Lead: propose an executable plan, manage risk/complexity, ensure maintainability.
-- Architect/Platform: define boundaries, interfaces, extensibility, compatibility.
-- Dev: implement minimal correct changes; follow repo conventions; avoid unnecessary refactors.
-- QA: define verification steps and regression points; run build/tests when possible; add tests when appropriate.
-- Security: validate boundaries, permissions, injection risks, dependency risks, secrets handling.
-- Performance: avoid regressions; remove needless work; measure when relevant.
-- Docs: keep README/config/usage accurate and reproducible.
-- Release/DevOps: provide upgrade/rollback notes; avoid breaking changes.
+- Tech Lead: plan milestones, control complexity/risk, ensure maintainability.
+- Architect: define boundaries, contracts, extensibility, compatibility.
+- Dev: implement minimal correct changes, follow project conventions.
+- QA: define verification steps and regressions; run existing tests/builds; add tests if needed.
+- Security: check inputs/outputs, permissions, injection, dependency risk, leaks.
+- Perf: identify hotspots, avoid regressions.
+- Docs: update README/config/usage to be reproducible.
+- Release/DevOps: provide upgrade/rollback guidance, avoid breaking changes.
 
-Before anything (must): read the target first. Before decisions/edits, read relevant files/config/logs; if key inputs are missing, use ask_question (single-choice A/B/C with optional extra text), 1–3 questions max.
+【Before you start】Read target/current state/constraints first. If key inputs are missing, ask 1-3 questions via ask_question (single choice A/B/C + optional extra text).
 
-PRD & approval (must): create a PRD draft → user review/adjust → approval before any Plan. Do not implement (write code/run commands/use external tools) before approval.
+【PRD & Approval (required)】Create a PRD draft → user review/adjust → approval before any Plan. Do not implement (write code/run commands/use external tools) before approval.
 
-Planning & TODO breakdown (must): for any big feature/complex task (and any non-trivial change), produce a Plan and break it into small TODOs (verifiable, trackable, parallelizable). Update progress as you go.
+【Planning & TODO breakdown (required)】For any big feature/complex task (and any non-trivial change), produce a Plan and break it into TODOs. Update progress as you go.
 
-Do not trust your knowledge (must): your knowledge can be outdated and harmful. For any important decision (API/config/version/security/install), research first, then act.
+【Do not trust knowledge (required)】Your knowledge can be outdated and harmful. For critical decisions (APIs/configs/versions/security/install), research first.
 
-Workflow (must follow; strict order):
+【Workflow (must follow; strict order)】
 Read → Research → Plan → TODO → Act → Code Review → Act → Update Progress → Check Progress → Ask
-1) Read: read the target/current state/constraints first; before any decision/edit, read relevant files/config/logs; if key inputs are missing, ask 1–3 targeted questions via ask_question.
-2) Research (no guessing): prefer official docs/official README/release notes/source; confirm latest usage + breaking changes before upgrading/replacing; use Context7 if available; treat 2024 as outdated and default to sources updated from Oct 2025 onward (≥ 2025-10, add after:2025-09-30); if results are generic, refine and keep searching until you get exact API/config/version/path/commands.
-3) Plan: provide a high-level plan (milestones/risks/acceptance).
-4) TODO: break the plan into small verifiable TODOs (trackable, parallelizable).
-5) Act: tidy boundaries/structure before coding; implement minimal correct changes; fix root causes; keep style consistent; keep code modular/readable/maintainable (avoid unrelated refactors).
-6) Code Review: like a PR—check gaps, correctness, edge cases, error handling, security (injection/permissions/leaks/deps), performance (hot paths/leaks), compatibility.
-7) Act: apply fixes from review; add tests/regression points when needed.
-8) Update Progress: update progress after each TODO, stating what/why.
-9) Check Progress: run build/tests/lint when possible; otherwise give concrete user-run verification steps + expected results.
-10) Ask: deliver ONLY via ask_continue(reason) and wait; reason must include what was done, risks/notes, verification steps/commands, and next steps.
+1) Read: read target/state/constraints and relevant files/logs.
+2) Research: use official docs/README/changelogs/source; use Context7 if available; treat 2024 as old, default to 2025-10+ (use after:2025-09-30); keep searching if results are generic until you get actionable details.
+3) Plan: provide milestones, risks, acceptance.
+4) TODO: break down into verifiable, trackable tasks.
+5) Act: keep changes minimal, modular, maintainable; avoid unrelated refactors.
+6) Code Review: check gaps, correctness, errors, security, performance, compatibility.
+7) Act: fix review findings; add tests/regression if needed.
+8) Update Progress: update progress after each TODO.
+9) Check Progress: run build/test/lint or provide manual verification steps.
+10) Ask: only call ask_continue(reason) and wait; reason must include summary, risks, verification, next steps.
 
-Windsurf Hooks (recommended; can be hard guardrails): if your environment supports hooks.json, enforce guardrails in pre_* hooks (block dangerous commands/sensitive writes), and use post_cascade_response to audit missing ask_continue. Official docs: https://docs.windsurf.com/windsurf/cascade/hooks
+【Windsurf Hooks (recommended)】If hooks.json is supported, use pre_* to block dangerous commands/sensitive writes and post_cascade_response to audit missing ask_continue. Official docs: https://docs.windsurf.com/windsurf/cascade/hooks
 
-Pre-delivery checklist (must satisfy all):
-- Read target/current state/constraints
-- Plan + TODOs provided (if applicable)
-- Key decisions researched via official sources/Context7 (if applicable)
-- Code tidied: modular/maintainable (no unrelated refactors)
-- Code review completed (gaps/security/perf/leaks/etc)
-- Progress updated and validated
-- Verification completed (build/tests/lint or explicit manual steps)
-- End with ask_continue(reason) and wait
-
-Dependencies best practices:
-- If adding dependencies: prefer actively maintained, small, widely used options that match the requirement; explain why.
-- If a dependency is outdated or risky: consult official release notes/migration guides before proposing upgrades (avoid blind major bumps).
-- Any install/upgrade recommendation must include evidence (official docs/release notes) and verification steps.
+【Pre-delivery checklist (must satisfy)】
+- Read target/state/constraints
+- Plan + TODO (if applicable)
+- Researched official sources/Context7 (if applicable)
+- Code is modular/maintainable (no unrelated refactors)
+- Code review done (gaps/security/perf/leaks)
+- Progress updated and checked
+- Verified (build/test/lint or clear manual steps)
+- Finish with ask_continue(reason) and wait
 ```
 
-### Windsurf Hooks (optional but strongly recommended)
+## Project Tracker (PRD / Plan / TODO / Checklist)
 
-Windsurf officially supports **Cascade Hooks**: run your own shell commands automatically before/after key Cascade actions (read/write code, run commands, MCP tool use, responses). This is useful for safety guardrails, compliance/auditing, enforcing workflow, and blocking dangerous commands.
+- Tracking is **per workspace root**; PRD/Plan/TODO never bleed across projects
+- Tracker files (user-level):
+  - Windows: `%USERPROFILE%\.codeium\windsurf\windsurf-auto-mcp-tracker.json`
+  - Windows (windsurf-next): `%USERPROFILE%\.codeium\windsurf-next\windsurf-auto-mcp-tracker.json`
+- Sidebar provides editable PRD/Plan/TODO/Checklist with live progress
+- Per-project stats: PRD updates, approvals, plan updates, TODO updates, checklist updates
+- Hooks validate PRD approval + Plan/TODO before `pre_write_code`; missing gates block writes
 
-Official docs: `https://docs.windsurf.com/windsurf/cascade/hooks`
+## Windsurf Hooks
 
-Config file locations (from official docs):
+### Paths (official docs)
+
 - System-level:
   - Windows: `C:\ProgramData\Windsurf\hooks.json`
   - macOS: `/Library/Application Support/Windsurf/hooks.json`
   - Linux/WSL: `/etc/windsurf/hooks.json`
-- User-level (Windsurf, official):
+- User-level:
   - Windows: `%USERPROFILE%\.codeium\windsurf\hooks.json`
   - macOS/Linux: `~/.codeium/windsurf/hooks.json`
-- Workspace-level: `.windsurf/hooks.json` in your workspace root
+- Workspace-level: `.windsurf/hooks.json`
 
-Key rules (official):
-- All three levels are merged, in order: system → user → workspace
-- Hooks receive JSON via stdin (includes `agent_action_name`, `trajectory_id`, `execution_id`, `timestamp`, `tool_info`)
-- Exit codes: `0`=success; `2`=blocking (only for `pre_*`, stderr is shown to Cascade); any other non-zero does not block but reports an error (depending on `show_output`)
+> Official docs only mention `windsurf` paths. windsurf-next MCP config is `%USERPROFILE%\.codeium\windsurf-next\mcp_config.json`. This extension also writes user-level hooks into `%USERPROFILE%\.codeium\windsurf-next\hooks.json` (inferred support).
 
-Minimal example (official format):
-```json
-{
-  "hooks": {
-    "pre_run_command": [
-      { "command": "python3 /abs/path/hook.py", "show_output": true }
-    ]
-  }
-}
-```
+### Auto-install behavior
 
-Events (official):
-- `pre_read_code` / `post_read_code`
-- `pre_write_code` / `post_write_code`
-- `pre_run_command` / `post_run_command`
-- `pre_mcp_tool_use` / `post_mcp_tool_use`
-- `pre_user_prompt`
-- `post_cascade_response`
+- On activation, the extension checks and installs **user-level hooks.json** (enabled by default)
+- If hooks are already installed, it does nothing; it only fills missing entries
+- It never overwrites your existing hooks
+- **Restart Windsurf after hooks.json updates** to apply hooks
 
-WindsurfAutoMcp auto-installs hooks into the **user-level hooks.json** on activation (enabled by default). It does not overwrite your existing hooks; it only appends missing entries and covers all official events. Guardrails are enforced only on:
-- `pre_run_command` / `pre_write_code`: block common dangerous commands and sensitive writes
-- `post_cascade_response`: warn when `ask_continue` is missing (warning only; does not block)
-Other events are no-ops by default unless you enable logging via `WINDSURF_HOOK_LOG`.
+### Uninstall
 
-The scripts are copied under the user directory (example, Windows / windsurf-next): `%USERPROFILE%\.codeium\windsurf-next\hooks\windsurf-auto-mcp\...`
+- Run `WindsurfAutoMcp: Uninstall Hooks / 卸载 Hooks`
+- Or remove the matching `command` entries from hooks.json
 
-Disable/uninstall hooks:
-- Set `mcpService.autoInstallHooks = false`
-- Run: `WindsurfAutoMcp: Uninstall Hooks / 卸载 Hooks` (or remove the corresponding `command` entries from hooks.json)
+### Disable/uninstall behavior
 
-Note: Hooks use Python (the official docs example uses `python3`). Windows uses `python`, macOS/Linux use `python3`; ensure Python is available or you will see hook execution errors. `show_output` does not apply to `pre_user_prompt` / `post_cascade_response` per the official docs (and post-hooks cannot block actions).
-If you installed an older PowerShell/Node hooks version, running “Install Hooks” or “Uninstall Hooks” will clean up legacy `ps1/js` entries.
+- The hook script reads `mcp_config.json` and probes `http://localhost:<port>/health`
+- If `windsurf_auto_mcp` is missing/disabled/unreachable, it exits 0 (no blocking/audit)
 
-You can also reference the repo examples for manual installation:
-- `examples/windsurf-hooks/hooks.json`
-- `examples/windsurf-hooks/scripts/guard.py`
-
-Notes:
-- Hooks run with your user’s full permissions: only use trusted scripts; validate stdin JSON; don’t log secrets.
-- Disable/uninstall behavior: the bundled hook script reads `mcp_config.json` and probes `http://localhost:<port>/health`; if `windsurf_auto_mcp` is not configured/disabled/unreachable (e.g., extension disabled or uninstalled), it exits 0 and will not block/audit actions.
-- windsurf-next: official Hooks docs currently only mention `windsurf` paths, but windsurf-next’s MCP config is `%USERPROFILE%\.codeium\windsurf-next\mcp_config.json`. This extension also writes user-level hooks into `%USERPROFILE%\.codeium\windsurf-next\hooks.json` using the same pattern (best-effort/inferred; not officially documented).
-
-### Project Tracker (PRD / Plan / TODO / Checklist)
-
-- Tracker files (user-level): `%USERPROFILE%\.codeium\windsurf\windsurf-auto-mcp-tracker.json` and `%USERPROFILE%\.codeium\windsurf-next\windsurf-auto-mcp-tracker.json`
-- The sidebar provides an editable PRD/Plan/TODO/Checklist with live progress.
-- Hooks validate PRD approval + Plan/TODO before `pre_write_code`; if missing, writes are blocked with a warning.
-
-### Hotkey
-
-| Hotkey | Action |
-|--------|--------|
-| `Ctrl+M` | Toggle dialog |
-
-### MCP tools
+## MCP Tools
 
 | Tool | Description |
 |------|-------------|
-| `ask_continue` | Ask whether to continue after completing a task |
-| `ask_question` | Single-choice clarification (A/B/C...), with optional extra text/images |
-| `ask_user` | Request user input (supports image upload) |
+| `ask_user` | Request user input/confirmation (supports image) |
+| `ask_question` | Single-choice clarification (A/B/C..., optional text/image) |
 | `set_prd` | Create/update PRD draft |
 | `approve_prd` | Approve PRD |
 | `update_plan` | Set/update plan checklist |
 | `update_todos` | Set/update TODO checklist |
 | `update_checklist` | Set/update delivery checklist |
 | `get_project_status` | Get current project tracking status |
-| `notify` | Send a user notification |
+| `notify` | Show notification |
+| `ask_continue` | Ask whether to continue after completion |
 
-#### ask_question Examples
+## Settings
 
-Single question:
-```json
-{
-  "title": "Clarify",
-  "message": "Pick the scope for this task",
-  "options": ["Fix only", "Fix + regression tests", "Refactor + tests"],
-  "allowText": true
-}
-```
-
-Multiple questions:
-```json
-{
-  "title": "Clarify",
-  "message": "Answer these before planning",
-  "questions": [
-    { "id": "scope", "prompt": "Scope", "options": ["Fix only", "Fix + tests", "Refactor + tests"] },
-    { "id": "target", "prompt": "Target", "options": ["Frontend", "Backend", "Full stack"] }
-  ],
-  "allowText": true
-}
-```
-
-### Settings
-
-Search `mcpService` in settings:
-
-| Setting | Default | Notes |
-|--------|---------|------|
-| `mcpService.port` | 3456 | MCP server port |
-| `mcpService.autoStart` | true | Auto‑start server on launch |
-| `mcpService.language` | zh | UI language (`zh`/`en`) |
-| `mcpService.defaultReason` | empty | Default reason used when `ask_continue` has no `reason` |
-| `mcpService.autoInstallHooks` | true | Auto-install/update user-level hooks.json (Windsurf / windsurf-next) |
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `mcpService.port` | 3456 | MCP HTTP port |
+| `mcpService.autoStart` | true | Auto-start server |
+| `mcpService.language` | zh | UI language |
+| `mcpService.defaultReason` | empty | Default ask_continue reason |
 | `mcpService.mode` | http | MCP server mode |
+| `mcpService.autoInstallHooks` | true | Auto-install/update user-level hooks.json |
 
 ## FAQ
 
-**The sidebar icon is missing**
-- Restart Windsurf/VS Code fully, and confirm the extension is enabled.
+**Q: Hooks are not working?**
+- Ensure hooks.json contains the plugin command
+- **Restart Windsurf** (hooks load on restart)
+- Ensure MCP server is running and `mcp_config.json` is not disabled
 
-**The port is in use**
-- The extension will try the next port, or change `mcpService.port`.
+**Q: windsurf-next not working?**
+- Check `%USERPROFILE%\.codeium\windsurf-next\mcp_config.json` and `hooks.json`
 
-**The dialog doesn’t show**
-- Press `Ctrl+M` to open it, and confirm the AI actually called `ask_continue`.
+**Q: PRD or stats leaking across projects?**
+- They are per workspace root. Verify you opened the correct workspace.
 
-**Can I delete a wrong image before submitting?**
-- Yes. Click **×** on the image preview in the dialog.
+## Contributing
 
-## Build from source
-
-```bash
-git clone https://github.com/JiXiangKing80/windsurf-auto-mcp.git
-cd windsurf-auto-mcp
-npm ci # Node.js 18+ recommended
-npm run compile
-npm run package
-```
-
-### Build VSIX on GitHub Actions (recommended)
-
-This repo includes a workflow that builds a `.vsix` artifact on pushes to `feature` and on PRs targeting `main`.
-
-## License
-
-MIT License. Free to use/modify/distribute.
+Issues and PRs are welcome.
