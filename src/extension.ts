@@ -16,6 +16,8 @@ type ChoiceQuestion = {
     prompt?: string;
     options: string[];
 };
+type DialogMode = 'choice' | 'prd' | 'confirm';
+type ConfirmDialogType = 'confirm' | 'info';
 type TrackerItemStatus = 'todo' | 'doing' | 'done';
 type TrackerItem = {
     id: string;
@@ -170,9 +172,15 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
             '',
             '【开始前必须做】先读“目标/现状/约束”。在做任何修改前，必须先阅读目标文件/相关代码/配置/日志；缺关键输入先用 ask_question 提问（单选，选项数量不限，可附补充信息，按需提问）。',
             '',
+            '【读取项目基线（必须）】先用 get_project_status 读取 PRD/Plan/Walkthrough；如已存在内容，必须先阅读并在计划/实现中引用；为空则说明为空。关键上下文用 list_memories/get_memory 读取。',
+            '',
             '【PRD 与审批（必须）】先输出 PRD 草案 → 用户确认/补充 → 审批通过后才能输出 Plan；未审批不得开始实现（写代码/运行命令/调用外部工具）。',
             '',
+            '【PRD 标准（必须）】PRD = 项目需求文档。必须包含：问题/背景、目标/非目标、用户/场景、范围、功能需求与非功能需求（建议用表格）、验收标准、风险/依赖、里程碑、开放问题、参考资料（官方文档/Context7）。',
+            '',
             '【项目跟踪与记忆（必须）】使用 set_prd / update_task / update_plan / update_todos / update_checklist / update_walkthrough 维护项目跟踪；重要上下文用 save_memory 保存，开始前先 list_memories/get_memory；跟踪与记忆必须严格按当前项目，不得跨项目复用。',
+            '',
+            '【Walkthrough（必须）】每次关键实现/决策/修复后都要更新 Walkthrough（update_walkthrough），保证随时可审阅。',
             '',
             '【计划与拆解（必须做到）】对任何“大功能/复杂任务”（以及任何非小改动），必须先输出 Plan，并在 Plan 中包含 Task/子任务/TODO/Checklist（必要时按任务拆分）。每完成一项就更新进度并同步项目跟踪。',
             '',
@@ -190,17 +198,16 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
             '- 发布/运维（Release/DevOps）：给出升级/回滚说明，避免破坏性变更。',
             '',
             '【统一工作流（必须遵循；严格按顺序）】',
-            'Read → Research → Plan → TODO → Act → Code Review → Act → Update Progress → Check Progress → Ask',
+            'Read → Research → Plan → TODO → Act → Update Progress → Check Progress → Code Review → Ask',
             '1) Read：先读目标/现状/约束；在做任何修改前先阅读目标文件/相关代码/配置/日志；缺关键输入先用 ask_question 提问（按需）。',
             '2) Research（不要凭空猜，必须拿到可执行信息）：优先查官方文档/官方 README/发布说明/源码；依赖先确认最新版用法与破坏性变更；可用则用 Context7 获取最新文档；web search 把 2024 视为过旧，默认从 2025-10 起筛选（可加 after:2025-09-30）；结果泛泛/无法落地就调整检索词继续搜，直到拿到确切 API/配置/版本/路径/命令。',
             '3) Plan：给出总体 Plan（里程碑/风险/验收）。',
             '4) TODO：把 Plan 拆成可验证、可跟踪的小 TODO（能并行则并行）。',
             '5) Act：动手前先整理入口与模块边界；实现最小正确改动，小步推进、优先修根因、保持风格一致；新增/修改代码必须模块化、易读、易维护（但不要做与任务无关的重构）。',
-            '6) Code Review：像 PR 一样评审：检查 gaps、正确性、边界条件、错误处理、安全（注入/权限/泄露/依赖风险）、性能（热点/泄漏）、兼容性。',
-            '7) Act：根据评审结论修补问题；必要时补测试/回归点。',
-            '8) Update Progress：每完成一个 TODO 就更新进度，说明做了什么/为什么。',
-            '9) Check Progress：运行 build/test/lint；无法运行则给出可执行验证步骤与期望结果。',
-            '10) Ask：最终只允许调用 ask_continue(reason) 并等待；reason 必须包含：完成内容、风险/注意点、验证步骤/命令、下一步。',
+            '6) Update Progress：每完成一个 TODO 就更新进度，说明做了什么/为什么。',
+            '7) Check Progress：运行 build/test/lint；无法运行则给出可执行验证步骤与期望结果。',
+            '8) Code Review（必须最后一关）：像 PR 一样评审：检查 gaps、正确性、边界条件、错误处理、安全（注入/权限/泄露/依赖风险）、性能（热点/泄漏）、兼容性；发现问题就回到 Act 修复并重新 Check Progress，然后再 Review。',
+            '9) Ask：最终只允许调用 ask_continue(reason) 并等待；reason 必须包含：完成内容、风险/注意点、验证步骤/命令、下一步。',
             '',
             '【Windsurf Hooks（推荐，可当强制护栏）】如环境支持 hooks.json：建议配置 pre_run_command/pre_write_code 阻止危险命令/敏感写入，并用 post_cascade_response 审计是否遗漏 ask_continue；官方文档：https://docs.windsurf.com/windsurf/cascade/hooks',
             '',
@@ -213,6 +220,7 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
             '- 已更新进度并校验进度',
             '- 已验证（build/test/lint 或明确的手动验证步骤）',
             '- 已更新项目跟踪与记忆（如适用）',
+            '- 已更新 Walkthrough（如适用）',
             '- 将用 ask_continue(reason) 结束并等待用户'
         ].join('\\n'),
         'sidebar.trackerTitle': '项目跟踪',
@@ -334,6 +342,9 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'panel.contextLabel': '上下文',
         'panel.extraLabel': '补充信息（可选）',
         'panel.extraPlaceholder': '如需补充，请填写',
+        'panel.confirmYes': '确认',
+        'panel.confirmNo': '取消',
+        'panel.confirmOk': '知道了',
         'panel.prdTitle': 'PRD 审核',
         'panel.prdSubtitle': '请确认或要求修改',
         'panel.prdApprove': '批准 PRD',
@@ -363,6 +374,8 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'panel.walkthroughSubtitle': '实施记录',
         'artifact.memoryTitle': '项目记忆',
         'artifact.memoryUpdated': '更新时间',
+        'artifact.tableStatus': '状态',
+        'artifact.tableItem': '事项',
         'panel.itemTodo': '待办',
         'panel.itemDoing': '进行中',
         'panel.itemDone': '已完成'
@@ -464,9 +477,15 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
             '',
             'Before anything (must): read the target first. Before decisions/edits, read relevant files/config/logs; if key inputs are missing, use ask_question (single-choice, any number of options, ask as needed).',
             '',
+            'Project baseline (must): call get_project_status to read PRD/Plan/Walkthrough; if content exists, read and reference it before planning/implementation; if empty, state it. Use list_memories/get_memory for key context.',
+            '',
             'PRD & approval (must): produce a PRD draft → user review/adjust → approval before any Plan; do not implement (write code/run commands/use external tools) before approval.',
             '',
+            'PRD standard (must): PRD = Project Requirements Document. Must include problem/background, goals/non-goals, users/personas, scope, functional + non-functional requirements (prefer tables), acceptance criteria, risks/dependencies, milestones, open questions, references (official docs/Context7).',
+            '',
             'Project tracking & memory (must): keep tracking updated via set_prd / update_task / update_plan / update_todos / update_checklist / update_walkthrough; store key context in save_memory, and review list_memories/get_memory before starting; never reuse tracking/memory across projects.',
+            '',
+            'Walkthrough (must): update walkthrough after every meaningful implementation/decision/fix (update_walkthrough), keep it review-ready.',
             '',
             'Planning & TODO breakdown (must): for any big feature/complex task (and any non-trivial change), produce a Plan that includes Task/subtasks/TODO/Checklist (split per task when needed). Update progress as you go.',
             '',
@@ -484,17 +503,16 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
             '- Release/DevOps: provide upgrade/rollback notes; avoid breaking changes.',
             '',
             'Workflow (must follow; strict order):',
-            'Read → Research → Plan → TODO → Act → Code Review → Act → Update Progress → Check Progress → Ask',
+            'Read → Research → Plan → TODO → Act → Update Progress → Check Progress → Code Review → Ask',
             '1) Read: read the target/current state/constraints first; before any decision/edit, read relevant files/config/logs; if key inputs are missing, ask targeted questions via ask_question as needed.',
             '2) Research (no guessing): prefer official docs/official README/release notes/source; confirm latest usage + breaking changes before upgrading/replacing; use Context7 if available; treat 2024 as outdated and default to sources updated from Oct 2025 onward (≥ 2025-10, add after:2025-09-30); if results are generic, refine and keep searching until you get exact API/config/version/path/commands.',
             '3) Plan: provide a high-level plan (milestones/risks/acceptance).',
             '4) TODO: break the plan into small verifiable TODOs (trackable, parallelizable).',
             '5) Act: tidy boundaries before coding; implement minimal correct changes; fix root causes; keep style consistent; keep code modular/readable/maintainable (avoid unrelated refactors).',
-            '6) Code Review: like a PR—check gaps, correctness, edge cases, error handling, security (injection/permissions/leaks/deps), performance (hot paths/leaks), compatibility.',
-            '7) Act: apply fixes from review; add tests/regression points when needed.',
-            '8) Update Progress: update progress after each TODO, stating what/why.',
-            '9) Check Progress: run build/tests/lint when possible; otherwise give concrete user-run verification steps + expected results.',
-            '10) Ask: deliver ONLY via ask_continue(reason) and wait; reason must include what was done, risks/notes, verification steps/commands, and next steps.',
+            '6) Update Progress: update progress after each TODO, stating what/why.',
+            '7) Check Progress: run build/tests/lint when possible; otherwise give concrete user-run verification steps + expected results.',
+            '8) Code Review (final gate): like a PR—check gaps, correctness, edge cases, error handling, security (injection/permissions/leaks/deps), performance (hot paths/leaks), compatibility; if issues found, go back to Act, then re-run Check Progress and Review.',
+            '9) Ask: deliver ONLY via ask_continue(reason) and wait; reason must include what was done, risks/notes, verification steps/commands, and next steps.',
             '',
             'Windsurf Hooks (recommended; can be hard guardrails): if your environment supports hooks.json, configure pre_run_command/pre_write_code to block dangerous commands/sensitive writes, and use post_cascade_response to audit missing ask_continue. Official docs: https://docs.windsurf.com/windsurf/cascade/hooks',
             '',
@@ -507,6 +525,7 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
             '- Progress updated and validated',
             '- Verification completed (build/tests/lint or explicit manual steps)',
             '- Project tracking + memory updated (if applicable)',
+            '- Walkthrough updated (if applicable)',
             '- End with ask_continue(reason) and wait'
         ].join('\\n'),
         'sidebar.trackerTitle': 'Project Tracker',
@@ -628,6 +647,9 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'panel.contextLabel': 'Context',
         'panel.extraLabel': 'Extra details (optional)',
         'panel.extraPlaceholder': 'Add more information if needed',
+        'panel.confirmYes': 'Confirm',
+        'panel.confirmNo': 'Cancel',
+        'panel.confirmOk': 'OK',
         'panel.prdTitle': 'PRD Review',
         'panel.prdSubtitle': 'Approve or request changes',
         'panel.prdApprove': 'Approve PRD',
@@ -657,6 +679,8 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'panel.walkthroughSubtitle': 'Delivery log',
         'artifact.memoryTitle': 'Project Memory',
         'artifact.memoryUpdated': 'Updated',
+        'artifact.tableStatus': 'Status',
+        'artifact.tableItem': 'Item',
         'panel.itemTodo': 'Todo',
         'panel.itemDoing': 'In progress',
         'panel.itemDone': 'Done'
@@ -696,6 +720,89 @@ function escapeHtml(value: string): string {
         .replace(/'/g, '&#39;');
 }
 
+function splitMarkdownTableRow(row: string): string[] {
+    const trimmed = row.trim().replace(/^\|/, '').replace(/\|$/, '');
+    return trimmed.split('|').map((cell) => cell.trim());
+}
+
+function isMarkdownTableSeparator(line: string): boolean {
+    const trimmed = line.trim();
+    if (!trimmed.includes('|')) return false;
+    const body = trimmed.replace(/^\|/, '').replace(/\|$/, '');
+    return body.split('|').every((cell) => /^:?-{3,}:?$/.test(cell.trim()));
+}
+
+function renderMarkdownToHtml(content: string): string {
+    const lines = String(content || '').split(/\r?\n/);
+    const blocks: string[] = [];
+    let i = 0;
+
+    while (i < lines.length) {
+        const line = lines[i];
+        if (!line || line.trim() === '') {
+            i += 1;
+            continue;
+        }
+
+        if (line.trim().startsWith('```')) {
+            const codeLines: string[] = [];
+            i += 1;
+            while (i < lines.length && !lines[i].trim().startsWith('```')) {
+                codeLines.push(lines[i]);
+                i += 1;
+            }
+            i += 1;
+            blocks.push(`<pre><code>${escapeHtml(codeLines.join('\n'))}</code></pre>`);
+            continue;
+        }
+
+        const headingMatch = line.match(/^(#{1,6})\s+(.*)$/);
+        if (headingMatch) {
+            const level = headingMatch[1].length;
+            const text = escapeHtml(headingMatch[2].trim());
+            blocks.push(`<h${level}>${text}</h${level}>`);
+            i += 1;
+            continue;
+        }
+
+        if (line.includes('|') && i + 1 < lines.length && isMarkdownTableSeparator(lines[i + 1])) {
+            const headerCells = splitMarkdownTableRow(line).map((cell) => escapeHtml(cell));
+            i += 2;
+            const bodyRows: string[][] = [];
+            while (i < lines.length && lines[i].includes('|') && lines[i].trim() !== '') {
+                bodyRows.push(splitMarkdownTableRow(lines[i]).map((cell) => escapeHtml(cell)));
+                i += 1;
+            }
+            const headerHtml = headerCells.map((cell) => `<th>${cell || '&nbsp;'}</th>`).join('');
+            const bodyHtml = bodyRows
+                .map((row) => `<tr>${row.map((cell) => `<td>${cell || '&nbsp;'}</td>`).join('')}</tr>`)
+                .join('');
+            blocks.push(`<table><thead><tr>${headerHtml}</tr></thead><tbody>${bodyHtml}</tbody></table>`);
+            continue;
+        }
+
+        if (/^\s*[-*]\s+/.test(line)) {
+            const items: string[] = [];
+            while (i < lines.length && /^\s*[-*]\s+/.test(lines[i])) {
+                items.push(escapeHtml(lines[i].replace(/^\s*[-*]\s+/, '').trim()));
+                i += 1;
+            }
+            blocks.push(`<ul>${items.map((item) => `<li>${item}</li>`).join('')}</ul>`);
+            continue;
+        }
+
+        const paragraphLines: string[] = [];
+        while (i < lines.length && lines[i].trim() !== '') {
+            paragraphLines.push(lines[i]);
+            i += 1;
+        }
+        const paragraphText = escapeHtml(paragraphLines.join(' '));
+        blocks.push(`<p>${paragraphText}</p>`);
+    }
+
+    return blocks.join('\n');
+}
+
 function getNonce(length = 32): string {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
     let result = '';
@@ -712,26 +819,149 @@ function getDefaultReason(lang: UiLanguage = getUiLanguage()): string {
     return lang === 'en' ? 'Task completed' : '任务已完成';
 }
 
-function getWindsurfMcpConfigPaths(homeDir: string): string[] {
+function normalizePathForCompare(value: string): string {
+    return String(value || '').replace(/\\/g, '/').toLowerCase();
+}
+
+function isWslEnvironment(): boolean {
+    if (process.platform === 'win32') return false;
+    const release = os.release().toLowerCase();
+    return release.includes('microsoft') || !!process.env.WSL_DISTRO_NAME || !!process.env.WSL_INTEROP;
+}
+
+function toWslPath(winPath: string): string {
+    const trimmed = String(winPath || '').trim();
+    if (!trimmed) return '';
+    if (trimmed.startsWith('/mnt/')) return trimmed;
+    const match = trimmed.match(/^([a-zA-Z]):[\\/](.*)$/);
+    if (!match) return trimmed;
+    const drive = match[1].toLowerCase();
+    const rest = match[2].replace(/\\/g, '/');
+    return `/mnt/${drive}/${rest}`;
+}
+
+function isDirectory(dirPath: string): boolean {
+    try {
+        return fs.existsSync(dirPath) && fs.statSync(dirPath).isDirectory();
+    } catch {
+        return false;
+    }
+}
+
+function scoreHomeDir(dirPath: string): number {
+    let score = 0;
+    if (isDirectory(path.join(dirPath, '.codeium', 'windsurf-next'))) score += 4;
+    if (isDirectory(path.join(dirPath, '.codeium', 'windsurf'))) score += 3;
+    if (isDirectory(path.join(dirPath, '.codeium'))) score += 2;
+    if (isDirectory(path.join(dirPath, '.windsurf'))) score += 1;
+    return score;
+}
+
+function getWindowsHomeCandidates(): string[] {
+    const candidates: string[] = [];
+    const envProfile = process.env.USERPROFILE || '';
+    const envHome = envProfile || ((process.env.HOMEDRIVE && process.env.HOMEPATH) ? `${process.env.HOMEDRIVE}${process.env.HOMEPATH}` : '');
+    const envPath = toWslPath(envHome);
+    if (envPath && isDirectory(envPath)) {
+        candidates.push(envPath);
+    }
+
+    const userRoot = '/mnt/c/Users';
+    if (isDirectory(userRoot)) {
+        try {
+            const entries = fs.readdirSync(userRoot, { withFileTypes: true });
+            for (const entry of entries) {
+                if (!entry.isDirectory()) continue;
+                const name = entry.name;
+                if (/^(public|default|default user|all users)$/i.test(name)) continue;
+                const userDir = path.join(userRoot, name);
+                if (isDirectory(path.join(userDir, '.codeium'))) {
+                    candidates.push(userDir);
+                }
+            }
+        } catch {
+            // ignore
+        }
+    }
+
+    const unique: string[] = [];
+    const seen = new Set<string>();
+    for (const candidate of candidates) {
+        const key = normalizePathForCompare(candidate);
+        if (key && !seen.has(key)) {
+            seen.add(key);
+            unique.push(candidate);
+        }
+    }
+
+    unique.sort((a, b) => scoreHomeDir(b) - scoreHomeDir(a));
+    return unique;
+}
+
+function getCandidateHomeDirs(): string[] {
+    const dirs: string[] = [];
+    if (isWslEnvironment()) {
+        dirs.push(...getWindowsHomeCandidates());
+    }
+    dirs.push(os.homedir());
+
+    const unique: string[] = [];
+    const seen = new Set<string>();
+    for (const dir of dirs) {
+        const key = normalizePathForCompare(dir);
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        unique.push(dir);
+    }
+    return unique;
+}
+
+function getReadHomeDirs(): string[] {
+    return getCandidateHomeDirs();
+}
+
+function getWriteHomeDirs(): string[] {
+    const dirs = getCandidateHomeDirs();
+    return dirs.length > 0 ? [dirs[0]] : [os.homedir()];
+}
+
+function getWindsurfMcpConfigPaths(homeDirs: string[] = getWriteHomeDirs()): string[] {
     const baseDirs = ['.codeium'];
     const variants = ['windsurf', 'windsurf-next'];
     const paths: string[] = [];
+    const seen = new Set<string>();
 
-    for (const base of baseDirs) {
-        for (const variant of variants) {
-            paths.push(path.join(homeDir, base, variant, 'mcp_config.json'));
+    for (const homeDir of homeDirs) {
+        for (const base of baseDirs) {
+            for (const variant of variants) {
+                const configPath = path.join(homeDir, base, variant, 'mcp_config.json');
+                const key = normalizePathForCompare(configPath);
+                if (!seen.has(key)) {
+                    seen.add(key);
+                    paths.push(configPath);
+                }
+            }
         }
     }
 
     return paths;
 }
 
-function getWindsurfHooksConfigPaths(homeDir: string): Array<{ variant: string; hooksPath: string }> {
+function getWindsurfHooksConfigPaths(homeDirs: string[] = getWriteHomeDirs()): Array<{ variant: string; hooksPath: string }> {
     const variants = ['windsurf', 'windsurf-next'];
-    return variants.map((variant) => ({
-        variant,
-        hooksPath: path.join(homeDir, '.codeium', variant, 'hooks.json')
-    }));
+    const items: Array<{ variant: string; hooksPath: string }> = [];
+    const seen = new Set<string>();
+    for (const homeDir of homeDirs) {
+        for (const variant of variants) {
+            const hooksPath = path.join(homeDir, '.codeium', variant, 'hooks.json');
+            const key = normalizePathForCompare(hooksPath);
+            if (!seen.has(key)) {
+                seen.add(key);
+                items.push({ variant, hooksPath });
+            }
+        }
+    }
+    return items;
 }
 
 const HOOK_EVENTS = [
@@ -769,20 +999,38 @@ function createProjectId(): string {
     }
 }
 
-function getTrackerPaths(homeDir: string): Array<{ variant: string; trackerPath: string }> {
+function getTrackerPaths(homeDirs: string[] = getWriteHomeDirs()): Array<{ variant: string; trackerPath: string }> {
     const variants = ['windsurf', 'windsurf-next'];
-    return variants.map((variant) => ({
-        variant,
-        trackerPath: path.join(homeDir, '.codeium', variant, TRACKER_FILE_NAME)
-    }));
+    const items: Array<{ variant: string; trackerPath: string }> = [];
+    const seen = new Set<string>();
+    for (const homeDir of homeDirs) {
+        for (const variant of variants) {
+            const trackerPath = path.join(homeDir, '.codeium', variant, TRACKER_FILE_NAME);
+            const key = normalizePathForCompare(trackerPath);
+            if (!seen.has(key)) {
+                seen.add(key);
+                items.push({ variant, trackerPath });
+            }
+        }
+    }
+    return items;
 }
 
-function getMemoryPaths(homeDir: string): Array<{ variant: string; memoryPath: string }> {
+function getMemoryPaths(homeDirs: string[] = getWriteHomeDirs()): Array<{ variant: string; memoryPath: string }> {
     const variants = ['windsurf', 'windsurf-next'];
-    return variants.map((variant) => ({
-        variant,
-        memoryPath: path.join(homeDir, '.codeium', variant, MEMORY_FILE_NAME)
-    }));
+    const items: Array<{ variant: string; memoryPath: string }> = [];
+    const seen = new Set<string>();
+    for (const homeDir of homeDirs) {
+        for (const variant of variants) {
+            const memoryPath = path.join(homeDir, '.codeium', variant, MEMORY_FILE_NAME);
+            const key = normalizePathForCompare(memoryPath);
+            if (!seen.has(key)) {
+                seen.add(key);
+                items.push({ variant, memoryPath });
+            }
+        }
+    }
+    return items;
 }
 
 type ArtifactSpec = {
@@ -792,12 +1040,21 @@ type ArtifactSpec = {
     summary?: string;
 };
 
-function getProjectBrainDirs(homeDir: string, projectId: string): Array<{ variant: string; dir: string }> {
+function getProjectBrainDirs(homeDirs: string[] = getWriteHomeDirs(), projectId: string): Array<{ variant: string; dir: string }> {
     const variants = ['windsurf', 'windsurf-next'];
-    return variants.map((variant) => ({
-        variant,
-        dir: path.join(homeDir, '.codeium', variant, ARTIFACT_ROOT_DIR, ARTIFACT_BRAIN_DIR, projectId)
-    }));
+    const items: Array<{ variant: string; dir: string }> = [];
+    const seen = new Set<string>();
+    for (const homeDir of homeDirs) {
+        for (const variant of variants) {
+            const dir = path.join(homeDir, '.codeium', variant, ARTIFACT_ROOT_DIR, ARTIFACT_BRAIN_DIR, projectId);
+            const key = normalizePathForCompare(dir);
+            if (!seen.has(key)) {
+                seen.add(key);
+                items.push({ variant, dir });
+            }
+        }
+    }
+    return items;
 }
 
 function readArtifactMetadata(metaPath: string): { version: number; summary?: string; updatedAt?: string } | null {
@@ -901,8 +1158,7 @@ function readMemoryFile(memoryPath: string): MemoryData | null {
 }
 
 function loadTrackerData(): TrackerData {
-    const homeDir = os.homedir();
-    const paths = getTrackerPaths(homeDir);
+    const paths = getTrackerPaths(getReadHomeDirs());
     for (const { trackerPath } of paths) {
         const data = readTrackerFile(trackerPath);
         if (data) return data;
@@ -911,8 +1167,7 @@ function loadTrackerData(): TrackerData {
 }
 
 function loadMemoryData(): MemoryData {
-    const homeDir = os.homedir();
-    const paths = getMemoryPaths(homeDir);
+    const paths = getMemoryPaths(getReadHomeDirs());
     for (const { memoryPath } of paths) {
         const data = readMemoryFile(memoryPath);
         if (data) return data;
@@ -921,8 +1176,7 @@ function loadMemoryData(): MemoryData {
 }
 
 function saveTrackerData(data: TrackerData): void {
-    const homeDir = os.homedir();
-    const paths = getTrackerPaths(homeDir);
+    const paths = getTrackerPaths(getWriteHomeDirs());
     for (const { trackerPath } of paths) {
         const dir = path.dirname(trackerPath);
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -931,8 +1185,7 @@ function saveTrackerData(data: TrackerData): void {
 }
 
 function saveMemoryData(data: MemoryData): void {
-    const homeDir = os.homedir();
-    const paths = getMemoryPaths(homeDir);
+    const paths = getMemoryPaths(getWriteHomeDirs());
     for (const { memoryPath } of paths) {
         const dir = path.dirname(memoryPath);
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -954,14 +1207,28 @@ function getProjectNameFromPath(rootPath: string): string {
 function defaultPrdTemplate(lang: UiLanguage): string {
     if (lang === 'en') {
         return [
-            '# PRD',
-            '## Problem',
+            '# PRD (Project Requirements Document)',
+            '## Problem / Background',
             '## Goals',
             '## Non-goals',
-            '## Requirements (functional + non-functional)',
+            '## Users / Personas',
+            '## User Scenarios',
+            '## Scope',
+            '## Requirements (Functional)',
+            '| ID | Requirement | Priority | Notes |',
+            '| --- | --- | --- | --- |',
+            '| R-1 |  |  |  |',
+            '## Requirements (Non-Functional)',
+            '| ID | Requirement | Priority | Notes |',
+            '| --- | --- | --- | --- |',
+            '| NFR-1 |  |  |  |',
+            '## UX / Workflow',
+            '## Data / Analytics',
             '## Constraints',
             '## Dependencies / Integrations',
             '## Risks / Mitigations',
+            '## Success Metrics',
+            '## Milestones',
             '## Acceptance Criteria',
             '## Open Questions',
             '## References (official docs / Context7)',
@@ -969,14 +1236,28 @@ function defaultPrdTemplate(lang: UiLanguage): string {
         ].join('\n');
     }
     return [
-        '# PRD',
+        '# PRD（项目需求文档）',
         '## 问题/背景',
         '## 目标',
         '## 非目标',
-        '## 需求（功能 + 非功能）',
+        '## 用户/角色',
+        '## 使用场景',
+        '## 范围',
+        '## 需求（功能）',
+        '| ID | 需求 | 优先级 | 备注 |',
+        '| --- | --- | --- | --- |',
+        '| R-1 |  |  |  |',
+        '## 需求（非功能）',
+        '| ID | 需求 | 优先级 | 备注 |',
+        '| --- | --- | --- | --- |',
+        '| NFR-1 |  |  |  |',
+        '## 体验/流程',
+        '## 数据/埋点',
         '## 约束',
         '## 依赖/集成',
         '## 风险/缓解',
+        '## 成功指标',
+        '## 里程碑',
         '## 验收标准',
         '## 未决问题',
         '## 参考资料（官方文档/Context7）',
@@ -1146,28 +1427,41 @@ function formatChecklistText(items: TrackerItem[]): string {
         .join('\n');
 }
 
-function formatArtifactSection(title: string, summary: string | undefined, items: TrackerItem[], lang: UiLanguage): string {
+function escapeMarkdownTableCell(text: string): string {
+    return String(text || '').replace(/\|/g, '\\|').replace(/\r?\n/g, '<br>');
+}
+
+function formatItemsTable(items: TrackerItem[], lang: UiLanguage): string {
     const emptyLabel = tr('panel.readOnlyEmpty', {}, lang);
-    const lines: string[] = [`## ${title}`];
-    if (summary !== undefined) {
-        lines.push(summary.trim() ? summary.trim() : `_${emptyLabel}_`);
-    }
-    if (items.length > 0) {
-        lines.push(formatChecklistText(items));
-    } else {
-        lines.push(`_${emptyLabel}_`);
+    if (!items.length) return `_${emptyLabel}_`;
+    const lines = [
+        `| ${tr('artifact.tableStatus', {}, lang)} | ${tr('artifact.tableItem', {}, lang)} |`,
+        '| --- | --- |'
+    ];
+    for (const item of items) {
+        const status =
+            item.status === 'done'
+                ? tr('panel.itemDone', {}, lang)
+                : item.status === 'doing'
+                    ? tr('panel.itemDoing', {}, lang)
+                    : tr('panel.itemTodo', {}, lang);
+        lines.push(`| ${escapeMarkdownTableCell(status)} | ${escapeMarkdownTableCell(item.text)} |`);
     }
     return lines.join('\n');
+}
+
+function formatSummaryBlock(summary: string | undefined, lang: UiLanguage): string {
+    const emptyLabel = tr('panel.readOnlyEmpty', {}, lang);
+    const trimmed = typeof summary === 'string' ? summary.trim() : '';
+    return trimmed ? trimmed : `_${emptyLabel}_`;
 }
 
 function buildPlanArtifactContent(project: ProjectTracker, lang: UiLanguage): string {
     const title = tr('panel.planTitle', {}, lang);
     const header = project.name ? `${project.name} - ${title}` : title;
     const sections = [
-        formatArtifactSection(tr('panel.taskTitle', {}, lang), project.task.summary, project.task.items, lang),
-        formatArtifactSection(tr('panel.planTitle', {}, lang), project.plan.summary, project.plan.items, lang),
-        formatArtifactSection(tr('panel.todoTitle', {}, lang), undefined, project.todos.items, lang),
-        formatArtifactSection(tr('panel.checklistTitle', {}, lang), undefined, project.checklist.items, lang)
+        `## ${tr('panel.sectionSummary', {}, lang)}\n${formatSummaryBlock(project.plan.summary, lang)}`,
+        `## ${tr('panel.sectionItems', {}, lang)}\n${formatItemsTable(project.plan.items, lang)}`
     ];
     return [`# ${header}`, '', ...sections].join('\n\n');
 }
@@ -1175,20 +1469,13 @@ function buildPlanArtifactContent(project: ProjectTracker, lang: UiLanguage): st
 function buildTaskArtifactContent(project: ProjectTracker, lang: UiLanguage): string {
     const title = tr('panel.taskTitle', {}, lang);
     const header = project.name ? `${title}: ${project.name}` : title;
-    const emptyLabel = tr('panel.readOnlyEmpty', {}, lang);
-    const lines: string[] = [`# ${header}`];
-    const summary = project.task.summary?.trim() || '';
-    if (summary) {
-        lines.push('', summary);
-    } else {
-        lines.push('', `_${emptyLabel}_`);
-    }
-    if (project.task.items.length > 0) {
-        lines.push('', formatChecklistText(project.task.items));
-    } else {
-        lines.push('', `_${emptyLabel}_`);
-    }
-    return lines.join('\n');
+    const sections = [
+        `## ${tr('panel.sectionSummary', {}, lang)}\n${formatSummaryBlock(project.task.summary, lang)}`,
+        `## ${tr('panel.taskTitle', {}, lang)}\n${formatItemsTable(project.task.items, lang)}`,
+        `## ${tr('panel.todoTitle', {}, lang)}\n${formatItemsTable(project.todos.items, lang)}`,
+        `## ${tr('panel.checklistTitle', {}, lang)}\n${formatItemsTable(project.checklist.items, lang)}`
+    ];
+    return [`# ${header}`, '', ...sections].join('\n\n');
 }
 
 function buildWalkthroughArtifactContent(project: ProjectTracker, lang: UiLanguage): string {
@@ -1278,6 +1565,24 @@ function bumpProjectStat(project: ProjectTracker, key: TrackerStatKey) {
     project.stats.updatedAt = nowIso();
 }
 
+function appendWalkthroughEntry(project: ProjectTracker, entry: string, lang: UiLanguage = getUiLanguage()) {
+    const header = lang === 'en' ? '## Auto Updates' : '## 自动更新';
+    let content = project.walkthrough.content || '';
+    if (!content.includes(header)) {
+        content = content.trimEnd();
+        if (content) {
+            content += '\n\n';
+        }
+        content += `${header}\n`;
+    }
+    if (!content.endsWith('\n')) {
+        content += '\n';
+    }
+    content += `- ${nowIso()} ${entry}`;
+    project.walkthrough.content = content.trimEnd();
+    project.walkthrough.updatedAt = nowIso();
+}
+
 function buildHooksCommand(variantHooksDir: string): string {
     const guardPath = path.join(variantHooksDir, 'windsurf-auto-mcp-guard.py');
     if (process.platform === 'win32') {
@@ -1304,8 +1609,7 @@ function hooksContainCommand(config: any, command: string): boolean {
 }
 
 function installWindsurfHooks() {
-    const homeDir = os.homedir();
-    const items = getWindsurfHooksConfigPaths(homeDir);
+    const items = getWindsurfHooksConfigPaths(getWriteHomeDirs());
     const installed: string[] = [];
     const skipped: string[] = [];
     const failed: Array<{ path: string; error: string }> = [];
@@ -1399,8 +1703,7 @@ function installWindsurfHooks() {
 }
 
 function uninstallWindsurfHooks() {
-    const homeDir = os.homedir();
-    const items = getWindsurfHooksConfigPaths(homeDir);
+    const items = getWindsurfHooksConfigPaths(getWriteHomeDirs());
     const removed: string[] = [];
     const failed: Array<{ path: string; error: string }> = [];
 
@@ -2120,29 +2423,54 @@ async function handleAskUser(args: any): Promise<any> {
     const { title, message, type = 'input', allowImage } = args;
     const lang = getUiLanguage();
 
-    if (type === 'confirm') {
+    if (type === 'confirm' || type === 'info') {
         const yes = tr('tool.confirmYes', {}, lang);
         const no = tr('tool.confirmNo', {}, lang);
-        const result = await vscode.window.showInformationMessage(
-            message,
-            { modal: true },
-            yes, no
-        );
-        const choice = result === yes ? yes : no;
-        return { content: [{ type: 'text', text: tr('tool.userChoice', { choice }, lang) }] };
-    }
+        const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const promptText = typeof message === 'string' ? message : String(message ?? '');
+        const confirmMode: ConfirmDialogType = type === 'info' ? 'info' : 'confirm';
 
-    if (type === 'info') {
-        await vscode.window.showInformationMessage(message);
-        return { content: [{ type: 'text', text: tr('tool.userConfirmed', {}, lang) }] };
+        return new Promise((resolve) => {
+            sidebarProvider?.showInputDialog(requestId, title || 'WindsurfAutoMcp', promptText, false, {
+                mode: 'confirm',
+                confirmType: confirmMode
+            });
+
+            pendingRequests.set(requestId, {
+                resolve: (value: any) => {
+                    pendingRequests.delete(requestId);
+                    const confirmed = value?.confirmed === true;
+                    if (type === 'confirm') {
+                        const choice = confirmed ? yes : no;
+                        resolve({ content: [{ type: 'text', text: tr('tool.userChoice', { choice }, lang) }] });
+                        return;
+                    }
+                    if (confirmed) {
+                        resolve({ content: [{ type: 'text', text: tr('tool.userConfirmed', {}, lang) }] });
+                    } else {
+                        resolve({ content: [{ type: 'text', text: tr('tool.userCanceled', {}, lang) }] });
+                    }
+                },
+                reject: () => {
+                    pendingRequests.delete(requestId);
+                    if (type === 'confirm') {
+                        resolve({ content: [{ type: 'text', text: tr('tool.userChoice', { choice: no }, lang) }] });
+                        return;
+                    }
+                    resolve({ content: [{ type: 'text', text: tr('tool.userCanceled', {}, lang) }] });
+                },
+                timestamp: Date.now()
+            });
+        });
     }
 
     // input type - 使用webview获取更丰富的输入
+    const allowImages = allowImage !== false;
     const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
     return new Promise((resolve) => {
         // 发送到webview
-        sidebarProvider?.showInputDialog(requestId, title || 'WindsurfAutoMcp', message, allowImage);
+        sidebarProvider?.showInputDialog(requestId, title || 'WindsurfAutoMcp', message, allowImages);
 
         // 存储pending请求
         pendingRequests.set(requestId, {
@@ -2276,7 +2604,7 @@ function syncProjectArtifacts(project: ProjectTracker): void {
     const hasPlan = !!project.plan.summary?.trim() || project.plan.items.length > 0;
     const hasTodos = project.todos.items.length > 0;
     const hasChecklist = project.checklist.items.length > 0;
-    if (hasTask || hasPlan || hasTodos || hasChecklist) {
+    if (hasPlan) {
         const content = buildPlanArtifactContent(project, lang);
         specs.push({
             fileName: 'implementation_plan.md',
@@ -2286,7 +2614,7 @@ function syncProjectArtifacts(project: ProjectTracker): void {
         });
     }
 
-    if (hasTask) {
+    if (hasTask || hasTodos || hasChecklist) {
         const content = buildTaskArtifactContent(project, lang);
         specs.push({
             fileName: 'task.md',
@@ -2307,8 +2635,7 @@ function syncProjectArtifacts(project: ProjectTracker): void {
     }
 
     if (specs.length === 0) return;
-    const homeDir = os.homedir();
-    const dirs = getProjectBrainDirs(homeDir, project.projectId);
+    const dirs = getProjectBrainDirs(getWriteHomeDirs(), project.projectId);
     for (const { variant, dir } of dirs) {
         for (const spec of specs) {
             try {
@@ -2335,8 +2662,7 @@ function syncMemoryArtifacts(project: ProjectTracker, memoryStore: ProjectMemory
         content,
         summary: createArtifactSummary(content)
     };
-    const homeDir = os.homedir();
-    const dirs = getProjectBrainDirs(homeDir, project.projectId);
+    const dirs = getProjectBrainDirs(getWriteHomeDirs(), project.projectId);
     for (const { variant, dir } of dirs) {
         try {
             writeArtifactFiles(dir, spec);
@@ -2406,6 +2732,7 @@ async function handleSetPrd(args: any): Promise<any> {
     project.prd.reviewNote = '';
     project.prd.reviewedAt = undefined;
     bumpProjectStat(project, 'prdUpdates');
+    appendWalkthroughEntry(project, lang === 'en' ? 'PRD draft updated.' : 'PRD 草案已更新。', lang);
     project.updatedAt = nowIso();
     saveTrackerAndNotify(data, project);
 
@@ -2418,6 +2745,7 @@ async function handleSetPrd(args: any): Promise<any> {
         project.prd.approvedBy = approval.approver;
         project.prd.approvedAt = nowIso();
         bumpProjectStat(project, 'prdApprovals');
+        appendWalkthroughEntry(project, lang === 'en' ? 'PRD approved.' : 'PRD 已审批。', lang);
     } else if (approval.note) {
         project.prd.reviewNote = approval.note;
     }
@@ -2448,6 +2776,7 @@ async function handleApprovePrd(args: any): Promise<any> {
     project.prd.approvedAt = nowIso();
     project.prd.reviewedAt = nowIso();
     bumpProjectStat(project, 'prdApprovals');
+    appendWalkthroughEntry(project, lang === 'en' ? 'PRD approved.' : 'PRD 已审批。', lang);
     project.updatedAt = nowIso();
     saveTrackerAndNotify(data, project);
     const text = lang === 'en' ? 'PRD approved.' : 'PRD 已审批。';
@@ -2499,6 +2828,7 @@ async function handleUpdateTask(args: any): Promise<any> {
         project.task.items = items;
         bumpProjectStat(project, 'taskUpdates');
     }
+    appendWalkthroughEntry(project, lang === 'en' ? 'Task checklist updated.' : '任务清单已更新。', lang);
     project.updatedAt = nowIso();
     saveTrackerAndNotify(data, project);
     const text = lang === 'en' ? 'Task updated.' : '任务已更新。';
@@ -2523,6 +2853,7 @@ async function handleUpdatePlan(args: any): Promise<any> {
         project.plan.items = items;
         bumpProjectStat(project, 'planUpdates');
     }
+    appendWalkthroughEntry(project, lang === 'en' ? 'Plan updated.' : '计划已更新。', lang);
     project.updatedAt = nowIso();
     saveTrackerAndNotify(data, project);
     const text = lang === 'en' ? 'Plan updated.' : '计划已更新。';
@@ -2544,6 +2875,7 @@ async function handleUpdateTodos(args: any): Promise<any> {
     }
     project.todos.items = items;
     bumpProjectStat(project, 'todoUpdates');
+    appendWalkthroughEntry(project, lang === 'en' ? 'TODO list updated.' : 'TODO 已更新。', lang);
     project.updatedAt = nowIso();
     saveTrackerAndNotify(data, project);
     const text = lang === 'en' ? 'TODOs updated.' : 'TODO 已更新。';
@@ -2561,6 +2893,7 @@ async function handleUpdateChecklist(args: any): Promise<any> {
     }
     project.checklist.items = items;
     bumpProjectStat(project, 'checklistUpdates');
+    appendWalkthroughEntry(project, lang === 'en' ? 'Delivery checklist updated.' : '交付清单已更新。', lang);
     project.updatedAt = nowIso();
     saveTrackerAndNotify(data, project);
     const text = lang === 'en' ? 'Checklist updated.' : '检查清单已更新。';
@@ -2571,6 +2904,13 @@ async function handleGetProjectStatus(args: any): Promise<any> {
     const lang = getUiLanguage();
     const rootPath = typeof args?.rootPath === 'string' ? args.rootPath : undefined;
     const { project } = resolveProjectTracker(rootPath);
+    try {
+        syncProjectArtifacts(project);
+        const { project: memoryStore } = resolveProjectMemory(rootPath);
+        syncMemoryArtifacts(project, memoryStore);
+    } catch (e: any) {
+        outputChannel?.appendLine(`Artifact sync failed (status): ${e?.message ?? String(e)}`);
+    }
     const snapshot = buildTrackerSnapshot(project);
     const text = lang === 'en' ? 'Project status:' : '项目状态：';
     return { content: [{ type: 'text', text }, { type: 'text', text: `STATUS_JSON:\n${JSON.stringify(snapshot, null, 2)}` }] };
@@ -2838,6 +3178,7 @@ export function handleImageUpload() {
 // ==================== Popup Panels (PRD/Task/Plan/etc) ====================
 
 let prdPanel: vscode.WebviewPanel | null = null;
+let taskPanel: vscode.WebviewPanel | null = null;
 let planPanel: vscode.WebviewPanel | null = null;
 let walkthroughPanel: vscode.WebviewPanel | null = null;
 
@@ -2855,6 +3196,7 @@ function resolveProjectForPanel(): ProjectTracker | null {
 function refreshOpenPanels(project: ProjectTracker) {
     const lang = getUiLanguage();
     if (prdPanel) prdPanel.webview.html = getPrdPanelHtml(project, lang);
+    if (taskPanel) taskPanel.webview.html = getTaskPanelHtml(project, lang);
     if (planPanel) planPanel.webview.html = getPlanPanelHtml(project, lang);
     if (walkthroughPanel) walkthroughPanel.webview.html = getWalkthroughPanelHtml(project, lang);
 }
@@ -2887,6 +3229,21 @@ function showPlanPanel() {
     );
     planPanel.webview.html = getPlanPanelHtml(project, lang);
     planPanel.onDidDispose(() => { planPanel = null; });
+}
+
+function showTaskPanel() {
+    const project = resolveProjectForPanel();
+    if (!project) return;
+    const lang = getUiLanguage();
+    if (taskPanel) taskPanel.dispose();
+    taskPanel = vscode.window.createWebviewPanel(
+        'mcpTask',
+        tr('panel.taskTitle', {}, lang),
+        vscode.ViewColumn.Two,
+        { enableScripts: false, retainContextWhenHidden: true }
+    );
+    taskPanel.webview.html = getTaskPanelHtml(project, lang);
+    taskPanel.onDidDispose(() => { taskPanel = null; });
 }
 
 function showWalkthroughPanel() {
@@ -2999,6 +3356,51 @@ function getPanelShellHtml(title: string, subtitle: string, badge: string, body:
             font-size: 13px;
             line-height: 1.7;
             white-space: pre-wrap;
+        }
+        .markdown {
+            white-space: normal;
+        }
+        .markdown h1,
+        .markdown h2,
+        .markdown h3,
+        .markdown h4 {
+            margin: 12px 0 6px;
+            font-size: 15px;
+        }
+        .markdown p {
+            margin: 0 0 10px;
+        }
+        .markdown ul {
+            margin: 0 0 10px 18px;
+            padding: 0;
+        }
+        .markdown li {
+            margin-bottom: 6px;
+        }
+        .markdown table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+            margin-bottom: 10px;
+        }
+        .markdown th,
+        .markdown td {
+            border: 1px solid var(--border);
+            padding: 6px 8px;
+            text-align: left;
+        }
+        .markdown th {
+            background: rgba(255,255,255,0.04);
+            color: var(--text);
+            font-weight: 600;
+        }
+        .markdown pre {
+            background: rgba(10,12,14,0.8);
+            border: 1px solid var(--border);
+            padding: 12px;
+            border-radius: 12px;
+            overflow-x: auto;
+            margin-bottom: 10px;
         }
         .empty {
             color: var(--muted);
@@ -3133,14 +3535,16 @@ function getPrdPanelHtml(project: ProjectTracker, lang: UiLanguage): string {
         ? tr('panel.prdStatusApproved', {}, lang)
         : tr('panel.prdStatusDraft', {}, lang);
     const badge = statusLabel;
-    const content = project.prd.content ? escapeHtml(project.prd.content) : escapeHtml(tr('panel.readOnlyEmpty', {}, lang));
+    const content = project.prd.content
+        ? renderMarkdownToHtml(project.prd.content)
+        : `<p>${escapeHtml(tr('panel.readOnlyEmpty', {}, lang))}</p>`;
     const reviewNote = project.prd.reviewNote ? escapeHtml(project.prd.reviewNote) : '';
 
     const body = `
         <div class="grid">
             <section class="card">
                 <div class="card-title">${escapeHtml(tr('panel.sectionSummary', {}, lang))}</div>
-                <div class="card-body">${content}</div>
+                <div class="card-body markdown">${content}</div>
             </section>
             <section class="card">
                 <div class="card-title">${escapeHtml(tr('panel.reviewNoteLabel', {}, lang))}</div>
@@ -3152,17 +3556,12 @@ function getPrdPanelHtml(project: ProjectTracker, lang: UiLanguage): string {
     return getPanelShellHtml(tr('panel.prdPanelTitle', {}, lang), project.name, badge, body, lang);
 }
 
-function getPlanPanelHtml(project: ProjectTracker, lang: UiLanguage): string {
+function getTaskPanelHtml(project: ProjectTracker, lang: UiLanguage): string {
     const sections: TrackerPanelSection[] = [
         {
             title: tr('panel.taskTitle', {}, lang),
             summary: project.task.summary,
             items: project.task.items
-        },
-        {
-            title: tr('panel.planTitle', {}, lang),
-            summary: project.plan.summary,
-            items: project.plan.items
         },
         {
             title: tr('panel.todoTitle', {}, lang),
@@ -3201,20 +3600,47 @@ function getPlanPanelHtml(project: ProjectTracker, lang: UiLanguage): string {
         })
         .join('');
 
-    const overall = computeProgress(project);
+    const combinedItems = [...project.task.items, ...project.todos.items, ...project.checklist.items];
+    const overall = computeItemProgress(combinedItems);
     const badge = overall.total > 0 ? `${overall.percent}%` : '';
     const body = `<div class="grid">${cards}</div>`;
+    return getPanelShellHtml(tr('panel.taskTitle', {}, lang), project.name, badge, body, lang);
+}
+
+function getPlanPanelHtml(project: ProjectTracker, lang: UiLanguage): string {
+    const progress = computeItemProgress(project.plan.items);
+    const summaryText = project.plan.summary
+        ? escapeHtml(project.plan.summary)
+        : `<span class="empty">${escapeHtml(tr('panel.readOnlyEmpty', {}, lang))}</span>`;
+    const itemsHtml = renderTrackerItems(project.plan.items, lang);
+    const body = `
+        <section class="card">
+            <div class="card-title">${escapeHtml(tr('panel.sectionSummary', {}, lang))}</div>
+            <div class="card-body">${summaryText}</div>
+        </section>
+        <section class="card">
+            <div class="card-title">${escapeHtml(tr('panel.sectionItems', {}, lang))}</div>
+            <div class="progress">
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width:${progress.percent}%"></div>
+                </div>
+                <div class="progress-meta">${progress.done}/${progress.total} • ${progress.percent}%</div>
+            </div>
+            <div class="list">${itemsHtml}</div>
+        </section>
+    `;
+    const badge = progress.total > 0 ? `${progress.percent}%` : '';
     return getPanelShellHtml(tr('panel.planTitle', {}, lang), project.name, badge, body, lang);
 }
 
 function getWalkthroughPanelHtml(project: ProjectTracker, lang: UiLanguage): string {
     const content = project.walkthrough.content
-        ? escapeHtml(project.walkthrough.content)
-        : escapeHtml(tr('panel.readOnlyEmpty', {}, lang));
+        ? renderMarkdownToHtml(project.walkthrough.content)
+        : `<p>${escapeHtml(tr('panel.readOnlyEmpty', {}, lang))}</p>`;
     const body = `
         <section class="card">
             <div class="card-title">${escapeHtml(tr('panel.walkthroughSubtitle', {}, lang))}</div>
-            <div class="card-body">${content}</div>
+            <div class="card-body markdown">${content}</div>
         </section>
     `;
     return getPanelShellHtml(tr('panel.walkthroughTitle', {}, lang), project.name, '', body, lang);
@@ -3228,7 +3654,9 @@ function getPrdDialogHtml(
     csp: string,
     nonce: string
 ): string {
-    const escapedContent = escapeHtml(prdContent || tr('panel.readOnlyEmpty', {}, lang));
+    const contentHtml = prdContent
+        ? renderMarkdownToHtml(prdContent)
+        : `<p>${escapeHtml(tr('panel.readOnlyEmpty', {}, lang))}</p>`;
     const title = tr('panel.prdTitle', {}, lang);
     const subtitle = tr('panel.prdSubtitle', {}, lang);
     const approveLabel = tr('panel.prdApprove', {}, lang);
@@ -3309,10 +3737,54 @@ function getPrdDialogHtml(
             margin-bottom: 10px;
         }
         .content {
-            white-space: pre-wrap;
             line-height: 1.6;
             font-size: 13px;
             color: var(--text);
+        }
+        .markdown {
+            white-space: normal;
+        }
+        .markdown h1,
+        .markdown h2,
+        .markdown h3,
+        .markdown h4 {
+            margin: 12px 0 6px;
+            font-size: 15px;
+        }
+        .markdown p {
+            margin: 0 0 10px;
+        }
+        .markdown ul {
+            margin: 0 0 10px 18px;
+            padding: 0;
+        }
+        .markdown li {
+            margin-bottom: 6px;
+        }
+        .markdown table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+            margin-bottom: 10px;
+        }
+        .markdown th,
+        .markdown td {
+            border: 1px solid var(--border);
+            padding: 6px 8px;
+            text-align: left;
+        }
+        .markdown th {
+            background: rgba(255,255,255,0.04);
+            color: var(--text);
+            font-weight: 600;
+        }
+        .markdown pre {
+            background: rgba(10,12,14,0.8);
+            border: 1px solid var(--border);
+            padding: 12px;
+            border-radius: 12px;
+            overflow-x: auto;
+            margin-bottom: 10px;
         }
         textarea {
             width: 100%;
@@ -3368,7 +3840,7 @@ function getPrdDialogHtml(
     </div>
     <div class="card">
         <div class="card-title">${tr('panel.prdPanelTitle', {}, lang)}</div>
-        <div class="content">${escapedContent}</div>
+        <div class="content markdown">${contentHtml}</div>
     </div>
     <div class="card">
         <div class="card-title">${noteLabel}</div>
@@ -3434,7 +3906,8 @@ function showDialogPanel(
     message: string,
     allowImage: boolean = true,
     dialogOptions?: {
-        mode?: 'choice' | 'prd';
+        mode?: DialogMode;
+        confirmType?: ConfirmDialogType;
         questions?: ChoiceQuestion[];
         allowText?: boolean;
         prdContent?: string;
@@ -3494,7 +3967,8 @@ function getDialogHtml(
     message: string,
     allowImage: boolean,
     dialogOptions?: {
-        mode?: 'choice' | 'prd';
+        mode?: DialogMode;
+        confirmType?: ConfirmDialogType;
         questions?: ChoiceQuestion[];
         allowText?: boolean;
         prdContent?: string;
@@ -3502,9 +3976,10 @@ function getDialogHtml(
     }
 ): string {
     const isContinue = type === 'continue';
-    const dialogMode = dialogOptions?.mode === 'choice' ? 'choice' : type;
+    const dialogMode = dialogOptions?.mode || type;
     const choiceQuestions = dialogOptions?.questions ?? [];
     const allowExtraText = dialogOptions?.allowText !== false;
+    const confirmType = dialogOptions?.confirmType === 'info' ? 'info' : 'confirm';
     const lang = getUiLanguage();
     const htmlLang = lang === 'en' ? 'en' : 'zh-CN';
     const nonce = getNonce();
@@ -4022,6 +4497,7 @@ function getDialogHtml(
         const requestId = '${requestId}';
         const isContinue = ${isContinue};
         const dialogMode = ${safeJson(dialogMode)};
+        const confirmType = ${safeJson(confirmType)};
         const I18N = ${safeJson(WEBVIEW_I18N)};
         const rawTitle = ${safeJson(title ?? '')};
         const rawMessage = ${safeJson(message ?? '')};
@@ -4029,6 +4505,8 @@ function getDialogHtml(
         const choiceQuestions = ${safeJson(choiceQuestions)};
         const allowExtraText = ${safeJson(allowExtraText)};
         const hasChoice = dialogMode === 'choice';
+        const isConfirm = dialogMode === 'confirm';
+        const isInfo = isConfirm && confirmType === 'info';
         const normalizedQuestions = Array.isArray(choiceQuestions) ? choiceQuestions : [];
         const choiceSelections = {};
         const CHOICE_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -4063,12 +4541,20 @@ function getDialogHtml(
             if (titleEl) titleEl.textContent = titleText;
 
             const subEl = document.getElementById('panelSubtitle');
-            if (subEl) subEl.textContent = isContinue ? t('panel.confirmSub') : t('panel.inputSub');
+            if (subEl) {
+                if (isConfirm) {
+                    subEl.textContent = t('panel.confirmSub');
+                } else {
+                    subEl.textContent = isContinue ? t('panel.confirmSub') : t('panel.inputSub');
+                }
+            }
 
             const reasonLabelEl = document.getElementById('reasonLabel');
             if (reasonLabelEl) {
                 if (hasChoice) {
                     reasonLabelEl.textContent = showContext ? t('panel.contextLabel') : t('panel.choiceQuestion');
+                } else if (isConfirm) {
+                    reasonLabelEl.textContent = t('panel.reasonLabelInput');
                 } else {
                     reasonLabelEl.textContent = isContinue ? t('panel.reasonLabelContinue') : t('panel.reasonLabelInput');
                 }
@@ -4087,6 +4573,8 @@ function getDialogHtml(
             if (replyLabelEl) {
                 if (hasChoice) {
                     replyLabelEl.textContent = t('panel.extraLabel');
+                } else if (isConfirm) {
+                    replyLabelEl.textContent = '';
                 } else {
                     replyLabelEl.textContent = isContinue ? t('panel.replyLabelContinue') : t('panel.replyLabelInput');
                 }
@@ -4096,6 +4584,8 @@ function getDialogHtml(
             if (userInputEl) {
                 if (hasChoice) {
                     userInputEl.placeholder = t('panel.extraPlaceholder');
+                } else if (isConfirm) {
+                    userInputEl.placeholder = '';
                 } else {
                     userInputEl.placeholder = isContinue ? t('panel.replyPlaceholderContinue') : t('panel.replyPlaceholderInput');
                 }
@@ -4103,7 +4593,7 @@ function getDialogHtml(
 
             const inputCard = document.getElementById('inputCard');
             if (inputCard) {
-                if (hasChoice && !allowExtraText) {
+                if (isConfirm || (hasChoice && !allowExtraText)) {
                     inputCard.style.display = 'none';
                 } else {
                     inputCard.style.display = '';
@@ -4134,14 +4624,32 @@ function getDialogHtml(
 	            if (chooseBtn) chooseBtn.textContent = t('panel.chooseImage');
 
 	            const primaryBtn = document.getElementById('primaryBtn');
-	            if (primaryBtn) primaryBtn.textContent = isContinue ? t('panel.submitContinue') : t('panel.submit');
+	            if (primaryBtn) {
+	                if (isConfirm) {
+	                    primaryBtn.textContent = isInfo ? t('panel.confirmOk') : t('panel.confirmYes');
+	                } else {
+	                    primaryBtn.textContent = isContinue ? t('panel.submitContinue') : t('panel.submit');
+	                }
+	            }
 
 	            const secondaryBtn = document.getElementById('secondaryBtn');
-	            if (secondaryBtn) secondaryBtn.textContent = isContinue ? t('panel.end') : t('panel.cancel');
+	            if (secondaryBtn) {
+	                if (isConfirm) {
+	                    secondaryBtn.textContent = t('panel.confirmNo');
+	                    secondaryBtn.style.display = isInfo ? 'none' : '';
+	                } else {
+	                    secondaryBtn.textContent = isContinue ? t('panel.end') : t('panel.cancel');
+	                    secondaryBtn.style.display = '';
+	                }
+	            }
 
 	            const shortcuts = document.getElementById('shortcuts');
 	            if (shortcuts) {
-	                shortcuts.innerHTML = \`<kbd>Enter</kbd> \${t('panel.shortcutsConfirm')} · <kbd>Shift+Enter</kbd> \${t('panel.shortcutsNewline')} · <kbd>Esc</kbd> \${t('panel.shortcutsCancel')}\`;
+	                if (isConfirm) {
+	                    shortcuts.innerHTML = \`<kbd>Enter</kbd> \${t('panel.shortcutsConfirm')} · <kbd>Esc</kbd> \${t('panel.shortcutsCancel')}\`;
+	                } else {
+	                    shortcuts.innerHTML = \`<kbd>Enter</kbd> \${t('panel.shortcutsConfirm')} · <kbd>Shift+Enter</kbd> \${t('panel.shortcutsNewline')} · <kbd>Esc</kbd> \${t('panel.shortcutsCancel')}\`;
+	                }
 	            }
 
 	            const langBtn = document.getElementById('langBtn');
@@ -4409,6 +4917,8 @@ function getDialogHtml(
 	                    instruction: input,
 	                    images: imagesData
 	                };
+	            } else if (isConfirm) {
+	                response = { confirmed: confirm === true, confirmType };
 	            } else {
 	                if (confirm) {
 	                    if (hasChoice) {
@@ -4454,8 +4964,7 @@ function getDialogHtml(
 // ==================== Windsurf配置 ====================
 
 function configureWindsurf() {
-    const homeDir = os.homedir();
-    const configPaths = getWindsurfMcpConfigPaths(homeDir);
+    const configPaths = getWindsurfMcpConfigPaths(getWriteHomeDirs());
     const written: string[] = [];
     const failed: Array<{ path: string; error: string }> = [];
 
@@ -4592,27 +5101,38 @@ You are a full software engineering department (cross-functional team). Output m
 Read the target/current state/constraints first. Missing key inputs → ask questions via ask_question as needed (single-choice, any number of options + optional extra text).
 先读目标/现状/约束。缺关键输入 → 用 ask_question 按需提问（单选，选项数量不限，可附补充文本）。
 
+## Project Baseline / 项目基线
+Call get_project_status to read PRD/Plan/Walkthrough. If content exists, read and reference it before planning/implementation; if empty, state it. Use list_memories/get_memory for key context.
+先用 get_project_status 读取 PRD/Plan/Walkthrough；如有内容必须先阅读并在计划/实现中引用；为空则说明为空。关键上下文用 list_memories/get_memory 读取。
+
 ## PRD & Approval / PRD 与审批
 Create a PRD draft → user review/adjust → approval before any Plan. Do not implement (write code/run commands/use external tools) before approval.
 先输出 PRD 草案 → 用户确认/补充 → 审批通过后才能输出 Plan。未审批不得开始实现（写代码/运行命令/调用外部工具）。
+
+## PRD Standard / PRD 标准
+PRD = Project Requirements Document. Must include problem/background, goals/non-goals, users/personas, scope, functional + non-functional requirements (prefer tables), acceptance criteria, risks/dependencies, milestones, open questions, references (official docs/Context7).
+PRD = 项目需求文档。必须包含：问题/背景、目标/非目标、用户/场景、范围、功能/非功能需求（建议表格）、验收标准、风险/依赖、里程碑、开放问题、参考资料（官方文档/Context7）。
 
 ## Project Tracking & Memory / 项目跟踪与记忆
 Keep tracking updated via set_prd / update_task / update_plan / update_todos / update_checklist / update_walkthrough; store key context in save_memory, and review list_memories/get_memory before starting; never reuse tracking/memory across projects.
 使用 set_prd / update_task / update_plan / update_todos / update_checklist / update_walkthrough 维护项目跟踪；重要上下文用 save_memory 保存，开始前先 list_memories/get_memory；跟踪与记忆必须严格按当前项目，不得跨项目复用。
 
+## Walkthrough / Walkthrough
+Update walkthrough after every meaningful implementation/decision/fix (update_walkthrough). Keep it review-ready.
+每次关键实现/决策/修复后都要更新 Walkthrough（update_walkthrough），保证随时可审阅。
+
 ## Workflow (must follow; strict order) / 工作流（必须严格按顺序）
-Read → Research → Plan → TODO → Act → Code Review → Act → Update Progress → Check Progress → Ask
+Read → Research → Plan → TODO → Act → Update Progress → Check Progress → Code Review → Ask
 
 1) Read：先读目标/现状/约束；在做任何修改前先阅读目标文件/相关代码/配置/日志；缺关键输入先用 ask_question 按需提问。
 2) Research：不要凭空猜，必须拿到可执行信息（官方文档/README/发布说明/源码优先；依赖先确认最新版与破坏性变更；可用则用 Context7 获取最新文档；web search 把 2024 视为过旧，默认从 2025-10 起筛选，必要时加 after:2025-09-30；结果泛泛就调整检索词继续搜直到拿到确切 API/配置/版本/路径/命令）。
 3) Plan：给出总体 Plan（里程碑/风险/验收），并在 Plan 中包含 Task/子任务/TODO/Checklist（按需拆分）。
 4) TODO：把 Plan 细化为可验证、可跟踪的小 TODO（能并行则并行）。
 5) Act：动手前先整理入口与模块边界、清理结构；实现最小正确改动，小步推进、优先修根因、保持风格一致；代码必须模块化、易读、易维护（避免无关重构）。
-6) Code Review：像 PR 一样评审：检查 gaps、正确性、边界条件、错误处理、安全（注入/权限/泄露/依赖风险）、性能（热点/泄漏）、兼容性。
-7) Act：根据评审结论修补问题；必要时补测试/回归点。
-8) Update Progress：每完成一个 TODO 就更新进度，说明做了什么/为什么。
-9) Check Progress：运行 build/test/lint；无法运行则给出可执行验证步骤与期望结果。
-10) Ask：最终只允许调用 ask_continue(reason) 并等待；reason 必须包含：完成内容、风险/注意点、验证步骤/命令、下一步。
+6) Update Progress：每完成一个 TODO 就更新进度，说明做了什么/为什么。
+7) Check Progress：运行 build/test/lint；无法运行则给出可执行验证步骤与期望结果。
+8) Code Review（最后一关）：像 PR 一样评审：检查 gaps、正确性、边界条件、错误处理、安全（注入/权限/泄露/依赖风险）、性能（热点/泄漏）、兼容性；发现问题就回到 Act 修复并重新 Check Progress，然后再 Review。
+9) Ask：最终只允许调用 ask_continue(reason) 并等待；reason 必须包含：完成内容、风险/注意点、验证步骤/命令、下一步。
 `;
 
     const rulesPath = path.join(workspaceFolders[0].uri.fsPath, '.windsurf', 'rules.md');
@@ -4794,6 +5314,9 @@ class SidebarProvider implements vscode.WebviewViewProvider {
                 case 'openPrdPanel':
                     showPrdPanel();
                     break;
+                case 'openTaskPanel':
+                    showTaskPanel();
+                    break;
                 case 'openPlanPanel':
                     showPlanPanel();
                     break;
@@ -4840,7 +5363,8 @@ class SidebarProvider implements vscode.WebviewViewProvider {
         message: string,
         allowImage: boolean,
         dialogOptions?: {
-            mode?: 'choice' | 'prd';
+            mode?: DialogMode;
+            confirmType?: ConfirmDialogType;
             questions?: ChoiceQuestion[];
             allowText?: boolean;
             prdContent?: string;
@@ -4874,8 +5398,7 @@ class SidebarProvider implements vscode.WebviewViewProvider {
             `font-src 'none'`,
             `connect-src 'none'`
         ].join('; ');
-        const homeDir = os.homedir();
-        const configPaths = getWindsurfMcpConfigPaths(homeDir);
+        const configPaths = getWindsurfMcpConfigPaths(getReadHomeDirs());
 
         let isConfigured = false;
         try {
@@ -5134,6 +5657,10 @@ class SidebarProvider implements vscode.WebviewViewProvider {
                 <div class="panel-row">
                     <div class="panel-name">${tr('sidebar.panelPrd', {}, lang)}</div>
                     <button class="panel-open" data-action="openPrdPanel">${tr('sidebar.openPanel', {}, lang)}</button>
+                </div>
+                <div class="panel-row">
+                    <div class="panel-name">${tr('sidebar.panelTask', {}, lang)}</div>
+                    <button class="panel-open" data-action="openTaskPanel">${tr('sidebar.openPanel', {}, lang)}</button>
                 </div>
                 <div class="panel-row">
                     <div class="panel-name">${tr('sidebar.panelPlan', {}, lang)}</div>
