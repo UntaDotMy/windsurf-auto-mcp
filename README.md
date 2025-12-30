@@ -17,7 +17,7 @@
   <a href="#安装">安装</a> •
   <a href="#快速开始">快速开始</a> •
   <a href="#推荐全局规则--提示语">规则</a> •
-  <a href="#项目跟踪prd--plan--todo--checklist">项目跟踪</a> •
+  <a href="#项目跟踪prd--task--plan--todo--checklist--walkthrough">项目跟踪</a> •
   <a href="#windsurf-hooks">Hooks</a> •
   <a href="#mcp-工具列表">工具列表</a> •
   <a href="#常见问题">FAQ</a>
@@ -27,16 +27,19 @@
 
 ## 概览
 
-WindsurfAutoMcp 通过 MCP 协议提供标准化交互：AI 完成任务后通过 `ask_continue` 询问是否继续，避免空转消耗，同时提供可视化面板与项目跟踪（PRD/计划/TODO/Checklist）。
+WindsurfAutoMcp 通过 MCP 协议标准化交互：AI 完成任务后必须 `ask_continue`，避免空转消耗；同时提供 PRD 审批弹窗与只读项目面板（PRD/Plan/Walkthrough），其中 Plan 汇总 Task/TODO/Checklist，统计显示在侧边栏。
 
 ## 功能特性
 
 - ✅ 任务完成确认：强制 `ask_continue` 结束
-- 🔌 MCP HTTP 服务器：稳定可控
+- ❓ ask_question 单选澄清（选项数量不限，可取消重选）
+- 🧾 PRD 审批弹窗：未审批不可进入 Plan/实现
+- 🧭 项目面板：PRD / Plan / Walkthrough（只读，AI 更新；Plan 汇总 Task/TODO/Checklist）
+- 📊 统计显示在侧边栏
+- 📊 项目级统计 + Memory 存储
+- ⚙️ 一键配置 Windsurf / windsurf-next：写入 MCP 配置
+- 🛡️ Hooks 护栏：阻止危险命令/敏感写入（缺失时自动更新）
 - 🖼️ 图片上传与删除：发送前可移除
-- ⚙️ 一键配置 Windsurf / windsurf-next：自动写入 MCP 配置
-- 🧭 项目跟踪：PRD/Plan/TODO/Checklist + 进度与统计
-- 🛡️ Hooks 护栏：阻止危险命令/敏感写入（可选）
 - 🌐 中英双语界面
 - ⌨️ 快捷键：`Ctrl+M` 打开对话框
 
@@ -67,11 +70,12 @@ WindsurfAutoMcp 通过 MCP 协议提供标准化交互：AI 完成任务后通�
 
 1. 安装扩展后，打开侧边栏 **WindsurfAutoMcp**
 2. 确认服务器已启动（默认自动启动）
-3. 点击 **写入 Windsurf 配置**（会同时写入 windsurf 与 windsurf-next）
+3. 点击 **写入 Windsurf 配置**（会同时写入 `%USERPROFILE%\.codeium\windsurf\mcp_config.json` 与 `%USERPROFILE%\.codeium\windsurf-next\mcp_config.json`）
 4. **重启 Windsurf** 使 MCP 配置与 Hooks 生效
-5. 开始使用：AI 完成任务后会调用 `ask_continue`
+5. 打开 PRD/Plan/Walkthrough 面板查看进度（面板只读，AI 会通过 MCP 工具更新；Plan 汇总 Task/TODO/Checklist）
+6. 开始使用：AI 完成任务后会调用 `ask_continue`；当需要澄清时会调用 `ask_question`
 
-> 建议将下方“全局规则/提示语”写入 Windsurf 全局规则中；如果不方便，也可每次新对话粘贴一次。
+> 下面的“全局规则/提示语”只提供在 README 中展示；请手动写入 Windsurf 全局规则（或每次新对话粘贴）。
 
 ## 推荐全局规则 / 提示语
 
@@ -98,17 +102,19 @@ WindsurfAutoMcp 通过 MCP 协议提供标准化交互：AI 完成任务后通�
 - 文档（Docs）：更新 README/配置/使用说明，确保用户能按步骤复现。
 - 发布/运维（Release/DevOps）：给出升级/回滚说明，避免破坏性变更。
 
-【开始前必须做】先读“目标/现状/约束”。在做任何修改前，必须先阅读目标文件/相关代码/配置/日志；不确定点必须用 ask_question 提问（单选 A/B/C，可附补充信息），问题控制在 1-3 个。
+【开始前必须做】先读“目标/现状/约束”。在做任何修改前，必须先阅读目标文件/相关代码/配置/日志；不确定点必须用 ask_question 按需提问（单选，选项数量不限，可附补充信息）。
+
+【ask_question vs ask_continue】ask_question 仅用于澄清/规划前置问题；ask_continue 只在“任务完成后”用于确认是否继续或接收追加指令。
 
 【PRD 与审批（必须）】先输出 PRD 草案 → 用户确认/补充 → 审批通过后才能输出 Plan；未审批不得开始实现（写代码/运行命令/调用外部工具）。
 
-【计划与拆解（必须做到）】对任何“大功能/复杂任务”（以及任何非小改动），必须先输出 Plan，并拆成 TODO 小任务（每项可验证、可跟踪、可并行）。每完成一项就更新进度。
+【计划与拆解（必须做到）】对任何“大功能/复杂任务”（以及任何非小改动），必须先输出 Plan，并在 Plan 中包含 Task/子任务/TODO/Checklist（必要时按任务拆分）。每完成一项就更新进度。
 
 【不信任知识（必须做到）】不要依赖记忆/常识拍脑袋：你的知识可能过时且有害。遇到关键决策（API/配置/版本/安全/安装）必须先研究，再行动。
 
 【统一工作流（必须遵循；严格按顺序）】
 Read → Research → Plan → TODO → Act → Code Review → Act → Update Progress → Check Progress → Ask
-1) Read：先读目标/现状/约束；在做任何修改前先阅读目标文件/相关代码/配置/日志；缺关键输入先用 ask_question 问 1-3 个问题。
+1) Read：先读目标/现状/约束；在做任何修改前先阅读目标文件/相关代码/配置/日志；缺关键输入先用 ask_question 按需提问。
 2) Research：不要凭空猜，必须拿到可执行信息（官方文档/README/发布说明/源码优先；依赖先确认最新版与破坏性变更；可用则用 Context7 获取最新文档；web search 把 2024 视为过旧，默认从 2025-10 起筛选，必要时加 after:2025-09-30；结果泛泛就调整检索词继续搜直到拿到确切 API/配置/版本/路径/命令）。
 3) Plan：给出总体 Plan（里程碑/风险/验收）。
 4) TODO：把 Plan 拆成可验证、可跟踪的小 TODO（能并行则并行）。
@@ -132,15 +138,25 @@ Read → Research → Plan → TODO → Act → Code Review → Act → Update P
 - 将用 ask_continue(reason) 结束并等待用户
 ```
 
-## 项目跟踪（PRD / Plan / TODO / Checklist）
+## 项目跟踪（PRD / Plan / Walkthrough）
 
-- 跟踪是按 **项目根目录** 存储的，不会混用其它项目的 PRD/Plan/TODO
+- 跟踪按 **项目根目录** 存储，不会混用其它项目数据
 - 跟踪文件（用户级）：
   - Windows: `%USERPROFILE%\.codeium\windsurf\windsurf-auto-mcp-tracker.json`
   - Windows (windsurf-next): `%USERPROFILE%\.codeium\windsurf-next\windsurf-auto-mcp-tracker.json`
-- 侧边栏提供 PRD/Plan/TODO/Checklist 编辑与实时进度
-- 统计为 **单项目** 级别：PRD 更新、审批、计划更新、TODO 更新、清单更新
-- Hooks 在 `pre_write_code` 会校验 PRD 已审批 + Plan/TODO 已建立，否则阻止写入
+- Memory 文件（用户级）：
+  - Windows: `%USERPROFILE%\.codeium\windsurf\windsurf-auto-mcp-memories.json`
+  - Windows (windsurf-next): `%USERPROFILE%\.codeium\windsurf-next\windsurf-auto-mcp-memories.json`
+- 项目产出（brain）存储：
+  - Windows: `%USERPROFILE%\.codeium\windsurf\windsurf-auto-mcp\brain\<projectId>\`
+  - Windows (windsurf-next): `%USERPROFILE%\.codeium\windsurf-next\windsurf-auto-mcp\brain\<projectId>\`
+  - 文件：`prd.md` / `implementation_plan.md` / `task.md` / `walkthrough.md` / `memory.md`（含 `.metadata.json` / `.resolved` / `.resolved.N` 版本快照）
+- `projectId` 会在 `get_project_status` 返回的 JSON 中提供
+- 面板为只读，由 AI 通过 MCP 工具更新（PRD/Plan/Walkthrough）；Plan 汇总 Task/TODO/Checklist
+- 统计显示在侧边栏（全局调用 + 项目统计）
+- PRD 由 AI 生成并触发审批弹窗；未审批无法进入 Plan/实现
+- 统计为 **单项目** 级别：PRD 更新/审批、Task/Plan/TODO/Checklist 更新
+- Hooks 在 `pre_write_code` 会校验 PRD 审批 + Plan/TODO 是否已建立，否则阻止写入
 
 ## Windsurf Hooks
 
@@ -160,7 +176,7 @@ Read → Research → Plan → TODO → Act → Code Review → Act → Update P
 ### 自动安装规则
 
 - 扩展激活时会检查并安装 **用户级 hooks.json**（默认开启）
-- 已安装则不会重复写入；仅在缺失时补齐
+- 已安装但缺失项会自动补齐（相当于更新到最新）
 - 不覆盖你已有 hooks，仅追加缺失项
 - **更新 hooks.json 后需重启 Windsurf 才会生效**
 
@@ -179,13 +195,18 @@ Read → Research → Plan → TODO → Act → Code Review → Act → Update P
 | 工具 | 说明 |
 |------|------|
 | `ask_user` | 请求用户输入/确认（支持图片） |
-| `ask_question` | 单选澄清问题（A/B/C...，可附补充文本/图片） |
+| `ask_question` | 单选澄清问题（选项数量不限，可附补充文本/图片） |
 | `set_prd` | 创建/更新 PRD 草案 |
 | `approve_prd` | 审批 PRD |
+| `update_task` | 设置/更新任务清单 |
 | `update_plan` | 设置/更新计划清单 |
 | `update_todos` | 设置/更新 TODO 清单 |
 | `update_checklist` | 设置/更新交付检查清单 |
+| `update_walkthrough` | 更新 Walkthrough 总结 |
 | `get_project_status` | 获取当前项目跟踪状态 |
+| `save_memory` | 保存项目记忆 |
+| `get_memory` | 读取项目记忆 |
+| `list_memories` | 列出项目记忆键 |
 | `notify` | 通知消息 |
 | `ask_continue` | 任务完成后询问是否继续 |
 

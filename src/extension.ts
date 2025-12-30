@@ -8,6 +8,7 @@ import * as http from 'http';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import * as crypto from 'crypto';
 
 type UiLanguage = 'zh' | 'en';
 type ChoiceQuestion = {
@@ -25,12 +26,14 @@ type TrackerItem = {
 type ProjectTrackerStats = {
     prdUpdates: number;
     prdApprovals: number;
+    taskUpdates: number;
     planUpdates: number;
     todoUpdates: number;
     checklistUpdates: number;
     updatedAt?: string;
 };
 type ProjectTracker = {
+    projectId: string;
     rootPath: string;
     name: string;
     prd: {
@@ -39,10 +42,15 @@ type ProjectTracker = {
         approvedBy?: string;
         approvedAt?: string;
         updatedAt?: string;
+        generatedBy?: 'ai';
+        reviewNote?: string;
+        reviewedAt?: string;
     };
-    plan: { items: TrackerItem[] };
+    task: { summary: string; items: TrackerItem[] };
+    plan: { summary: string; items: TrackerItem[] };
     todos: { items: TrackerItem[] };
     checklist: { items: TrackerItem[] };
+    walkthrough: { content: string; updatedAt?: string };
     stats: ProjectTrackerStats;
     updatedAt: string;
 };
@@ -50,6 +58,18 @@ type TrackerData = {
     schemaVersion: 1;
     activeProject?: string;
     projects: Record<string, ProjectTracker>;
+};
+type MemoryEntry = {
+    key: string;
+    content: string;
+    updatedAt: string;
+};
+type ProjectMemoryStore = {
+    memories: Record<string, MemoryEntry>;
+};
+type MemoryData = {
+    schemaVersion: 1;
+    projects: Record<string, ProjectMemoryStore>;
 };
 
 const I18N: Record<UiLanguage, Record<string, string>> = {
@@ -71,10 +91,23 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'ext.statsTitle': 'WindsurfAutoMcp 统计:\n',
         'ext.statsLineTotal': '总调用: {total}\n',
         'ext.statsLineAskUser': 'ask_user: {askUser}\n',
+        'ext.statsLineAskQuestion': 'ask_question: {askQuestion}\n',
         'ext.statsLineAskContinue': 'ask_continue: {askContinue}\n',
         'ext.statsLineNotify': 'notify: {notify}\n',
+        'ext.statsLineSetPrd': 'set_prd: {setPrd}\n',
+        'ext.statsLineApprovePrd': 'approve_prd: {approvePrd}\n',
+        'ext.statsLineUpdateTask': 'update_task: {updateTask}\n',
+        'ext.statsLineUpdatePlan': 'update_plan: {updatePlan}\n',
+        'ext.statsLineUpdateTodos': 'update_todos: {updateTodos}\n',
+        'ext.statsLineUpdateChecklist': 'update_checklist: {updateChecklist}\n',
+        'ext.statsLineUpdateWalkthrough': 'update_walkthrough: {updateWalkthrough}\n',
+        'ext.statsLineGetProjectStatus': 'get_project_status: {getProjectStatus}\n',
+        'ext.statsLineSaveMemory': 'save_memory: {saveMemory}\n',
+        'ext.statsLineGetMemory': 'get_memory: {getMemory}\n',
+        'ext.statsLineListMemory': 'list_memories: {listMemory}\n',
         'ext.statsLineUploads': '图片上传: {uploads}\n',
         'ext.statsLineUptime': '运行时间: {uptime} 分钟',
+        'ext.statsInSidebar': '统计已显示在侧边栏。',
         'ext.workspaceRequired': '请先打开一个工作区',
         'ext.statusTooltipRunning': 'WindsurfAutoMcp 运行中 - 端口 {port}\n调用次数: {calls}',
         'ext.statusTooltipStopped': 'WindsurfAutoMcp 已停止',
@@ -135,11 +168,11 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
             '',
             '【团队协作（必须做到）】你现在扮演一个“完整的软件工程部门”（跨职能团队）协作完成任务，适用于任何语言/框架/平台；对外输出要简洁一致，但要体现“协同结论”。',
             '',
-            '【开始前必须做】先读“目标/现状/约束”。在做任何修改前，必须先阅读目标文件/相关代码/配置/日志；缺关键输入先用 ask_question 提问（单选 A/B/C，可附补充信息）。',
+            '【开始前必须做】先读“目标/现状/约束”。在做任何修改前，必须先阅读目标文件/相关代码/配置/日志；缺关键输入先用 ask_question 提问（单选，选项数量不限，可附补充信息，按需提问）。',
             '',
             '【PRD 与审批（必须）】先输出 PRD 草案 → 用户确认/补充 → 审批通过后才能输出 Plan；未审批不得开始实现（写代码/运行命令/调用外部工具）。',
             '',
-            '【计划与拆解（必须做到）】对任何“大功能/复杂任务”（以及任何非小改动），必须先输出 Plan，并拆成 TODO 小任务（每项可验证、可跟踪、可并行）。每完成一项就更新进度并同步项目跟踪。',
+            '【计划与拆解（必须做到）】对任何“大功能/复杂任务”（以及任何非小改动），必须先输出 Plan，并在 Plan 中包含 Task/子任务/TODO/Checklist（必要时按任务拆分）。每完成一项就更新进度并同步项目跟踪。',
             '',
             '【不信任知识（必须做到）】不要依赖记忆/常识拍脑袋：你的知识可能过时且有害。遇到关键决策（API/配置/版本/安全/安装）必须先研究，再行动。',
             '',
@@ -154,22 +187,22 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
             '- 文档（Docs）：更新 README/配置/使用说明，确保用户能按步骤复现。',
             '- 发布/运维（Release/DevOps）：给出升级/回滚说明，避免破坏性变更。',
             '',
-	            '【统一工作流（必须遵循；严格按顺序）】',
-	            'Read → Research → Plan → TODO → Act → Code Review → Act → Update Progress → Check Progress → Ask',
-	            '1) Read：先读目标/现状/约束；在做任何修改前先阅读目标文件/相关代码/配置/日志；缺关键输入先用 ask_question 问 1-3 个问题。',
-	            '2) Research（不要凭空猜，必须拿到可执行信息）：优先查官方文档/官方 README/发布说明/源码；依赖先确认最新版用法与破坏性变更；可用则用 Context7 获取最新文档；web search 把 2024 视为过旧，默认从 2025-10 起筛选（可加 after:2025-09-30）；结果泛泛/无法落地就调整检索词继续搜，直到拿到确切 API/配置/版本/路径/命令。',
-	            '3) Plan：给出总体 Plan（里程碑/风险/验收）。',
-	            '4) TODO：把 Plan 拆成可验证、可跟踪的小 TODO（能并行则并行）。',
-	            '5) Act：动手前先整理入口与模块边界；实现最小正确改动，小步推进、优先修根因、保持风格一致；新增/修改代码必须模块化、易读、易维护（但不要做与任务无关的重构）。',
-	            '6) Code Review：像 PR 一样评审：检查 gaps、正确性、边界条件、错误处理、安全（注入/权限/泄露/依赖风险）、性能（热点/泄漏）、兼容性。',
-	            '7) Act：根据评审结论修补问题；必要时补测试/回归点。',
-		            '8) Update Progress：每完成一个 TODO 就更新进度，说明做了什么/为什么。',
-		            '9) Check Progress：运行 build/test/lint；无法运行则给出可执行验证步骤与期望结果。',
-		            '10) Ask：最终只允许调用 ask_continue(reason) 并等待；reason 必须包含：完成内容、风险/注意点、验证步骤/命令、下一步。',
-		            '',
-		            '【Windsurf Hooks（推荐，可当强制护栏）】如环境支持 hooks.json：建议配置 pre_run_command/pre_write_code 阻止危险命令/敏感写入，并用 post_cascade_response 审计是否遗漏 ask_continue；官方文档：https://docs.windsurf.com/windsurf/cascade/hooks',
-	            '',
-	            '【交付前自检清单（必须逐项满足）】',
+            '【统一工作流（必须遵循；严格按顺序）】',
+            'Read → Research → Plan → TODO → Act → Code Review → Act → Update Progress → Check Progress → Ask',
+            '1) Read：先读目标/现状/约束；在做任何修改前先阅读目标文件/相关代码/配置/日志；缺关键输入先用 ask_question 提问（按需）。',
+            '2) Research（不要凭空猜，必须拿到可执行信息）：优先查官方文档/官方 README/发布说明/源码；依赖先确认最新版用法与破坏性变更；可用则用 Context7 获取最新文档；web search 把 2024 视为过旧，默认从 2025-10 起筛选（可加 after:2025-09-30）；结果泛泛/无法落地就调整检索词继续搜，直到拿到确切 API/配置/版本/路径/命令。',
+            '3) Plan：给出总体 Plan（里程碑/风险/验收）。',
+            '4) TODO：把 Plan 拆成可验证、可跟踪的小 TODO（能并行则并行）。',
+            '5) Act：动手前先整理入口与模块边界；实现最小正确改动，小步推进、优先修根因、保持风格一致；新增/修改代码必须模块化、易读、易维护（但不要做与任务无关的重构）。',
+            '6) Code Review：像 PR 一样评审：检查 gaps、正确性、边界条件、错误处理、安全（注入/权限/泄露/依赖风险）、性能（热点/泄漏）、兼容性。',
+            '7) Act：根据评审结论修补问题；必要时补测试/回归点。',
+            '8) Update Progress：每完成一个 TODO 就更新进度，说明做了什么/为什么。',
+            '9) Check Progress：运行 build/test/lint；无法运行则给出可执行验证步骤与期望结果。',
+            '10) Ask：最终只允许调用 ask_continue(reason) 并等待；reason 必须包含：完成内容、风险/注意点、验证步骤/命令、下一步。',
+            '',
+            '【Windsurf Hooks（推荐，可当强制护栏）】如环境支持 hooks.json：建议配置 pre_run_command/pre_write_code 阻止危险命令/敏感写入，并用 post_cascade_response 审计是否遗漏 ask_continue；官方文档：https://docs.windsurf.com/windsurf/cascade/hooks',
+            '',
+            '【交付前自检清单（必须逐项满足）】',
             '- 已读目标/现状/约束',
             '- 已给出 Plan + TODO（如适用）',
             '- 关键点已研究官方来源/Context7（如适用）',
@@ -196,9 +229,25 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'sidebar.trackerStats': '统计',
         'sidebar.trackerStatsPrd': 'PRD 更新',
         'sidebar.trackerStatsApprovals': '审批',
+        'sidebar.trackerStatsTask': '任务更新',
         'sidebar.trackerStatsPlan': '计划更新',
         'sidebar.trackerStatsTodo': 'TODO 更新',
         'sidebar.trackerStatsChecklist': '清单更新',
+        'sidebar.statAskContinue': 'ask_continue',
+        'sidebar.statAskUser': 'ask_user',
+        'sidebar.statAskQuestion': 'ask_question',
+        'sidebar.statSetPrd': 'set_prd',
+        'sidebar.statApprovePrd': 'approve_prd',
+        'sidebar.statUpdateTask': 'update_task',
+        'sidebar.statUpdatePlan': 'update_plan',
+        'sidebar.statUpdateTodos': 'update_todos',
+        'sidebar.statUpdateChecklist': 'update_checklist',
+        'sidebar.statUpdateWalkthrough': 'update_walkthrough',
+        'sidebar.statGetProjectStatus': 'get_project_status',
+        'sidebar.statSaveMemory': 'save_memory',
+        'sidebar.statGetMemory': 'get_memory',
+        'sidebar.statListMemory': 'list_memories',
+        'sidebar.statNotify': 'notify',
         'sidebar.copy': '复制',
         'sidebar.windsurfConfigTitle': 'Windsurf 配置',
         'sidebar.writeConfig': '写入 Windsurf 配置',
@@ -213,6 +262,23 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'sidebar.defaultReason': '默认完成原因',
         'sidebar.defaultReasonPlaceholder': '例如：任务已完成',
         'sidebar.saveSettings': '保存设置',
+        'sidebar.panelsTitle': '项目面板',
+        'sidebar.panelPrd': 'PRD',
+        'sidebar.panelTask': '任务',
+        'sidebar.panelPlan': '实施计划',
+        'sidebar.panelTodos': 'TODO',
+        'sidebar.panelChecklist': '检查清单',
+        'sidebar.panelWalkthrough': 'Walkthrough',
+        'sidebar.panelStats': '统计',
+        'sidebar.systemTitle': '系统控制',
+        'sidebar.openPanel': '打开',
+        'sidebar.configureWindsurf': '写入 Windsurf 配置',
+        'sidebar.installHooks': '安装/更新 Hooks',
+        'sidebar.openDialogShort': '对话确认',
+        'sidebar.languageTitle': '语言',
+        'sidebar.configStatus': '配置状态',
+        'sidebar.configStatusConfigured': '已配置',
+        'sidebar.configStatusMissing': '未配置',
 
         // Sidebar toasts
         'toast.startingServer': '正在启动服务器...',
@@ -264,7 +330,39 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'panel.choiceQuestion': '问题',
         'panel.contextLabel': '上下文',
         'panel.extraLabel': '补充信息（可选）',
-        'panel.extraPlaceholder': '如需补充，请填写'
+        'panel.extraPlaceholder': '如需补充，请填写',
+        'panel.prdTitle': 'PRD 审核',
+        'panel.prdSubtitle': '请确认或要求修改',
+        'panel.prdApprove': '批准 PRD',
+        'panel.prdRequestChanges': '请求修改',
+        'panel.prdNoteLabel': '修改意见',
+        'panel.prdNotePlaceholder': '请描述你希望修改的内容',
+        'panel.prdApproveHint': '审批后才能进入计划/实现阶段',
+        'panel.readOnlyEmpty': '暂无内容',
+        'panel.sectionSummary': '摘要',
+        'panel.sectionItems': '清单',
+        'panel.sectionProgress': '进度',
+        'panel.statsGlobal': '全局统计',
+        'panel.statsProject': '项目统计',
+        'panel.statsCalls': '工具调用',
+        'panel.statsTracker': '项目跟踪',
+        'panel.statsUptime': '运行时间',
+        'panel.statsMinutes': '{minutes} 分钟',
+        'panel.prdPanelTitle': 'PRD',
+        'panel.prdStatusDraft': '草案',
+        'panel.prdStatusApproved': '已审批',
+        'panel.reviewNoteLabel': '审核备注',
+        'panel.taskTitle': '任务',
+        'panel.planTitle': '实施计划',
+        'panel.todoTitle': 'TODO',
+        'panel.checklistTitle': '检查清单',
+        'panel.walkthroughTitle': 'Walkthrough',
+        'panel.walkthroughSubtitle': '实施记录',
+        'artifact.memoryTitle': '项目记忆',
+        'artifact.memoryUpdated': '更新时间',
+        'panel.itemTodo': '待办',
+        'panel.itemDoing': '进行中',
+        'panel.itemDone': '已完成'
     },
     en: {
         // Extension host
@@ -284,10 +382,23 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'ext.statsTitle': 'WindsurfAutoMcp stats:\n',
         'ext.statsLineTotal': 'Total calls: {total}\n',
         'ext.statsLineAskUser': 'ask_user: {askUser}\n',
+        'ext.statsLineAskQuestion': 'ask_question: {askQuestion}\n',
         'ext.statsLineAskContinue': 'ask_continue: {askContinue}\n',
         'ext.statsLineNotify': 'notify: {notify}\n',
+        'ext.statsLineSetPrd': 'set_prd: {setPrd}\n',
+        'ext.statsLineApprovePrd': 'approve_prd: {approvePrd}\n',
+        'ext.statsLineUpdateTask': 'update_task: {updateTask}\n',
+        'ext.statsLineUpdatePlan': 'update_plan: {updatePlan}\n',
+        'ext.statsLineUpdateTodos': 'update_todos: {updateTodos}\n',
+        'ext.statsLineUpdateChecklist': 'update_checklist: {updateChecklist}\n',
+        'ext.statsLineUpdateWalkthrough': 'update_walkthrough: {updateWalkthrough}\n',
+        'ext.statsLineGetProjectStatus': 'get_project_status: {getProjectStatus}\n',
+        'ext.statsLineSaveMemory': 'save_memory: {saveMemory}\n',
+        'ext.statsLineGetMemory': 'get_memory: {getMemory}\n',
+        'ext.statsLineListMemory': 'list_memories: {listMemory}\n',
         'ext.statsLineUploads': 'Image uploads: {uploads}\n',
         'ext.statsLineUptime': 'Uptime: {uptime} minutes',
+        'ext.statsInSidebar': 'Stats are shown in the sidebar.',
         'ext.workspaceRequired': 'Please open a workspace first',
         'ext.statusTooltipRunning': 'WindsurfAutoMcp running - port {port}\nCalls: {calls}',
         'ext.statusTooltipStopped': 'WindsurfAutoMcp stopped',
@@ -348,11 +459,11 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
             '',
             'Collaboration (must): operate as a full "software engineering department" (cross-functional team) across any language/framework/platform. Output must be unified and concise, but reflect a consolidated team conclusion.',
             '',
-            'Before anything (must): read the target first. Before decisions/edits, read relevant files/config/logs; if key inputs are missing, use ask_question (single choice A/B/C with optional extra text).',
+            'Before anything (must): read the target first. Before decisions/edits, read relevant files/config/logs; if key inputs are missing, use ask_question (single-choice, any number of options, ask as needed).',
             '',
             'PRD & approval (must): produce a PRD draft → user review/adjust → approval before any Plan; do not implement (write code/run commands/use external tools) before approval.',
             '',
-            'Planning & TODO breakdown (must): for any big feature/complex task (and any non-trivial change), produce a Plan and break it into small TODOs (verifiable, trackable, parallelizable). Update progress as you go.',
+            'Planning & TODO breakdown (must): for any big feature/complex task (and any non-trivial change), produce a Plan that includes Task/subtasks/TODO/Checklist (split per task when needed). Update progress as you go.',
             '',
             'Do not trust your knowledge (must): your knowledge can be outdated and harmful. For any important decision (API/config/version/security/install), research first, then act.',
             '',
@@ -367,22 +478,22 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
             '- Docs: keep README/config/usage accurate and reproducible.',
             '- Release/DevOps: provide upgrade/rollback notes; avoid breaking changes.',
             '',
-	            'Workflow (must follow; strict order):',
-	            'Read → Research → Plan → TODO → Act → Code Review → Act → Update Progress → Check Progress → Ask',
-	            '1) Read: read the target/current state/constraints first; before any decision/edit, read relevant files/config/logs; if key inputs are missing, ask 1–3 targeted questions via ask_question.',
-	            '2) Research (no guessing): prefer official docs/official README/release notes/source; confirm latest usage + breaking changes before upgrading/replacing; use Context7 if available; treat 2024 as outdated and default to sources updated from Oct 2025 onward (≥ 2025-10, add after:2025-09-30); if results are generic, refine and keep searching until you get exact API/config/version/path/commands.',
-	            '3) Plan: provide a high-level plan (milestones/risks/acceptance).',
-	            '4) TODO: break the plan into small verifiable TODOs (trackable, parallelizable).',
-	            '5) Act: tidy boundaries before coding; implement minimal correct changes; fix root causes; keep style consistent; keep code modular/readable/maintainable (avoid unrelated refactors).',
-	            '6) Code Review: like a PR—check gaps, correctness, edge cases, error handling, security (injection/permissions/leaks/deps), performance (hot paths/leaks), compatibility.',
-	            '7) Act: apply fixes from review; add tests/regression points when needed.',
-	            '8) Update Progress: update progress after each TODO, stating what/why.',
-	            '9) Check Progress: run build/tests/lint when possible; otherwise give concrete user-run verification steps + expected results.',
-	            '10) Ask: deliver ONLY via ask_continue(reason) and wait; reason must include what was done, risks/notes, verification steps/commands, and next steps.',
-	            '',
-	            'Windsurf Hooks (recommended; can be hard guardrails): if your environment supports hooks.json, configure pre_run_command/pre_write_code to block dangerous commands/sensitive writes, and use post_cascade_response to audit missing ask_continue. Official docs: https://docs.windsurf.com/windsurf/cascade/hooks',
-	            '',
-	            'Pre-delivery checklist (must satisfy all):',
+            'Workflow (must follow; strict order):',
+            'Read → Research → Plan → TODO → Act → Code Review → Act → Update Progress → Check Progress → Ask',
+            '1) Read: read the target/current state/constraints first; before any decision/edit, read relevant files/config/logs; if key inputs are missing, ask targeted questions via ask_question as needed.',
+            '2) Research (no guessing): prefer official docs/official README/release notes/source; confirm latest usage + breaking changes before upgrading/replacing; use Context7 if available; treat 2024 as outdated and default to sources updated from Oct 2025 onward (≥ 2025-10, add after:2025-09-30); if results are generic, refine and keep searching until you get exact API/config/version/path/commands.',
+            '3) Plan: provide a high-level plan (milestones/risks/acceptance).',
+            '4) TODO: break the plan into small verifiable TODOs (trackable, parallelizable).',
+            '5) Act: tidy boundaries before coding; implement minimal correct changes; fix root causes; keep style consistent; keep code modular/readable/maintainable (avoid unrelated refactors).',
+            '6) Code Review: like a PR—check gaps, correctness, edge cases, error handling, security (injection/permissions/leaks/deps), performance (hot paths/leaks), compatibility.',
+            '7) Act: apply fixes from review; add tests/regression points when needed.',
+            '8) Update Progress: update progress after each TODO, stating what/why.',
+            '9) Check Progress: run build/tests/lint when possible; otherwise give concrete user-run verification steps + expected results.',
+            '10) Ask: deliver ONLY via ask_continue(reason) and wait; reason must include what was done, risks/notes, verification steps/commands, and next steps.',
+            '',
+            'Windsurf Hooks (recommended; can be hard guardrails): if your environment supports hooks.json, configure pre_run_command/pre_write_code to block dangerous commands/sensitive writes, and use post_cascade_response to audit missing ask_continue. Official docs: https://docs.windsurf.com/windsurf/cascade/hooks',
+            '',
+            'Pre-delivery checklist (must satisfy all):',
             '- Read target/current state/constraints',
             '- Plan + TODOs provided (if applicable)',
             '- Key decisions researched via official sources/Context7 (if applicable)',
@@ -409,9 +520,25 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'sidebar.trackerStats': 'Activity',
         'sidebar.trackerStatsPrd': 'PRD updates',
         'sidebar.trackerStatsApprovals': 'Approvals',
+        'sidebar.trackerStatsTask': 'Task updates',
         'sidebar.trackerStatsPlan': 'Plan updates',
         'sidebar.trackerStatsTodo': 'TODO updates',
         'sidebar.trackerStatsChecklist': 'Checklist updates',
+        'sidebar.statAskContinue': 'ask_continue',
+        'sidebar.statAskUser': 'ask_user',
+        'sidebar.statAskQuestion': 'ask_question',
+        'sidebar.statSetPrd': 'set_prd',
+        'sidebar.statApprovePrd': 'approve_prd',
+        'sidebar.statUpdateTask': 'update_task',
+        'sidebar.statUpdatePlan': 'update_plan',
+        'sidebar.statUpdateTodos': 'update_todos',
+        'sidebar.statUpdateChecklist': 'update_checklist',
+        'sidebar.statUpdateWalkthrough': 'update_walkthrough',
+        'sidebar.statGetProjectStatus': 'get_project_status',
+        'sidebar.statSaveMemory': 'save_memory',
+        'sidebar.statGetMemory': 'get_memory',
+        'sidebar.statListMemory': 'list_memories',
+        'sidebar.statNotify': 'notify',
         'sidebar.copy': 'Copy',
         'sidebar.windsurfConfigTitle': 'Windsurf Config',
         'sidebar.writeConfig': 'Write Windsurf config',
@@ -426,6 +553,23 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'sidebar.defaultReason': 'Default completion reason',
         'sidebar.defaultReasonPlaceholder': 'e.g. Task completed',
         'sidebar.saveSettings': 'Save settings',
+        'sidebar.panelsTitle': 'Project Panels',
+        'sidebar.panelPrd': 'PRD',
+        'sidebar.panelTask': 'Task',
+        'sidebar.panelPlan': 'Implementation Plan',
+        'sidebar.panelTodos': 'TODO',
+        'sidebar.panelChecklist': 'Checklist',
+        'sidebar.panelWalkthrough': 'Walkthrough',
+        'sidebar.panelStats': 'Stats',
+        'sidebar.systemTitle': 'System',
+        'sidebar.openPanel': 'Open',
+        'sidebar.configureWindsurf': 'Write Windsurf Config',
+        'sidebar.installHooks': 'Install/Update Hooks',
+        'sidebar.openDialogShort': 'Confirm Dialog',
+        'sidebar.languageTitle': 'Language',
+        'sidebar.configStatus': 'Config Status',
+        'sidebar.configStatusConfigured': 'Configured',
+        'sidebar.configStatusMissing': 'Not configured',
 
         // Sidebar toasts
         'toast.startingServer': 'Starting server...',
@@ -477,7 +621,39 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'panel.choiceQuestion': 'Question',
         'panel.contextLabel': 'Context',
         'panel.extraLabel': 'Extra details (optional)',
-        'panel.extraPlaceholder': 'Add more information if needed'
+        'panel.extraPlaceholder': 'Add more information if needed',
+        'panel.prdTitle': 'PRD Review',
+        'panel.prdSubtitle': 'Approve or request changes',
+        'panel.prdApprove': 'Approve PRD',
+        'panel.prdRequestChanges': 'Request Changes',
+        'panel.prdNoteLabel': 'Change request',
+        'panel.prdNotePlaceholder': 'Describe the changes you want',
+        'panel.prdApproveHint': 'Approval is required before planning/implementation',
+        'panel.readOnlyEmpty': 'No content yet',
+        'panel.sectionSummary': 'Summary',
+        'panel.sectionItems': 'Checklist',
+        'panel.sectionProgress': 'Progress',
+        'panel.statsGlobal': 'Global Stats',
+        'panel.statsProject': 'Project Stats',
+        'panel.statsCalls': 'Tool Calls',
+        'panel.statsTracker': 'Tracking',
+        'panel.statsUptime': 'Uptime',
+        'panel.statsMinutes': '{minutes} minutes',
+        'panel.prdPanelTitle': 'PRD',
+        'panel.prdStatusDraft': 'Draft',
+        'panel.prdStatusApproved': 'Approved',
+        'panel.reviewNoteLabel': 'Review note',
+        'panel.taskTitle': 'Task',
+        'panel.planTitle': 'Implementation Plan',
+        'panel.todoTitle': 'TODO',
+        'panel.checklistTitle': 'Checklist',
+        'panel.walkthroughTitle': 'Walkthrough',
+        'panel.walkthroughSubtitle': 'Delivery log',
+        'artifact.memoryTitle': 'Project Memory',
+        'artifact.memoryUpdated': 'Updated',
+        'panel.itemTodo': 'Todo',
+        'panel.itemDoing': 'In progress',
+        'panel.itemDone': 'Done'
     }
 };
 
@@ -505,6 +681,15 @@ function safeJson(value: unknown): string {
     return JSON.stringify(value).replace(/</g, '\\u003c');
 }
 
+function escapeHtml(value: string): string {
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 function getNonce(length = 32): string {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
     let result = '';
@@ -522,7 +707,7 @@ function getDefaultReason(lang: UiLanguage = getUiLanguage()): string {
 }
 
 function getWindsurfMcpConfigPaths(homeDir: string): string[] {
-    const baseDirs = ['.windsurf', '.codeium'];
+    const baseDirs = ['.codeium'];
     const variants = ['windsurf', 'windsurf-next'];
     const paths: string[] = [];
 
@@ -557,9 +742,25 @@ const HOOK_EVENTS = [
 ] as const;
 
 const TRACKER_FILE_NAME = 'windsurf-auto-mcp-tracker.json';
+const MEMORY_FILE_NAME = 'windsurf-auto-mcp-memories.json';
+const ARTIFACT_ROOT_DIR = 'windsurf-auto-mcp';
+const ARTIFACT_BRAIN_DIR = 'brain';
 
 function nowIso(): string {
     return new Date().toISOString();
+}
+
+function nowIsoNano(): string {
+    const iso = new Date().toISOString();
+    return iso.replace('Z', '000000Z');
+}
+
+function createProjectId(): string {
+    try {
+        return crypto.randomUUID();
+    } catch {
+        return `project_${Math.random().toString(36).slice(2, 12)}`;
+    }
 }
 
 function getTrackerPaths(homeDir: string): Array<{ variant: string; trackerPath: string }> {
@@ -568,6 +769,101 @@ function getTrackerPaths(homeDir: string): Array<{ variant: string; trackerPath:
         variant,
         trackerPath: path.join(homeDir, '.codeium', variant, TRACKER_FILE_NAME)
     }));
+}
+
+function getMemoryPaths(homeDir: string): Array<{ variant: string; memoryPath: string }> {
+    const variants = ['windsurf', 'windsurf-next'];
+    return variants.map((variant) => ({
+        variant,
+        memoryPath: path.join(homeDir, '.codeium', variant, MEMORY_FILE_NAME)
+    }));
+}
+
+type ArtifactSpec = {
+    fileName: string;
+    artifactType: string;
+    content: string;
+    summary?: string;
+};
+
+function getProjectBrainDirs(homeDir: string, projectId: string): Array<{ variant: string; dir: string }> {
+    const variants = ['windsurf', 'windsurf-next'];
+    return variants.map((variant) => ({
+        variant,
+        dir: path.join(homeDir, '.codeium', variant, ARTIFACT_ROOT_DIR, ARTIFACT_BRAIN_DIR, projectId)
+    }));
+}
+
+function readArtifactMetadata(metaPath: string): { version: number; summary?: string; updatedAt?: string } | null {
+    try {
+        if (!fs.existsSync(metaPath)) return null;
+        const raw = fs.readFileSync(metaPath, 'utf-8');
+        if (!raw.trim()) return null;
+        const data = JSON.parse(raw);
+        if (!data || typeof data !== 'object') return null;
+        const parsedVersion = parseInt(String((data as any).version ?? '0'), 10);
+        return {
+            version: Number.isFinite(parsedVersion) ? parsedVersion : 0,
+            summary: typeof (data as any).summary === 'string' ? (data as any).summary : undefined,
+            updatedAt: typeof (data as any).updatedAt === 'string' ? (data as any).updatedAt : undefined
+        };
+    } catch {
+        return null;
+    }
+}
+
+function createArtifactSummary(content: string): string {
+    const lines = String(content || '')
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean);
+    if (lines.length === 0) return '';
+    const first = lines[0].replace(/^#+\s*/, '').trim();
+    if (!first) return '';
+    if (first.length > 180) {
+        return `${first.slice(0, 177)}...`;
+    }
+    return first;
+}
+
+function writeArtifactFiles(dir: string, spec: ArtifactSpec): boolean {
+    const content = spec.content ?? '';
+    if (!content.trim()) return false;
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+    const filePath = path.join(dir, spec.fileName);
+    const resolvedPath = `${filePath}.resolved`;
+    const metaPath = `${filePath}.metadata.json`;
+
+    const existingResolved = fs.existsSync(resolvedPath) ? fs.readFileSync(resolvedPath, 'utf-8') : null;
+    const existingMeta = readArtifactMetadata(metaPath);
+    const existingVersion = existingMeta?.version ?? 0;
+    const contentChanged = existingResolved === null || existingResolved !== content;
+    const needsWrite = contentChanged || !fs.existsSync(filePath) || !fs.existsSync(resolvedPath) || !fs.existsSync(metaPath);
+
+    if (!needsWrite) return false;
+
+    if (existingResolved !== null && existingResolved !== content) {
+        const snapshotPath = `${resolvedPath}.${existingVersion}`;
+        if (!fs.existsSync(snapshotPath)) {
+            fs.writeFileSync(snapshotPath, existingResolved, 'utf-8');
+        }
+    }
+
+    fs.writeFileSync(filePath, content, 'utf-8');
+    fs.writeFileSync(resolvedPath, content, 'utf-8');
+
+    const version = contentChanged || !existingMeta ? existingVersion + 1 : existingVersion;
+    const updatedAt = contentChanged || !existingMeta ? nowIsoNano() : (existingMeta.updatedAt || nowIsoNano());
+    const summary = spec.summary || existingMeta?.summary;
+    const metadata: Record<string, string> = {
+        artifactType: spec.artifactType,
+        updatedAt,
+        version: String(version)
+    };
+    if (summary) metadata.summary = summary;
+    fs.writeFileSync(metaPath, JSON.stringify(metadata, null, 2));
+    return true;
 }
 
 function readTrackerFile(trackerPath: string): TrackerData | null {
@@ -584,11 +880,35 @@ function readTrackerFile(trackerPath: string): TrackerData | null {
     }
 }
 
+function readMemoryFile(memoryPath: string): MemoryData | null {
+    try {
+        if (!fs.existsSync(memoryPath)) return null;
+        const raw = fs.readFileSync(memoryPath, 'utf-8');
+        if (!raw.trim()) return null;
+        const data = JSON.parse(raw);
+        if (!data || typeof data !== 'object') return null;
+        if (data.schemaVersion !== 1 || typeof data.projects !== 'object') return null;
+        return data as MemoryData;
+    } catch {
+        return null;
+    }
+}
+
 function loadTrackerData(): TrackerData {
     const homeDir = os.homedir();
     const paths = getTrackerPaths(homeDir);
     for (const { trackerPath } of paths) {
         const data = readTrackerFile(trackerPath);
+        if (data) return data;
+    }
+    return { schemaVersion: 1, projects: {} };
+}
+
+function loadMemoryData(): MemoryData {
+    const homeDir = os.homedir();
+    const paths = getMemoryPaths(homeDir);
+    for (const { memoryPath } of paths) {
+        const data = readMemoryFile(memoryPath);
         if (data) return data;
     }
     return { schemaVersion: 1, projects: {} };
@@ -601,6 +921,16 @@ function saveTrackerData(data: TrackerData): void {
         const dir = path.dirname(trackerPath);
         if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
         fs.writeFileSync(trackerPath, JSON.stringify(data, null, 2));
+    }
+}
+
+function saveMemoryData(data: MemoryData): void {
+    const homeDir = os.homedir();
+    const paths = getMemoryPaths(homeDir);
+    for (const { memoryPath } of paths) {
+        const dir = path.dirname(memoryPath);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(memoryPath, JSON.stringify(data, null, 2));
     }
 }
 
@@ -652,6 +982,7 @@ function createDefaultTrackerStats(): ProjectTrackerStats {
     return {
         prdUpdates: 0,
         prdApprovals: 0,
+        taskUpdates: 0,
         planUpdates: 0,
         todoUpdates: 0,
         checklistUpdates: 0
@@ -665,6 +996,7 @@ function normalizeTrackerStats(raw: any): ProjectTrackerStats {
     return {
         prdUpdates: safe(raw.prdUpdates),
         prdApprovals: safe(raw.prdApprovals),
+        taskUpdates: safe(raw.taskUpdates),
         planUpdates: safe(raw.planUpdates),
         todoUpdates: safe(raw.todoUpdates),
         checklistUpdates: safe(raw.checklistUpdates),
@@ -675,10 +1007,37 @@ function normalizeTrackerStats(raw: any): ProjectTrackerStats {
 function ensureProjectTracker(data: TrackerData, rootPath: string, lang: UiLanguage): ProjectTracker {
     const existing = data.projects[rootPath];
     if (existing) {
+        if (!existing.projectId || typeof existing.projectId !== 'string') {
+            existing.projectId = createProjectId();
+        }
         existing.stats = normalizeTrackerStats(existing.stats);
+        if (!existing.task || typeof existing.task !== 'object') {
+            existing.task = { summary: '', items: [] };
+        } else {
+            if (typeof existing.task.summary !== 'string') existing.task.summary = '';
+            if (!Array.isArray(existing.task.items)) existing.task.items = [];
+        }
+        if (!existing.plan || typeof existing.plan !== 'object') {
+            existing.plan = { summary: '', items: [] };
+        } else {
+            if (typeof existing.plan.summary !== 'string') existing.plan.summary = '';
+            if (!Array.isArray(existing.plan.items)) existing.plan.items = [];
+        }
+        if (!existing.todos || typeof existing.todos !== 'object' || !Array.isArray(existing.todos.items)) {
+            existing.todos = { items: [] };
+        }
+        if (!existing.checklist || typeof existing.checklist !== 'object' || !Array.isArray(existing.checklist.items)) {
+            existing.checklist = { items: [] };
+        }
+        if (!existing.walkthrough || typeof existing.walkthrough !== 'object') {
+            existing.walkthrough = { content: '' };
+        } else if (typeof existing.walkthrough.content !== 'string') {
+            existing.walkthrough.content = '';
+        }
         return existing;
     }
     const project: ProjectTracker = {
+        projectId: createProjectId(),
         rootPath,
         name: getProjectNameFromPath(rootPath),
         prd: {
@@ -686,9 +1045,11 @@ function ensureProjectTracker(data: TrackerData, rootPath: string, lang: UiLangu
             status: 'draft',
             updatedAt: nowIso()
         },
-        plan: { items: [] },
+        task: { summary: '', items: [] },
+        plan: { summary: '', items: [] },
         todos: { items: [] },
         checklist: { items: [] },
+        walkthrough: { content: '' },
         stats: createDefaultTrackerStats(),
         updatedAt: nowIso()
     };
@@ -703,9 +1064,18 @@ function computeProgress(project: ProjectTracker): { done: number; total: number
             ? project.checklist.items
             : project.todos.items.length > 0
                 ? project.todos.items
-                : project.plan.items;
+                : project.plan.items.length > 0
+                    ? project.plan.items
+                    : project.task.items;
     const total = source.length;
     const done = source.filter((item) => item.status === 'done').length;
+    const percent = total > 0 ? Math.round((done / total) * 100) : 0;
+    return { done, total, percent };
+}
+
+function computeItemProgress(items: TrackerItem[]): { done: number; total: number; percent: number } {
+    const total = items.length;
+    const done = items.filter((item) => item.status === 'done').length;
     const percent = total > 0 ? Math.round((done / total) * 100) : 0;
     return { done, total, percent };
 }
@@ -770,18 +1140,119 @@ function formatChecklistText(items: TrackerItem[]): string {
         .join('\n');
 }
 
+function formatArtifactSection(title: string, summary: string | undefined, items: TrackerItem[], lang: UiLanguage): string {
+    const emptyLabel = tr('panel.readOnlyEmpty', {}, lang);
+    const lines: string[] = [`## ${title}`];
+    if (summary !== undefined) {
+        lines.push(summary.trim() ? summary.trim() : `_${emptyLabel}_`);
+    }
+    if (items.length > 0) {
+        lines.push(formatChecklistText(items));
+    } else {
+        lines.push(`_${emptyLabel}_`);
+    }
+    return lines.join('\n');
+}
+
+function buildPlanArtifactContent(project: ProjectTracker, lang: UiLanguage): string {
+    const title = tr('panel.planTitle', {}, lang);
+    const header = project.name ? `${project.name} - ${title}` : title;
+    const sections = [
+        formatArtifactSection(tr('panel.taskTitle', {}, lang), project.task.summary, project.task.items, lang),
+        formatArtifactSection(tr('panel.planTitle', {}, lang), project.plan.summary, project.plan.items, lang),
+        formatArtifactSection(tr('panel.todoTitle', {}, lang), undefined, project.todos.items, lang),
+        formatArtifactSection(tr('panel.checklistTitle', {}, lang), undefined, project.checklist.items, lang)
+    ];
+    return [`# ${header}`, '', ...sections].join('\n\n');
+}
+
+function buildTaskArtifactContent(project: ProjectTracker, lang: UiLanguage): string {
+    const title = tr('panel.taskTitle', {}, lang);
+    const header = project.name ? `${title}: ${project.name}` : title;
+    const emptyLabel = tr('panel.readOnlyEmpty', {}, lang);
+    const lines: string[] = [`# ${header}`];
+    const summary = project.task.summary?.trim() || '';
+    if (summary) {
+        lines.push('', summary);
+    } else {
+        lines.push('', `_${emptyLabel}_`);
+    }
+    if (project.task.items.length > 0) {
+        lines.push('', formatChecklistText(project.task.items));
+    } else {
+        lines.push('', `_${emptyLabel}_`);
+    }
+    return lines.join('\n');
+}
+
+function buildWalkthroughArtifactContent(project: ProjectTracker, lang: UiLanguage): string {
+    const title = tr('panel.walkthroughTitle', {}, lang);
+    const header = project.name ? `${title}: ${project.name}` : title;
+    const content = project.walkthrough.content.trim()
+        ? project.walkthrough.content.trim()
+        : `_${tr('panel.readOnlyEmpty', {}, lang)}_`;
+    return [`# ${header}`, '', content].join('\n');
+}
+
+function buildMemoryArtifactContent(
+    projectName: string,
+    memoryStore: ProjectMemoryStore,
+    lang: UiLanguage
+): string {
+    const entries = Object.values(memoryStore.memories || {});
+    if (entries.length === 0) return '';
+    const title = tr('artifact.memoryTitle', {}, lang);
+    const header = projectName ? `${title}: ${projectName}` : title;
+    entries.sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
+    const sections = entries.map((entry) => {
+        const content = entry.content.trim() || `_${tr('panel.readOnlyEmpty', {}, lang)}_`;
+        const updated = entry.updatedAt ? `${tr('artifact.memoryUpdated', {}, lang)}: ${entry.updatedAt}` : '';
+        const metaLine = updated ? `\n\n${updated}` : '';
+        return `## ${entry.key}\n${content}${metaLine}`;
+    });
+    return [`# ${header}`, '', ...sections].join('\n\n');
+}
+
 function buildTrackerSnapshot(project: ProjectTracker) {
     const progress = computeProgress(project);
     return {
+        projectId: project.projectId,
         rootPath: project.rootPath,
         name: project.name,
         prd: {
             status: project.prd.status,
-            content: project.prd.content || ''
+            content: project.prd.content || '',
+            reviewNote: project.prd.reviewNote || '',
+            approvedBy: project.prd.approvedBy || '',
+            approvedAt: project.prd.approvedAt || '',
+            updatedAt: project.prd.updatedAt || '',
+            generatedBy: project.prd.generatedBy || ''
         },
+        task: {
+            summary: project.task.summary || '',
+            items: project.task.items
+        },
+        plan: {
+            summary: project.plan.summary || '',
+            items: project.plan.items
+        },
+        todos: {
+            items: project.todos.items
+        },
+        checklist: {
+            items: project.checklist.items
+        },
+        walkthrough: {
+            content: project.walkthrough.content || '',
+            updatedAt: project.walkthrough.updatedAt || ''
+        },
+        taskSummary: project.task.summary || '',
+        taskText: formatChecklistText(project.task.items),
+        planSummary: project.plan.summary || '',
         planText: formatChecklistText(project.plan.items),
         todoText: formatChecklistText(project.todos.items),
         checklistText: formatChecklistText(project.checklist.items),
+        walkthroughText: project.walkthrough.content || '',
         progress,
         stats: normalizeTrackerStats(project.stats)
     };
@@ -790,6 +1261,7 @@ function buildTrackerSnapshot(project: ProjectTracker) {
 type TrackerStatKey =
     | 'prdUpdates'
     | 'prdApprovals'
+    | 'taskUpdates'
     | 'planUpdates'
     | 'todoUpdates'
     | 'checklistUpdates';
@@ -1015,12 +1487,24 @@ let currentDialogRequestId: string | null = null;
 let lastDialogReason: string = '';
 let extensionContext: vscode.ExtensionContext;
 
-// 统计数据
+// 统计数据 - comprehensive tracking for all tools
 let stats = {
     totalCalls: 0,
     askUserCalls: 0,
+    askQuestionCalls: 0,
     askContinueCalls: 0,
     notifyCalls: 0,
+    setPrdCalls: 0,
+    approvePrdCalls: 0,
+    updateTaskCalls: 0,
+    updatePlanCalls: 0,
+    updateTodosCalls: 0,
+    updateChecklistCalls: 0,
+    updateWalkthroughCalls: 0,
+    getProjectStatusCalls: 0,
+    saveMemoryCalls: 0,
+    getMemoryCalls: 0,
+    listMemoryCalls: 0,
     imageUploads: 0,
     startTime: Date.now()
 };
@@ -1043,8 +1527,8 @@ const TOOLS = [
             properties: {
                 title: { type: 'string', description: 'Dialog title / 对话框标题' },
                 message: { type: 'string', description: 'Message shown to user / 显示给用户的消息' },
-                type: { 
-                    type: 'string', 
+                type: {
+                    type: 'string',
                     enum: ['input', 'confirm', 'info'],
                     description: 'Dialog type: input/confirm/info / 对话框类型：input=输入框，confirm=确认框，info=信息提示'
                 },
@@ -1055,7 +1539,7 @@ const TOOLS = [
     },
     {
         name: 'ask_question',
-        description: 'Ask single-choice clarification questions (A/B/C/...) with optional extra text / 单选澄清问题（A/B/C...），可附加补充文本',
+        description: 'Ask single-choice clarification questions (any number of options) with optional extra text / 单选澄清问题（选项数量不限），可附加补充文本',
         inputSchema: {
             type: 'object',
             properties: {
@@ -1064,7 +1548,7 @@ const TOOLS = [
                 options: {
                     type: 'array',
                     items: { type: 'string' },
-                    description: 'Single-question options (A/B/C/...) / 单问题选项'
+                    description: 'Single-question options (any count) / 单问题选项（数量不限）'
                 },
                 questions: {
                     type: 'array',
@@ -1115,11 +1599,35 @@ const TOOLS = [
         }
     },
     {
+        name: 'update_task',
+        description: 'Set/update task overview after PRD approval / 在 PRD 审批后设置任务概览',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                summary: { type: 'string', description: 'Task summary / 任务摘要' },
+                items: {
+                    type: 'array',
+                    description: 'Task checklist items / 任务清单条目',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            text: { type: 'string' },
+                            status: { type: 'string', enum: ['todo', 'doing', 'done'] }
+                        },
+                        required: ['text']
+                    }
+                },
+                text: { type: 'string', description: 'Task checklist text (supports [x]/[~]/[ ]) / 任务清单文本（支持 [x]/[~]/[ ]）' }
+            }
+        }
+    },
+    {
         name: 'update_plan',
         description: 'Set/replace plan checklist after PRD approval / 在 PRD 审批后设置计划清单',
         inputSchema: {
             type: 'object',
             properties: {
+                summary: { type: 'string', description: 'Plan summary / 计划摘要' },
                 items: {
                     type: 'array',
                     description: 'Plan items / 计划条目',
@@ -1212,6 +1720,60 @@ const TOOLS = [
             },
             required: ['reason']
         }
+    },
+    // ==================== Memory Tools ====================
+    {
+        name: 'save_memory',
+        description: 'Save development context/learnings for this project (persists across sessions) / 保存开发上下文/经验（跨会话持久化）',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                key: { type: 'string', description: 'Memory key identifier / 内存键标识符' },
+                value: { type: 'string', description: 'Memory value to store / 要存储的内存值' }
+            },
+            required: ['key', 'value']
+        }
+    },
+    {
+        name: 'get_memory',
+        description: 'Retrieve saved memory by key / 通过键获取保存的内存',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                key: { type: 'string', description: 'Memory key to retrieve / 要获取的内存键' }
+            },
+            required: ['key']
+        }
+    },
+    {
+        name: 'list_memories',
+        description: 'List all saved memory keys for this project / 列出此项目的所有保存的内存键',
+        inputSchema: {
+            type: 'object',
+            properties: {}
+        }
+    },
+    {
+        name: 'update_walkthrough',
+        description: 'Update walkthrough summary / 更新 Walkthrough 总结',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                content: { type: 'string', description: 'Walkthrough markdown content / 摘要 Markdown 内容' }
+            },
+            required: ['content']
+        }
+    },
+    {
+        name: 'generate_walkthrough',
+        description: 'Alias of update_walkthrough / update_walkthrough 的别名',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                content: { type: 'string', description: 'Walkthrough markdown content / 摘要 Markdown 内容' }
+            },
+            required: ['content']
+        }
     }
 ];
 
@@ -1239,34 +1801,34 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.window.registerWebviewViewProvider('mcpServicePanel.sidebarView', sidebarProvider)
     );
 
-	    // 注册命令
-	    context.subscriptions.push(
-	        vscode.commands.registerCommand('mcpService.startServer', () => startServer()),
-	        vscode.commands.registerCommand('mcpService.stopServer', () => stopServer()),
-	        vscode.commands.registerCommand('mcpService.configWindsurf', () => configureWindsurf()),
-	        vscode.commands.registerCommand('mcpService.showStats', () => showStats()),
-	        vscode.commands.registerCommand('mcpService.toggleDialog', () => toggleDialog()),
-	        vscode.commands.registerCommand('mcpService.installHooks', () => installWindsurfHooks()),
-	        vscode.commands.registerCommand('mcpService.uninstallHooks', () => uninstallWindsurfHooks())
-	    );
+    // 注册命令
+    context.subscriptions.push(
+        vscode.commands.registerCommand('mcpService.startServer', () => startServer()),
+        vscode.commands.registerCommand('mcpService.stopServer', () => stopServer()),
+        vscode.commands.registerCommand('mcpService.configWindsurf', () => configureWindsurf()),
+        vscode.commands.registerCommand('mcpService.showStats', () => showStats()),
+        vscode.commands.registerCommand('mcpService.toggleDialog', () => toggleDialog()),
+        vscode.commands.registerCommand('mcpService.installHooks', () => installWindsurfHooks()),
+        vscode.commands.registerCommand('mcpService.uninstallHooks', () => uninstallWindsurfHooks())
+    );
 
-	    // 自动启动服务器
-	    const config = vscode.workspace.getConfiguration('mcpService');
-	    if (config.get('autoStart', true)) {
-	        startServer();
-	    }
+    // 自动启动服务器
+    const config = vscode.workspace.getConfiguration('mcpService');
+    if (config.get('autoStart', true)) {
+        startServer();
+    }
 
-        // Install hooks (user-level) for Windsurf & windsurf-next (best-effort).
-        try {
-            const cfg = vscode.workspace.getConfiguration('mcpService');
-            if (cfg.get('autoInstallHooks', true)) {
-                installWindsurfHooks();
-            }
-        } catch (e: any) {
-            outputChannel.appendLine(`Install hooks error: ${e?.message ?? String(e)}`);
+    // Install hooks (user-level) for Windsurf & windsurf-next (best-effort).
+    try {
+        const cfg = vscode.workspace.getConfiguration('mcpService');
+        if (cfg.get('autoInstallHooks', true)) {
+            installWindsurfHooks();
         }
+    } catch (e: any) {
+        outputChannel.appendLine(`Install hooks error: ${e?.message ?? String(e)}`);
+    }
 
-	    outputChannel.appendLine(tr('ext.activated'));
+    outputChannel.appendLine(tr('ext.activated'));
 }
 
 export function deactivate() {
@@ -1317,7 +1879,7 @@ async function startServer() {
     updateStatusBar();
     sidebarProvider?.updateStatus(true, currentPort);
     writePortFile();
-    
+
     // 自动配置Windsurf
     configureWindsurf();
 }
@@ -1472,24 +2034,35 @@ async function handleToolCall(name: string, args: any): Promise<any> {
             result = await handleAskUser(args);
             break;
         case 'ask_question':
+            stats.askQuestionCalls++;
             result = await handleAskQuestion(args);
             break;
         case 'set_prd':
+            stats.setPrdCalls++;
             result = await handleSetPrd(args);
             break;
         case 'approve_prd':
+            stats.approvePrdCalls++;
             result = await handleApprovePrd(args);
             break;
+        case 'update_task':
+            stats.updateTaskCalls++;
+            result = await handleUpdateTask(args);
+            break;
         case 'update_plan':
+            stats.updatePlanCalls++;
             result = await handleUpdatePlan(args);
             break;
         case 'update_todos':
+            stats.updateTodosCalls++;
             result = await handleUpdateTodos(args);
             break;
         case 'update_checklist':
+            stats.updateChecklistCalls++;
             result = await handleUpdateChecklist(args);
             break;
         case 'get_project_status':
+            stats.getProjectStatusCalls++;
             result = await handleGetProjectStatus(args);
             break;
         case 'notify':
@@ -1500,6 +2073,26 @@ async function handleToolCall(name: string, args: any): Promise<any> {
             stats.askContinueCalls++;
             result = await handleAskContinue(args);
             break;
+        case 'save_memory':
+            stats.saveMemoryCalls++;
+            result = await handleSaveMemory(args);
+            break;
+        case 'get_memory':
+            stats.getMemoryCalls++;
+            result = await handleGetMemory(args);
+            break;
+        case 'list_memories':
+            stats.listMemoryCalls++;
+            result = await handleListMemories(args);
+            break;
+        case 'update_walkthrough':
+            stats.updateWalkthroughCalls++;
+            result = await handleUpdateWalkthrough(args);
+            break;
+        case 'generate_walkthrough':
+            stats.updateWalkthroughCalls++;
+            result = await handleUpdateWalkthrough(args);
+            break;
         default:
             {
                 const lang = getUiLanguage();
@@ -1507,13 +2100,13 @@ async function handleToolCall(name: string, args: any): Promise<any> {
                 throw new Error(msg);
             }
     }
-    
+
     // 保存统计数据并刷新界面
     saveStats();
     updateStatusBar();
     const configuredPort = vscode.workspace.getConfiguration('mcpService').get('port', 3456);
     sidebarProvider?.updateStatus(mcpServer !== null, mcpServer ? currentPort : configuredPort);
-    
+
     return result;
 }
 
@@ -1540,11 +2133,11 @@ async function handleAskUser(args: any): Promise<any> {
 
     // input type - 使用webview获取更丰富的输入
     const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
+
     return new Promise((resolve) => {
         // 发送到webview
         sidebarProvider?.showInputDialog(requestId, title || 'WindsurfAutoMcp', message, allowImage);
-        
+
         // 存储pending请求
         pendingRequests.set(requestId, {
             resolve: (value: any) => {
@@ -1626,10 +2219,168 @@ function resolveProjectTracker(rootPathOverride?: string): { data: TrackerData; 
     return { data, project, rootPath };
 }
 
+function resolveProjectMemory(rootPathOverride?: string): { data: MemoryData; project: ProjectMemoryStore; rootPath: string } {
+    const lang = getUiLanguage();
+    const rootPath = rootPathOverride || getWorkspaceRootPath();
+    if (!rootPath) {
+        const msg = lang === 'en' ? 'Workspace is required for memories.' : '记忆需要打开工作区。';
+        throw new Error(msg);
+    }
+    const data = loadMemoryData();
+    if (!data.projects[rootPath]) {
+        data.projects[rootPath] = { memories: {} };
+    }
+    return { data, project: data.projects[rootPath], rootPath };
+}
+
 function saveTrackerAndNotify(data: TrackerData, project: ProjectTracker) {
     saveTrackerData(data);
+    try {
+        syncProjectArtifacts(project);
+    } catch (e: any) {
+        outputChannel?.appendLine(`Artifact sync failed: ${e?.message ?? String(e)}`);
+    }
     const snapshot = buildTrackerSnapshot(project);
     sidebarProvider?.postMessage({ type: 'tracker', data: snapshot });
+    refreshOpenPanels(project);
+}
+
+function saveMemoryAndNotify(data: MemoryData): void {
+    saveMemoryData(data);
+}
+
+function syncProjectArtifacts(project: ProjectTracker): void {
+    const lang = getUiLanguage();
+    const specs: ArtifactSpec[] = [];
+    if (!project.projectId) {
+        project.projectId = createProjectId();
+    }
+
+    const prdContent = project.prd.content?.trim() || '';
+    if (project.prd.generatedBy === 'ai' && prdContent) {
+        specs.push({
+            fileName: 'prd.md',
+            artifactType: 'ARTIFACT_TYPE_PRD',
+            content: prdContent,
+            summary: createArtifactSummary(prdContent)
+        });
+    }
+
+    const hasTask = !!project.task.summary?.trim() || project.task.items.length > 0;
+    const hasPlan = !!project.plan.summary?.trim() || project.plan.items.length > 0;
+    const hasTodos = project.todos.items.length > 0;
+    const hasChecklist = project.checklist.items.length > 0;
+    if (hasTask || hasPlan || hasTodos || hasChecklist) {
+        const content = buildPlanArtifactContent(project, lang);
+        specs.push({
+            fileName: 'implementation_plan.md',
+            artifactType: 'ARTIFACT_TYPE_IMPLEMENTATION_PLAN',
+            content,
+            summary: createArtifactSummary(content)
+        });
+    }
+
+    if (hasTask) {
+        const content = buildTaskArtifactContent(project, lang);
+        specs.push({
+            fileName: 'task.md',
+            artifactType: 'ARTIFACT_TYPE_TASK',
+            content,
+            summary: createArtifactSummary(content)
+        });
+    }
+
+    if (project.walkthrough.content?.trim()) {
+        const content = buildWalkthroughArtifactContent(project, lang);
+        specs.push({
+            fileName: 'walkthrough.md',
+            artifactType: 'ARTIFACT_TYPE_WALKTHROUGH',
+            content,
+            summary: createArtifactSummary(content)
+        });
+    }
+
+    if (specs.length === 0) return;
+    const homeDir = os.homedir();
+    const dirs = getProjectBrainDirs(homeDir, project.projectId);
+    for (const { variant, dir } of dirs) {
+        for (const spec of specs) {
+            try {
+                writeArtifactFiles(dir, spec);
+            } catch (e: any) {
+                outputChannel?.appendLine(
+                    `Artifact write failed (${variant}): ${spec.fileName} - ${e?.message ?? String(e)}`
+                );
+            }
+        }
+    }
+}
+
+function syncMemoryArtifacts(project: ProjectTracker, memoryStore: ProjectMemoryStore): void {
+    const lang = getUiLanguage();
+    const content = buildMemoryArtifactContent(project.name, memoryStore, lang);
+    if (!content.trim()) return;
+    if (!project.projectId) {
+        project.projectId = createProjectId();
+    }
+    const spec: ArtifactSpec = {
+        fileName: 'memory.md',
+        artifactType: 'ARTIFACT_TYPE_MEMORY',
+        content,
+        summary: createArtifactSummary(content)
+    };
+    const homeDir = os.homedir();
+    const dirs = getProjectBrainDirs(homeDir, project.projectId);
+    for (const { variant, dir } of dirs) {
+        try {
+            writeArtifactFiles(dir, spec);
+        } catch (e: any) {
+            outputChannel?.appendLine(
+                `Artifact write failed (${variant}): ${spec.fileName} - ${e?.message ?? String(e)}`
+            );
+        }
+    }
+}
+
+type PrdApprovalResult = {
+    approved: boolean;
+    note?: string;
+    approver?: string;
+};
+
+async function requestPrdApproval(content: string, projectName: string): Promise<PrdApprovalResult> {
+    const lang = getUiLanguage();
+    const requestId = `prd_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    const title = lang === 'en' ? 'PRD Review' : 'PRD 审核';
+    const message = lang === 'en' ? 'Review the PRD and approve or request changes.' : '请审核 PRD，并选择审批或要求修改。';
+
+    return new Promise((resolve) => {
+        showDialogPanel(requestId, 'input', title, message, false, {
+            mode: 'prd',
+            prdContent: content,
+            projectName
+        });
+
+        pendingRequests.set(requestId, {
+            resolve: (value: any) => {
+                pendingRequests.delete(requestId);
+                if (!value) {
+                    resolve({ approved: false, note: lang === 'en' ? 'User canceled PRD review.' : '用户取消了 PRD 审核。' });
+                    return;
+                }
+                resolve({
+                    approved: value.approved === true,
+                    note: typeof value.note === 'string' ? value.note.trim() : undefined,
+                    approver: typeof value.approver === 'string' ? value.approver.trim() : undefined
+                });
+            },
+            reject: () => {
+                pendingRequests.delete(requestId);
+                resolve({ approved: false, note: lang === 'en' ? 'PRD review canceled.' : 'PRD 审核已取消。' });
+            },
+            timestamp: Date.now()
+        });
+    });
 }
 
 async function handleSetPrd(args: any): Promise<any> {
@@ -1645,19 +2396,51 @@ async function handleSetPrd(args: any): Promise<any> {
     project.prd.updatedAt = nowIso();
     project.prd.approvedAt = undefined;
     project.prd.approvedBy = undefined;
+    project.prd.generatedBy = 'ai';
+    project.prd.reviewNote = '';
+    project.prd.reviewedAt = undefined;
     bumpProjectStat(project, 'prdUpdates');
     project.updatedAt = nowIso();
     saveTrackerAndNotify(data, project);
-    const text = lang === 'en' ? 'PRD updated (draft).' : 'PRD 已更新（草案）。';
-    return { content: [{ type: 'text', text }, { type: 'text', text: `PRD_JSON:\n${JSON.stringify(buildTrackerSnapshot(project), null, 2)}` }] };
+
+    const approval = await requestPrdApproval(content, project.name);
+    if (approval.approved) {
+        if (!approval.approver) {
+            approval.approver = lang === 'en' ? 'user' : '用户';
+        }
+        project.prd.status = 'approved';
+        project.prd.approvedBy = approval.approver;
+        project.prd.approvedAt = nowIso();
+        bumpProjectStat(project, 'prdApprovals');
+    } else if (approval.note) {
+        project.prd.reviewNote = approval.note;
+    }
+    project.prd.reviewedAt = nowIso();
+    project.updatedAt = nowIso();
+    saveTrackerAndNotify(data, project);
+
+    const text = approval.approved
+        ? (lang === 'en' ? 'PRD approved by user.' : 'PRD 已由用户审批。')
+        : (lang === 'en' ? 'PRD review complete (changes requested).' : 'PRD 审核完成（需修改）。');
+    return {
+        content: [
+            { type: 'text', text },
+            { type: 'text', text: `PRD_JSON:\n${JSON.stringify(buildTrackerSnapshot(project), null, 2)}` }
+        ]
+    };
 }
 
 async function handleApprovePrd(args: any): Promise<any> {
     const lang = getUiLanguage();
     const { data, project } = resolveProjectTracker();
+    if (!project.prd.content) {
+        const msg = lang === 'en' ? 'PRD is empty; generate PRD first.' : 'PRD 为空，请先生成 PRD。';
+        throw new Error(msg);
+    }
     project.prd.status = 'approved';
     project.prd.approvedBy = typeof args?.approver === 'string' ? args.approver.trim() : undefined;
     project.prd.approvedAt = nowIso();
+    project.prd.reviewedAt = nowIso();
     bumpProjectStat(project, 'prdApprovals');
     project.updatedAt = nowIso();
     saveTrackerAndNotify(data, project);
@@ -1675,20 +2458,65 @@ function extractItemsFromArgs(args: any): TrackerItem[] {
     return [];
 }
 
+function extractSummaryFromArgs(args: any): string | undefined {
+    if (typeof args?.summary === 'string' && args.summary.trim()) {
+        return args.summary.trim();
+    }
+    if (typeof args?.content === 'string' && args.content.trim()) {
+        return args.content.trim();
+    }
+    return undefined;
+}
+
+function assertPrdApproved(project: ProjectTracker, lang: UiLanguage) {
+    if (project.prd.status !== 'approved') {
+        const msg = lang === 'en' ? 'PRD must be approved before planning or tasks.' : 'PRD 审批后才能进行计划或任务。';
+        throw new Error(msg);
+    }
+}
+
+async function handleUpdateTask(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const { data, project } = resolveProjectTracker();
+    assertPrdApproved(project, lang);
+    const items = extractItemsFromArgs(args);
+    const summary = extractSummaryFromArgs(args);
+    if (items.length === 0 && !summary) {
+        const msg = lang === 'en' ? 'update_task requires items/text or summary.' : 'update_task 需要 items/text 或 summary。';
+        throw new Error(msg);
+    }
+    if (summary !== undefined) {
+        project.task.summary = summary;
+        bumpProjectStat(project, 'taskUpdates');
+    }
+    if (items.length > 0) {
+        project.task.items = items;
+        bumpProjectStat(project, 'taskUpdates');
+    }
+    project.updatedAt = nowIso();
+    saveTrackerAndNotify(data, project);
+    const text = lang === 'en' ? 'Task updated.' : '任务已更新。';
+    return { content: [{ type: 'text', text }, { type: 'text', text: `TASK_JSON:\n${JSON.stringify(buildTrackerSnapshot(project), null, 2)}` }] };
+}
+
 async function handleUpdatePlan(args: any): Promise<any> {
     const lang = getUiLanguage();
     const { data, project } = resolveProjectTracker();
-    if (project.prd.status !== 'approved') {
-        const msg = lang === 'en' ? 'PRD must be approved before creating a plan.' : 'PRD 审批后才能创建计划。';
-        throw new Error(msg);
-    }
+    assertPrdApproved(project, lang);
     const items = extractItemsFromArgs(args);
-    if (items.length === 0) {
-        const msg = lang === 'en' ? 'update_plan requires items or text.' : 'update_plan 需要 items 或 text。';
+    const summary = extractSummaryFromArgs(args);
+    if (items.length === 0 && !summary) {
+        const msg = lang === 'en' ? 'update_plan requires items/text or summary.' : 'update_plan 需要 items/text 或 summary。';
         throw new Error(msg);
     }
-    project.plan.items = items;
-    bumpProjectStat(project, 'planUpdates');
+    if (summary !== undefined) {
+        project.plan.summary = summary;
+        bumpProjectStat(project, 'planUpdates');
+    }
+    if (items.length > 0) {
+        project.plan.items = items;
+        bumpProjectStat(project, 'planUpdates');
+    }
     project.updatedAt = nowIso();
     saveTrackerAndNotify(data, project);
     const text = lang === 'en' ? 'Plan updated.' : '计划已更新。';
@@ -1698,7 +2526,8 @@ async function handleUpdatePlan(args: any): Promise<any> {
 async function handleUpdateTodos(args: any): Promise<any> {
     const lang = getUiLanguage();
     const { data, project } = resolveProjectTracker();
-    if (project.plan.items.length === 0) {
+    assertPrdApproved(project, lang);
+    if (project.plan.items.length === 0 && !project.plan.summary) {
         const msg = lang === 'en' ? 'Plan is required before TODOs.' : '需要先有计划再创建 TODO。';
         throw new Error(msg);
     }
@@ -1718,6 +2547,7 @@ async function handleUpdateTodos(args: any): Promise<any> {
 async function handleUpdateChecklist(args: any): Promise<any> {
     const lang = getUiLanguage();
     const { data, project } = resolveProjectTracker();
+    assertPrdApproved(project, lang);
     const items = extractItemsFromArgs(args);
     if (items.length === 0) {
         const msg = lang === 'en' ? 'update_checklist requires items or text.' : 'update_checklist 需要 items 或 text。';
@@ -1738,6 +2568,84 @@ async function handleGetProjectStatus(args: any): Promise<any> {
     const snapshot = buildTrackerSnapshot(project);
     const text = lang === 'en' ? 'Project status:' : '项目状态：';
     return { content: [{ type: 'text', text }, { type: 'text', text: `STATUS_JSON:\n${JSON.stringify(snapshot, null, 2)}` }] };
+}
+
+// ==================== Memory Handlers ====================
+
+async function handleSaveMemory(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const key = typeof args?.key === 'string' ? args.key.trim() : '';
+    const value = typeof args?.value === 'string' ? args.value : '';
+    if (!key) {
+        const msg = lang === 'en' ? 'save_memory requires a key.' : 'save_memory 需要提供 key。';
+        throw new Error(msg);
+    }
+    const { data, project, rootPath } = resolveProjectMemory();
+    project.memories[key] = {
+        key,
+        content: value,
+        updatedAt: nowIso()
+    };
+    saveMemoryAndNotify(data);
+    try {
+        const trackerInfo = resolveProjectTracker(rootPath);
+        saveTrackerData(trackerInfo.data);
+        syncMemoryArtifacts(trackerInfo.project, project);
+    } catch (e: any) {
+        outputChannel?.appendLine(`Memory artifact sync failed: ${e?.message ?? String(e)}`);
+    }
+    const text = lang === 'en' ? `Memory saved: ${key}` : `内存已保存: ${key}`;
+    return { content: [{ type: 'text', text }] };
+}
+
+async function handleGetMemory(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const key = typeof args?.key === 'string' ? args.key.trim() : '';
+    if (!key) {
+        const msg = lang === 'en' ? 'get_memory requires a key.' : 'get_memory 需要提供 key。';
+        throw new Error(msg);
+    }
+    const { project } = resolveProjectMemory();
+    const entry = project.memories?.[key];
+    if (!entry) {
+        const text = lang === 'en' ? `Memory not found: ${key}` : `未找到内存: ${key}`;
+        return { content: [{ type: 'text', text }] };
+    }
+    const text = lang === 'en' ? `Memory [${key}]:` : `内存 [${key}]:`;
+    return { content: [{ type: 'text', text }, { type: 'text', text: entry.content }] };
+}
+
+async function handleListMemories(_args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const { project } = resolveProjectMemory();
+    const keys = Object.keys(project.memories || {});
+    if (keys.length === 0) {
+        const text = lang === 'en' ? 'No memories saved for this project.' : '此项目没有保存的内存。';
+        return { content: [{ type: 'text', text }] };
+    }
+    const text = lang === 'en' ? `Saved memory keys (${keys.length}):` : `保存的内存键 (${keys.length}):`;
+    return { content: [{ type: 'text', text }, { type: 'text', text: keys.join('\n') }] };
+}
+
+// ==================== Walkthrough Handler ====================
+
+async function handleUpdateWalkthrough(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const content = typeof args?.content === 'string' ? args.content.trim() : '';
+    if (!content) {
+        const msg = lang === 'en' ? 'update_walkthrough requires content.' : 'update_walkthrough 需要提供 content。';
+        throw new Error(msg);
+    }
+    const { data, project } = resolveProjectTracker();
+    project.walkthrough = {
+        content,
+        updatedAt: nowIso()
+    };
+    project.updatedAt = nowIso();
+    saveTrackerAndNotify(data, project);
+
+    const text = lang === 'en' ? 'Walkthrough updated.' : 'Walkthrough 已更新。';
+    return { content: [{ type: 'text', text }] };
 }
 
 async function handleAskQuestion(args: any): Promise<any> {
@@ -1764,12 +2672,12 @@ async function handleAskQuestion(args: any): Promise<any> {
         questions.length > 0
             ? questions
             : [
-                  {
-                      id: 'q_1',
-                      prompt: typeof message === 'string' ? message : '',
-                      options
-                  }
-              ];
+                {
+                    id: 'q_1',
+                    prompt: typeof message === 'string' ? message : '',
+                    options
+                }
+            ];
 
     return new Promise((resolve) => {
         sidebarProvider?.showInputDialog(
@@ -1854,12 +2762,12 @@ async function handleAskContinue(args: any): Promise<any> {
     const { reason } = args;
     const lang = getUiLanguage();
     const resolvedReason = String(reason || '').trim() || getDefaultReason(lang);
-    
+
     const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
+
     return new Promise((resolve) => {
         sidebarProvider?.showContinueDialog(requestId, resolvedReason);
-        
+
         pendingRequests.set(requestId, {
             resolve: (value: any) => {
                 pendingRequests.delete(requestId);
@@ -1921,6 +2829,574 @@ export function handleImageUpload() {
     stats.imageUploads++;
 }
 
+// ==================== Popup Panels (PRD/Task/Plan/etc) ====================
+
+let prdPanel: vscode.WebviewPanel | null = null;
+let planPanel: vscode.WebviewPanel | null = null;
+let walkthroughPanel: vscode.WebviewPanel | null = null;
+
+function resolveProjectForPanel(): ProjectTracker | null {
+    try {
+        const { data, project } = resolveProjectTracker();
+        saveTrackerData(data);
+        return project;
+    } catch (e: any) {
+        vscode.window.showErrorMessage(e?.message ?? String(e));
+        return null;
+    }
+}
+
+function refreshOpenPanels(project: ProjectTracker) {
+    const lang = getUiLanguage();
+    if (prdPanel) prdPanel.webview.html = getPrdPanelHtml(project, lang);
+    if (planPanel) planPanel.webview.html = getPlanPanelHtml(project, lang);
+    if (walkthroughPanel) walkthroughPanel.webview.html = getWalkthroughPanelHtml(project, lang);
+}
+
+function showPrdPanel() {
+    const project = resolveProjectForPanel();
+    if (!project) return;
+    const lang = getUiLanguage();
+    if (prdPanel) prdPanel.dispose();
+    prdPanel = vscode.window.createWebviewPanel(
+        'mcpPrd',
+        tr('panel.prdPanelTitle', {}, lang),
+        vscode.ViewColumn.Two,
+        { enableScripts: false, retainContextWhenHidden: true }
+    );
+    prdPanel.webview.html = getPrdPanelHtml(project, lang);
+    prdPanel.onDidDispose(() => { prdPanel = null; });
+}
+
+function showPlanPanel() {
+    const project = resolveProjectForPanel();
+    if (!project) return;
+    const lang = getUiLanguage();
+    if (planPanel) planPanel.dispose();
+    planPanel = vscode.window.createWebviewPanel(
+        'mcpPlan',
+        tr('panel.planTitle', {}, lang),
+        vscode.ViewColumn.Two,
+        { enableScripts: false, retainContextWhenHidden: true }
+    );
+    planPanel.webview.html = getPlanPanelHtml(project, lang);
+    planPanel.onDidDispose(() => { planPanel = null; });
+}
+
+function showWalkthroughPanel() {
+    const project = resolveProjectForPanel();
+    if (!project) return;
+    const lang = getUiLanguage();
+    if (walkthroughPanel) walkthroughPanel.dispose();
+    walkthroughPanel = vscode.window.createWebviewPanel(
+        'mcpWalkthrough',
+        tr('panel.walkthroughTitle', {}, lang),
+        vscode.ViewColumn.Two,
+        { enableScripts: false, retainContextWhenHidden: true }
+    );
+    walkthroughPanel.webview.html = getWalkthroughPanelHtml(project, lang);
+    walkthroughPanel.onDidDispose(() => { walkthroughPanel = null; });
+}
+type TrackerPanelSection = {
+    title: string;
+    summary?: string;
+    items: TrackerItem[];
+};
+
+function getPanelShellHtml(title: string, subtitle: string, badge: string, body: string, lang: UiLanguage): string {
+    const csp = `default-src 'none'; style-src 'unsafe-inline';`;
+    const safeTitle = escapeHtml(title);
+    const safeSubtitle = subtitle ? escapeHtml(subtitle) : '';
+    const safeBadge = badge ? escapeHtml(badge) : '';
+    const subtitleHtml = safeSubtitle ? `<div class="subtitle">${safeSubtitle}</div>` : '';
+    const badgeHtml = safeBadge ? `<div class="badge">${safeBadge}</div>` : '';
+
+    return `<!DOCTYPE html>
+<html lang="${lang === 'en' ? 'en' : 'zh-CN'}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="${csp}">
+    <title>${safeTitle}</title>
+    <style>
+        :root {
+            --bg: #0c0f10;
+            --panel: #151a1c;
+            --card: #1b2226;
+            --card-strong: #20282d;
+            --text: #f5f2e9;
+            --muted: #9aa4a9;
+            --accent: #20c997;
+            --accent-weak: rgba(32, 201, 151, 0.2);
+            --warn: #f97316;
+            --border: rgba(255,255,255,0.08);
+            --shadow: 0 20px 40px rgba(0,0,0,0.45);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: "Trebuchet MS", "Segoe UI Variable Display", "Segoe UI", sans-serif;
+            background:
+                radial-gradient(800px 400px at 10% -10%, rgba(32,201,151,0.18), transparent 60%),
+                radial-gradient(600px 360px at 100% 0%, rgba(249,115,22,0.12), transparent 55%),
+                var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+        .stage {
+            padding: 28px;
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+        }
+        .hero {
+            background: linear-gradient(145deg, rgba(32,201,151,0.18), rgba(21,26,28,0.9));
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 22px;
+            box-shadow: var(--shadow);
+            animation: floatIn 0.6s ease;
+        }
+        .hero h1 { font-size: 22px; letter-spacing: 0.4px; }
+        .subtitle { margin-top: 6px; font-size: 12px; color: var(--muted); }
+        .badge {
+            display: inline-flex;
+            margin-top: 12px;
+            padding: 4px 12px;
+            border-radius: 999px;
+            font-size: 11px;
+            border: 1px solid var(--accent-weak);
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 16px;
+        }
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 16px;
+            box-shadow: 0 16px 30px rgba(0,0,0,0.35);
+            animation: floatIn 0.6s ease;
+        }
+        .card-title {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            color: var(--muted);
+            margin-bottom: 10px;
+        }
+        .card-body {
+            font-size: 13px;
+            line-height: 1.7;
+            white-space: pre-wrap;
+        }
+        .empty {
+            color: var(--muted);
+            font-style: italic;
+        }
+        .progress {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .progress-bar {
+            height: 8px;
+            border-radius: 999px;
+            background: #101416;
+            overflow: hidden;
+            border: 1px solid var(--border);
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent), rgba(32,201,151,0.6));
+            width: 0%;
+        }
+        .progress-meta {
+            font-size: 12px;
+            color: var(--muted);
+        }
+        .list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .item {
+            display: flex;
+            gap: 12px;
+            padding: 12px;
+            border-radius: 12px;
+            background: var(--card-strong);
+            border: 1px solid rgba(255,255,255,0.04);
+            animation: rise 0.5s ease forwards;
+            opacity: 0;
+            transform: translateY(8px);
+        }
+        .item.todo .dot { background: #64748b; }
+        .item.doing .dot { background: var(--warn); }
+        .item.done .dot { background: var(--accent); }
+        .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-top: 6px;
+            box-shadow: 0 0 12px rgba(255,255,255,0.2);
+        }
+        .item-text {
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        .item-meta {
+            font-size: 11px;
+            color: var(--muted);
+            margin-top: 4px;
+        }
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 12px;
+        }
+        .stat {
+            padding: 12px;
+            border-radius: 12px;
+            background: rgba(15,18,20,0.9);
+            border: 1px solid var(--border);
+        }
+        .stat-label {
+            font-size: 11px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+        }
+        .stat-value {
+            font-size: 18px;
+            font-weight: 700;
+            margin-top: 4px;
+        }
+        @keyframes floatIn {
+            from { opacity: 0; transform: translateY(12px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes rise {
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+    <div class="stage">
+        <div class="hero">
+            <h1>${safeTitle}</h1>
+            ${subtitleHtml}
+            ${badgeHtml}
+        </div>
+        ${body}
+    </div>
+</body>
+</html>`;
+}
+
+function renderTrackerItems(items: TrackerItem[], lang: UiLanguage): string {
+    if (!items.length) {
+        return `<div class="empty">${escapeHtml(tr('panel.readOnlyEmpty', {}, lang))}</div>`;
+    }
+    return items
+        .map((item, index) => {
+            const label =
+                item.status === 'done'
+                    ? tr('panel.itemDone', {}, lang)
+                    : item.status === 'doing'
+                        ? tr('panel.itemDoing', {}, lang)
+                        : tr('panel.itemTodo', {}, lang);
+            const safeText = escapeHtml(item.text);
+            return `<div class="item ${item.status}" style="animation-delay:${index * 40}ms">
+                <div class="dot"></div>
+                <div>
+                    <div class="item-text">${safeText}</div>
+                    <div class="item-meta">${escapeHtml(label)}</div>
+                </div>
+            </div>`;
+        })
+        .join('');
+}
+
+function getPrdPanelHtml(project: ProjectTracker, lang: UiLanguage): string {
+    const statusLabel = project.prd.status === 'approved'
+        ? tr('panel.prdStatusApproved', {}, lang)
+        : tr('panel.prdStatusDraft', {}, lang);
+    const badge = statusLabel;
+    const content = project.prd.content ? escapeHtml(project.prd.content) : escapeHtml(tr('panel.readOnlyEmpty', {}, lang));
+    const reviewNote = project.prd.reviewNote ? escapeHtml(project.prd.reviewNote) : '';
+
+    const body = `
+        <div class="grid">
+            <section class="card">
+                <div class="card-title">${escapeHtml(tr('panel.sectionSummary', {}, lang))}</div>
+                <div class="card-body">${content}</div>
+            </section>
+            <section class="card">
+                <div class="card-title">${escapeHtml(tr('panel.reviewNoteLabel', {}, lang))}</div>
+                <div class="card-body">${reviewNote || `<span class="empty">${escapeHtml(tr('panel.readOnlyEmpty', {}, lang))}</span>`}</div>
+            </section>
+        </div>
+    `;
+
+    return getPanelShellHtml(tr('panel.prdPanelTitle', {}, lang), project.name, badge, body, lang);
+}
+
+function getPlanPanelHtml(project: ProjectTracker, lang: UiLanguage): string {
+    const sections: TrackerPanelSection[] = [
+        {
+            title: tr('panel.taskTitle', {}, lang),
+            summary: project.task.summary,
+            items: project.task.items
+        },
+        {
+            title: tr('panel.planTitle', {}, lang),
+            summary: project.plan.summary,
+            items: project.plan.items
+        },
+        {
+            title: tr('panel.todoTitle', {}, lang),
+            items: project.todos.items
+        },
+        {
+            title: tr('panel.checklistTitle', {}, lang),
+            items: project.checklist.items
+        }
+    ];
+
+    const cards = sections
+        .map((section) => {
+            const progress = computeItemProgress(section.items);
+            const summaryText = section.summary !== undefined
+                ? (section.summary
+                    ? escapeHtml(section.summary)
+                    : `<span class="empty">${escapeHtml(tr('panel.readOnlyEmpty', {}, lang))}</span>`)
+                : '';
+            const summaryBlock = section.summary !== undefined
+                ? `<div class="card-body">${summaryText}</div>`
+                : '';
+            const itemsHtml = renderTrackerItems(section.items, lang);
+            return `
+            <section class="card">
+                <div class="card-title">${escapeHtml(section.title)}</div>
+                ${summaryBlock}
+                <div class="progress">
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width:${progress.percent}%"></div>
+                    </div>
+                    <div class="progress-meta">${progress.done}/${progress.total} • ${progress.percent}%</div>
+                </div>
+                <div class="list">${itemsHtml}</div>
+            </section>`;
+        })
+        .join('');
+
+    const overall = computeProgress(project);
+    const badge = overall.total > 0 ? `${overall.percent}%` : '';
+    const body = `<div class="grid">${cards}</div>`;
+    return getPanelShellHtml(tr('panel.planTitle', {}, lang), project.name, badge, body, lang);
+}
+
+function getWalkthroughPanelHtml(project: ProjectTracker, lang: UiLanguage): string {
+    const content = project.walkthrough.content
+        ? escapeHtml(project.walkthrough.content)
+        : escapeHtml(tr('panel.readOnlyEmpty', {}, lang));
+    const body = `
+        <section class="card">
+            <div class="card-title">${escapeHtml(tr('panel.walkthroughSubtitle', {}, lang))}</div>
+            <div class="card-body">${content}</div>
+        </section>
+    `;
+    return getPanelShellHtml(tr('panel.walkthroughTitle', {}, lang), project.name, '', body, lang);
+}
+
+function getPrdDialogHtml(
+    requestId: string,
+    prdContent: string,
+    projectName: string,
+    lang: UiLanguage,
+    csp: string,
+    nonce: string
+): string {
+    const escapedContent = escapeHtml(prdContent || tr('panel.readOnlyEmpty', {}, lang));
+    const title = tr('panel.prdTitle', {}, lang);
+    const subtitle = tr('panel.prdSubtitle', {}, lang);
+    const approveLabel = tr('panel.prdApprove', {}, lang);
+    const requestLabel = tr('panel.prdRequestChanges', {}, lang);
+    const noteLabel = tr('panel.prdNoteLabel', {}, lang);
+    const notePlaceholder = tr('panel.prdNotePlaceholder', {}, lang);
+    const cancelLabel = tr('panel.cancel', {}, lang);
+    const hint = tr('panel.prdApproveHint', {}, lang);
+    const projectBadge = projectName ? `<span class="badge">${escapeHtml(projectName)}</span>` : '';
+
+    return `<!DOCTYPE html>
+<html lang="${lang === 'en' ? 'en' : 'zh-CN'}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="${csp}">
+    <title>${title}</title>
+    <style>
+        :root {
+            --bg: #0b0f0f;
+            --panel: #151a1a;
+            --card: #1b2121;
+            --text: #f5f1e8;
+            --muted: #8f979c;
+            --accent: #20c997;
+            --accent-weak: rgba(32, 201, 151, 0.2);
+            --warn: #f97316;
+            --border: rgba(255, 255, 255, 0.08);
+            --shadow: 0 18px 40px rgba(0,0,0,0.45);
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: "Trebuchet MS", "Segoe UI Variable Display", "Segoe UI", sans-serif;
+            background: radial-gradient(800px 400px at 10% -10%, rgba(32,201,151,0.18), transparent 60%),
+                        radial-gradient(600px 360px at 100% 0%, rgba(249,115,22,0.14), transparent 55%),
+                        var(--bg);
+            color: var(--text);
+            padding: 28px;
+            min-height: 100vh;
+        }
+        .hero {
+            background: linear-gradient(140deg, rgba(32,201,151,0.18), rgba(21,26,26,0.9));
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 20px 22px;
+            margin-bottom: 18px;
+            box-shadow: var(--shadow);
+        }
+        .hero h1 { font-size: 20px; margin-bottom: 6px; }
+        .hero p { font-size: 12px; color: var(--muted); }
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 11px;
+            border: 1px solid var(--accent-weak);
+            color: var(--accent);
+            margin-top: 10px;
+        }
+        .hint {
+            margin-top: 8px;
+            font-size: 12px;
+            color: var(--muted);
+        }
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 16px;
+            margin-bottom: 14px;
+        }
+        .card-title {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            color: var(--muted);
+            margin-bottom: 10px;
+        }
+        .content {
+            white-space: pre-wrap;
+            line-height: 1.6;
+            font-size: 13px;
+            color: var(--text);
+        }
+        textarea {
+            width: 100%;
+            min-height: 90px;
+            background: #111515;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            color: var(--text);
+            font-size: 13px;
+            padding: 12px;
+            resize: vertical;
+            font-family: inherit;
+        }
+        .actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 16px;
+        }
+        .btn {
+            border: none;
+            border-radius: 12px;
+            padding: 12px 18px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+        }
+        .btn:active { transform: scale(0.97); }
+        .btn-approve {
+            background: var(--accent);
+            color: #06221c;
+            box-shadow: 0 10px 20px rgba(32,201,151,0.3);
+        }
+        .btn-request {
+            background: transparent;
+            color: var(--warn);
+            border: 1px solid rgba(249,115,22,0.35);
+        }
+        .btn-cancel {
+            background: #141818;
+            color: var(--muted);
+            border: 1px solid var(--border);
+        }
+    </style>
+</head>
+<body>
+    <div class="hero">
+        <h1>${title}</h1>
+        <p>${subtitle}</p>
+        ${projectBadge}
+        <div class="hint">${hint}</div>
+    </div>
+    <div class="card">
+        <div class="card-title">${tr('panel.prdPanelTitle', {}, lang)}</div>
+        <div class="content">${escapedContent}</div>
+    </div>
+    <div class="card">
+        <div class="card-title">${noteLabel}</div>
+        <textarea id="noteInput" placeholder="${notePlaceholder}"></textarea>
+    </div>
+    <div class="actions">
+        <button class="btn btn-approve" id="approveBtn">${approveLabel}</button>
+        <button class="btn btn-request" id="requestBtn">${requestLabel}</button>
+        <button class="btn btn-cancel" id="cancelBtn">${cancelLabel}</button>
+    </div>
+    <script nonce="${nonce}">
+        const vscode = acquireVsCodeApi();
+        const requestId = ${safeJson(requestId)};
+        const noteEl = document.getElementById('noteInput');
+
+        function submit(approved) {
+            const note = (noteEl && noteEl.value || '').trim();
+            if (approved === null) {
+                vscode.postMessage({ type: 'response', requestId, value: null });
+                return;
+            }
+            const payload = { approved: approved === true };
+            if (note) payload.note = note;
+            vscode.postMessage({ type: 'response', requestId, value: payload });
+        }
+
+        document.getElementById('approveBtn')?.addEventListener('click', () => submit(true));
+        document.getElementById('requestBtn')?.addEventListener('click', () => submit(false));
+        document.getElementById('cancelBtn')?.addEventListener('click', () => submit(null));
+    </script>
+</body>
+</html>`;
+}
+
 // ==================== 对话框 Panel ====================
 
 function toggleDialog() {
@@ -1931,7 +3407,7 @@ function toggleDialog() {
         outputChannel.appendLine('[toggleDialog] 对话框已关闭');
         return;
     }
-    
+
     // 如果有待处理的请求，打开对话框
     if (pendingRequests.size > 0) {
         const entries = Array.from(pendingRequests.entries());
@@ -1951,7 +3427,13 @@ function showDialogPanel(
     title: string,
     message: string,
     allowImage: boolean = true,
-    dialogOptions?: { mode?: 'choice'; questions?: ChoiceQuestion[]; allowText?: boolean }
+    dialogOptions?: {
+        mode?: 'choice' | 'prd';
+        questions?: ChoiceQuestion[];
+        allowText?: boolean;
+        prdContent?: string;
+        projectName?: string;
+    }
 ) {
     // 如果已有 panel，先关闭
     if (dialogPanel) {
@@ -2005,7 +3487,13 @@ function getDialogHtml(
     title: string,
     message: string,
     allowImage: boolean,
-    dialogOptions?: { mode?: 'choice'; questions?: ChoiceQuestion[]; allowText?: boolean }
+    dialogOptions?: {
+        mode?: 'choice' | 'prd';
+        questions?: ChoiceQuestion[];
+        allowText?: boolean;
+        prdContent?: string;
+        projectName?: string;
+    }
 ): string {
     const isContinue = type === 'continue';
     const dialogMode = dialogOptions?.mode === 'choice' ? 'choice' : type;
@@ -2022,8 +3510,14 @@ function getDialogHtml(
         `font-src 'none'`,
         `connect-src 'none'`
     ].join('; ');
-		    
-		    return `<!DOCTYPE html>
+
+    if (dialogOptions?.mode === 'prd') {
+        const prdContent = typeof dialogOptions.prdContent === 'string' ? dialogOptions.prdContent : '';
+        const projectName = typeof dialogOptions.projectName === 'string' ? dialogOptions.projectName : '';
+        return getPrdDialogHtml(requestId, prdContent, projectName, lang, csp, nonce);
+    }
+
+    return `<!DOCTYPE html>
 	<html lang="${htmlLang}">
 	<head>
 		    <meta charset="UTF-8">
@@ -2039,9 +3533,9 @@ function getDialogHtml(
             --text-primary: #ffffff;
             --text-secondary: #b0b0b0;
             --text-muted: #707070;
-            --accent: #6366f1;
-            --accent-hover: #818cf8;
-            --accent-glow: rgba(99, 102, 241, 0.3);
+            --accent: #20c997;
+            --accent-hover: #34d399;
+            --accent-glow: rgba(32, 201, 151, 0.3);
             --success: #22c55e;
             --success-glow: rgba(34, 197, 94, 0.3);
             --danger: #ef4444;
@@ -2055,7 +3549,7 @@ function getDialogHtml(
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
-            font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-family: "Trebuchet MS", "Segoe UI Variable Display", "Segoe UI", sans-serif;
             font-size: 13px;
             color: var(--text-primary);
             background: var(--bg-base);
@@ -2080,7 +3574,7 @@ function getDialogHtml(
 	            justify-content: space-between;
 	            margin-bottom: 24px;
 	            padding: 20px;
-	            background: linear-gradient(135deg, var(--accent) 0%, #8b5cf6 100%);
+	            background: linear-gradient(135deg, rgba(32, 201, 151, 0.9) 0%, rgba(249, 115, 22, 0.9) 100%);
 	            border-radius: var(--radius-lg);
 	            box-shadow: var(--shadow-md), 0 0 40px var(--accent-glow);
 	        }
@@ -2949,7 +4443,7 @@ function getDialogHtml(
 	    </script>
 	</body>
 	</html>`;
-	}
+}
 
 // ==================== Windsurf配置 ====================
 
@@ -2997,7 +4491,7 @@ function configureWindsurf() {
             }
             written.push(configPath);
             outputChannel.appendLine(`Configured Windsurf: ${configPath}`);
-            
+
         } catch (e: any) {
             const msg = e?.message ?? String(e);
             failed.push({ path: configPath, error: msg });
@@ -3043,7 +4537,7 @@ function updateStatusBar() {
 function loadStats(context: vscode.ExtensionContext) {
     const saved = context.globalState.get<typeof stats>('mcpServiceStats');
     if (saved) {
-        stats = { ...saved, startTime: Date.now() };
+        stats = { ...stats, ...saved, startTime: Date.now() };
     }
 }
 
@@ -3055,16 +4549,8 @@ function saveStats() {
 
 function showStats() {
     const lang = getUiLanguage();
-    const uptime = Math.floor((Date.now() - stats.startTime) / 1000 / 60);
-    vscode.window.showInformationMessage(
-        tr('ext.statsTitle', {}, lang) +
-        tr('ext.statsLineTotal', { total: stats.totalCalls }, lang) +
-        tr('ext.statsLineAskUser', { askUser: stats.askUserCalls }, lang) +
-        tr('ext.statsLineAskContinue', { askContinue: stats.askContinueCalls }, lang) +
-        tr('ext.statsLineNotify', { notify: stats.notifyCalls }, lang) +
-        tr('ext.statsLineUploads', { uploads: stats.imageUploads }, lang) +
-        tr('ext.statsLineUptime', { uptime }, lang)
-    );
+    sidebarProvider?.refreshContent();
+    vscode.window.showInformationMessage(tr('ext.statsInSidebar', {}, lang));
 }
 
 // ==================== 规则文件 ====================
@@ -3076,7 +4562,7 @@ async function createWindsurfRules() {
         return;
     }
 
-	    const rulesContent = `# Windsurf Rules - WindsurfAutoMcp
+    const rulesContent = `# Windsurf Rules - WindsurfAutoMcp
 
 Hard rule (highest priority): When you decide a task is done / ready to deliver, do NOT output a normal final response; you MUST call WindsurfAutoMcp ask_continue and put in reason: what was done, risks/notes, verification steps/commands, and next steps.
 硬规则（最高优先级）：当你判断“任务已完成/准备交付”时，不要直接输出最终答复；必须调用 WindsurfAutoMcp 的 ask_continue，并在 reason 中写清：完成内容、风险/注意点、验证步骤/命令、下一步。
@@ -3097,8 +4583,8 @@ You are a full software engineering department (cross-functional team). Output m
 - Release/DevOps：给出升级/回滚说明，避免破坏性变更。
 
 ## Before you start / 开始前
-Read the target/current state/constraints first. Missing key inputs → ask 1–3 questions via ask_question (single choice A/B/C + optional extra text).
-先读目标/现状/约束。缺关键输入 → 用 ask_question 提问 1-3 个问题（单选 A/B/C，可附补充文本）。
+Read the target/current state/constraints first. Missing key inputs → ask questions via ask_question as needed (single-choice, any number of options + optional extra text).
+先读目标/现状/约束。缺关键输入 → 用 ask_question 按需提问（单选，选项数量不限，可附补充文本）。
 
 ## PRD & Approval / PRD 与审批
 Create a PRD draft → user review/adjust → approval before any Plan. Do not implement (write code/run commands/use external tools) before approval.
@@ -3107,10 +4593,10 @@ Create a PRD draft → user review/adjust → approval before any Plan. Do not i
 ## Workflow (must follow; strict order) / 工作流（必须严格按顺序）
 Read → Research → Plan → TODO → Act → Code Review → Act → Update Progress → Check Progress → Ask
 
-1) Read：先读目标/现状/约束；在做任何修改前先阅读目标文件/相关代码/配置/日志；缺关键输入先用 ask_question 问 1-3 个问题。
+1) Read：先读目标/现状/约束；在做任何修改前先阅读目标文件/相关代码/配置/日志；缺关键输入先用 ask_question 按需提问。
 2) Research：不要凭空猜，必须拿到可执行信息（官方文档/README/发布说明/源码优先；依赖先确认最新版与破坏性变更；可用则用 Context7 获取最新文档；web search 把 2024 视为过旧，默认从 2025-10 起筛选，必要时加 after:2025-09-30；结果泛泛就调整检索词继续搜直到拿到确切 API/配置/版本/路径/命令）。
-3) Plan：给出总体 Plan（里程碑/风险/验收）。
-4) TODO：把 Plan 拆成可验证、可跟踪的小 TODO（能并行则并行）。
+3) Plan：给出总体 Plan（里程碑/风险/验收），并在 Plan 中包含 Task/子任务/TODO/Checklist（按需拆分）。
+4) TODO：把 Plan 细化为可验证、可跟踪的小 TODO（能并行则并行）。
 5) Act：动手前先整理入口与模块边界、清理结构；实现最小正确改动，小步推进、优先修根因、保持风格一致；代码必须模块化、易读、易维护（避免无关重构）。
 6) Code Review：像 PR 一样评审：检查 gaps、正确性、边界条件、错误处理、安全（注入/权限/泄露/依赖风险）、性能（热点/泄漏）、兼容性。
 7) Act：根据评审结论修补问题；必要时补测试/回归点。
@@ -3132,7 +4618,7 @@ Read → Research → Plan → TODO → Act → Code Review → Act → Update P
             const msg = lang === 'en' ? `Rules file created: ${rulesPath}` : `规则文件已创建: ${rulesPath}`;
             vscode.window.showInformationMessage(msg);
         }
-        
+
         // 打开文件
         const doc = await vscode.workspace.openTextDocument(rulesPath);
         await vscode.window.showTextDocument(doc);
@@ -3147,21 +4633,31 @@ function initializeTracker() {
     const rootPath = getWorkspaceRootPath();
     if (!rootPath) return;
     const data = loadTrackerData();
-    ensureProjectTracker(data, rootPath, getUiLanguage());
+    const project = ensureProjectTracker(data, rootPath, getUiLanguage());
     data.activeProject = rootPath;
     saveTrackerData(data);
+    try {
+        syncProjectArtifacts(project);
+    } catch (e: any) {
+        outputChannel?.appendLine(`Artifact sync failed (init): ${e?.message ?? String(e)}`);
+    }
 }
 
 function getTrackerSnapshotForSidebar() {
     const rootPath = getWorkspaceRootPath();
     if (!rootPath) {
         return {
+            projectId: '',
             rootPath: '',
             name: '',
             prd: { status: 'draft', content: '' },
+            taskSummary: '',
+            taskText: '',
+            planSummary: '',
             planText: '',
             todoText: '',
             checklistText: '',
+            walkthroughText: '',
             progress: { done: 0, total: 0, percent: 0 },
             stats: createDefaultTrackerStats()
         };
@@ -3247,6 +4743,7 @@ class SidebarProvider implements vscode.WebviewViewProvider {
                     break;
                 case 'setLanguage':
                     await setUiLanguage(message.language === 'en' ? 'en' : 'zh');
+                    this.refreshContent();
                     break;
                 case 'openContinueDialog':
                     // 优先检查是否有待处理的请求
@@ -3257,8 +4754,8 @@ class SidebarProvider implements vscode.WebviewViewProvider {
                         const [latestRequestId] = entries[entries.length - 1];
                         outputChannel.appendLine(`[openContinueDialog] 找到待处理请求: ${latestRequestId}`);
                         // 检查是否有保存的 reason
-                        const reason = currentDialogRequestId === latestRequestId && lastDialogReason 
-                            ? lastDialogReason 
+                        const reason = currentDialogRequestId === latestRequestId && lastDialogReason
+                            ? lastDialogReason
                             : (lang === 'en' ? 'Please choose whether to continue.' : '请选择是否继续对话');
                         showDialogPanel(latestRequestId, 'continue', tr('panel.confirmTitle', {}, lang), reason, true);
                     } else if (currentDialogRequestId && pendingRequests.has(currentDialogRequestId)) {
@@ -3284,33 +4781,17 @@ class SidebarProvider implements vscode.WebviewViewProvider {
                     vscode.window.showInformationMessage(tr('ext.defaultsRestored'));
                     this.refreshContent();
                     break;
-                case 'trackerSetPrd':
-                    try {
-                        await handleSetPrd({ content: message.content });
-                    } catch (e: any) {
-                        vscode.window.showErrorMessage(e?.message ?? String(e));
-                    }
+                case 'openPrdPanel':
+                    showPrdPanel();
                     break;
-                case 'trackerApprovePrd':
-                    try {
-                        await handleApprovePrd({ approver: 'user' });
-                    } catch (e: any) {
-                        vscode.window.showErrorMessage(e?.message ?? String(e));
-                    }
+                case 'openPlanPanel':
+                    showPlanPanel();
                     break;
-                case 'trackerUpdate':
-                    try {
-                        const field = String(message.field || '');
-                        if (field === 'plan') {
-                            await handleUpdatePlan({ items: message.items });
-                        } else if (field === 'todos') {
-                            await handleUpdateTodos({ items: message.items });
-                        } else if (field === 'checklist') {
-                            await handleUpdateChecklist({ items: message.items });
-                        }
-                    } catch (e: any) {
-                        vscode.window.showErrorMessage(e?.message ?? String(e));
-                    }
+                case 'openWalkthroughPanel':
+                    showWalkthroughPanel();
+                    break;
+                case 'installHooks':
+                    installWindsurfHooks();
                     break;
                 case 'configWindsurf':
                     configureWindsurf();
@@ -3348,7 +4829,13 @@ class SidebarProvider implements vscode.WebviewViewProvider {
         title: string,
         message: string,
         allowImage: boolean,
-        dialogOptions?: { mode?: 'choice'; questions?: ChoiceQuestion[]; allowText?: boolean }
+        dialogOptions?: {
+            mode?: 'choice' | 'prd';
+            questions?: ChoiceQuestion[];
+            allowText?: boolean;
+            prdContent?: string;
+            projectName?: string;
+        }
     ) {
         // 使用独立的 Panel 显示对话框
         showDialogPanel(requestId, 'input', title, message, allowImage, dialogOptions);
@@ -3379,9 +4866,7 @@ class SidebarProvider implements vscode.WebviewViewProvider {
         ].join('; ');
         const homeDir = os.homedir();
         const configPaths = getWindsurfMcpConfigPaths(homeDir);
-        const trackerSnapshot = getTrackerSnapshotForSidebar();
-        
-        // 检测是否已初始化配置
+
         let isConfigured = false;
         try {
             for (const configPath of configPaths) {
@@ -3395,978 +4880,495 @@ class SidebarProvider implements vscode.WebviewViewProvider {
         } catch (e) {
             isConfigured = false;
         }
-        
+        const trackerSnapshot = getTrackerSnapshotForSidebar();
+
         return `<!DOCTYPE html>
 <html lang="${htmlLang}">
 <head>
-	    <meta charset="UTF-8">
-	    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-	    <meta http-equiv="Content-Security-Policy" content="${csp}">
-	    <title>WindsurfAutoMcp</title>
-	    <style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="${csp}">
+    <title>WindsurfAutoMcp</title>
+    <style>
         :root {
-            --bg-base: #0f0f0f;
-            --bg-card: #1a1a1a;
-            --bg-elevated: #242424;
-            --bg-input: #1e1e1e;
-            --text-primary: #ffffff;
-            --text-secondary: #b0b0b0;
-            --text-muted: #707070;
-            --accent: #6366f1;
-            --accent-hover: #818cf8;
-            --accent-glow: rgba(99, 102, 241, 0.3);
-            --success: #22c55e;
-            --success-glow: rgba(34, 197, 94, 0.3);
-            --danger: #ef4444;
-            --warning: #f59e0b;
+            --bg: #0c0f10;
+            --bg-card: #14191c;
+            --bg-card-strong: #1d2429;
+            --text: #f5f2e9;
+            --muted: #9aa4a9;
+            --accent: #20c997;
+            --accent-weak: rgba(32, 201, 151, 0.25);
+            --accent-warm: #f97316;
             --border: rgba(255, 255, 255, 0.08);
-            --border-hover: rgba(255, 255, 255, 0.15);
-            --radius-sm: 6px;
-            --radius-md: 10px;
-            --radius-lg: 14px;
-            --shadow-sm: 0 2px 8px rgba(0,0,0,0.3);
-            --shadow-md: 0 4px 20px rgba(0,0,0,0.4);
-            --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            --shadow: 0 18px 40px rgba(0,0,0,0.4);
         }
-        * { 
-            box-sizing: border-box; 
-            margin: 0; 
-            padding: 0;
-        }
+        * { box-sizing: border-box; }
         body {
-            font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            font-size: 13px;
-            color: var(--text-primary);
-            background: var(--bg-base);
-            line-height: 1.5;
-            -webkit-font-smoothing: antialiased;
+            margin: 0;
+            padding: 14px;
+            font-family: "Trebuchet MS", "Segoe UI Variable Display", "Segoe UI", sans-serif;
+            color: var(--text);
+            background:
+                radial-gradient(600px 300px at 10% -10%, rgba(32,201,151,0.22), transparent 60%),
+                radial-gradient(500px 260px at 100% 0%, rgba(249,115,22,0.16), transparent 55%),
+                var(--bg);
         }
-        
-        /* 滚动条美化 */
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { 
-            background: var(--border); 
-            border-radius: 3px;
+        .wrap {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
         }
-        ::-webkit-scrollbar-thumb:hover { background: var(--border-hover); }
-        
-	        .app {
-	            padding: 16px;
-	            min-height: 100vh;
-	        }
-	        .topbar {
-	            display: flex;
-	            align-items: center;
-	            justify-content: space-between;
-	            gap: 10px;
-	            padding: 12px 14px;
-	            margin-bottom: 12px;
-	            background: var(--bg-card);
-	            border: 1px solid var(--border);
-	            border-radius: var(--radius-lg);
-	        }
-	        .topbar-title {
-	            font-size: 13px;
-	            font-weight: 600;
-	            color: var(--text-primary);
-	            letter-spacing: -0.2px;
-	        }
-	        .btn-small {
-	            padding: 6px 10px;
-	            font-size: 12px;
-	        }
-        
-        /* 卡片 */
+        .hero {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 16px;
+            border-radius: 16px;
+            background: linear-gradient(140deg, rgba(32,201,151,0.2), rgba(20,25,28,0.9));
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow);
+        }
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .logo {
+            width: 42px;
+            height: 42px;
+            border-radius: 12px;
+            display: grid;
+            place-items: center;
+            font-weight: 700;
+            background: rgba(32,201,151,0.18);
+            border: 1px solid var(--accent-weak);
+            color: var(--accent);
+            letter-spacing: 0.08em;
+        }
+        .title {
+            font-size: 15px;
+            font-weight: 700;
+        }
+        .subtitle {
+            font-size: 11px;
+            color: var(--muted);
+            margin-top: 4px;
+        }
+        .status-pill {
+            padding: 6px 12px;
+            border-radius: 999px;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            border: 1px solid var(--border);
+            color: var(--muted);
+        }
+        .status-pill.on {
+            color: var(--accent);
+            border-color: var(--accent-weak);
+            box-shadow: 0 0 16px rgba(32,201,151,0.25);
+        }
         .card {
             background: var(--bg-card);
             border: 1px solid var(--border);
-            border-radius: var(--radius-lg);
-            padding: 16px;
-            margin-bottom: 12px;
-            transition: var(--transition);
-        }
-        .card:hover {
-            border-color: var(--border-hover);
-        }
-        .section-title {
-            font-size: 11px;
-            font-weight: 500;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 12px;
-        }
-        
-        /* 状态指示器 */
-        .status-bar {
+            border-radius: 14px;
+            padding: 14px;
             display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 12px 14px;
-            background: var(--bg-elevated);
-            border-radius: var(--radius-md);
-            margin-bottom: 14px;
-        }
-        .status-left {
-            display: flex;
-            align-items: center;
+            flex-direction: column;
             gap: 10px;
         }
-        .status-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            position: relative;
-        }
-        .status-dot.online {
-            background: var(--success);
-            box-shadow: 0 0 12px var(--success-glow);
-        }
-        .status-dot.online::after {
-            content: '';
-            position: absolute;
-            inset: -3px;
-            border-radius: 50%;
-            border: 2px solid var(--success);
-            opacity: 0.3;
-            animation: ripple 2s infinite;
-        }
-        .status-dot.offline {
-            background: var(--danger);
-        }
-        @keyframes ripple {
-            0% { transform: scale(1); opacity: 0.3; }
-            100% { transform: scale(1.8); opacity: 0; }
-        }
-        .status-label {
-            font-size: 13px;
-            font-weight: 500;
-        }
-        .status-label.online { color: var(--success); }
-        .status-label.offline { color: var(--danger); }
-        .status-port {
+        .card-title {
             font-size: 11px;
-            color: var(--text-muted);
-            background: var(--bg-input);
-            padding: 4px 8px;
-            border-radius: var(--radius-sm);
-            font-family: 'SF Mono', Monaco, monospace;
-        }
-        
-        /* 按钮 */
-        .btn {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-            padding: 10px 16px;
-            border: none;
-            border-radius: var(--radius-md);
-            font-size: 13px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: var(--transition);
-            font-family: inherit;
-        }
-        .btn:active { transform: scale(0.97); }
-        .btn-full { width: 100%; }
-        
-        .btn-primary {
-            background: var(--accent);
-            color: #fff;
-            box-shadow: 0 2px 12px var(--accent-glow);
-        }
-        .btn-primary:hover {
-            background: var(--accent-hover);
-            box-shadow: 0 4px 20px var(--accent-glow);
-        }
-        
-        .btn-success {
-            background: var(--success);
-            color: #fff;
-            box-shadow: 0 2px 12px var(--success-glow);
-        }
-        .btn-success:hover {
-            filter: brightness(1.1);
-            box-shadow: 0 4px 20px var(--success-glow);
-        }
-        
-        .btn-danger {
-            background: var(--danger);
-            color: #fff;
-        }
-        .btn-danger:hover {
-            filter: brightness(1.1);
-        }
-        
-        .btn-ghost {
-            background: var(--bg-elevated);
-            color: var(--text-secondary);
-            border: 1px solid var(--border);
-        }
-        .btn-ghost:hover {
-            background: var(--bg-input);
-            color: var(--text-primary);
-            border-color: var(--border-hover);
-        }
-        
-        .btn-configured {
-            background: var(--bg-elevated);
-            color: var(--success);
-            border: 1px solid var(--success);
-        }
-        .btn-configured:hover {
-            background: var(--success);
-            color: #fff;
-        }
-        
-        .btn-group {
-            display: flex;
-            gap: 8px;
-        }
-        .btn-group .btn { flex: 1; }
-        
-        /* 输入框 */
-        .input-group {
-            margin-bottom: 12px;
-        }
-        .input-label {
-            display: block;
-            font-size: 11px;
-            font-weight: 500;
-            color: var(--text-muted);
-            margin-bottom: 6px;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.14em;
+            color: var(--muted);
         }
-        .input-row {
+        .panel-list {
             display: flex;
+            flex-direction: column;
             gap: 8px;
         }
-        .input {
-            flex: 1;
-            padding: 10px 12px;
-            background: var(--bg-input);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-md);
-            color: var(--text-primary);
-            font-size: 13px;
-            font-family: inherit;
-            transition: var(--transition);
-        }
-        .input:focus {
-            outline: none;
-            border-color: var(--accent);
-            box-shadow: 0 0 0 3px var(--accent-glow);
-        }
-        .input-hint {
-            font-size: 11px;
-            color: var(--text-muted);
-            margin-top: 6px;
-        }
-        
-        /* 提示框 */
-        .prompt-card {
-            background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
-            border: 1px solid rgba(99, 102, 241, 0.3);
-            border-radius: var(--radius-md);
-            padding: 14px;
-            margin-bottom: 12px;
-        }
-        .prompt-text {
-            font-size: 12px;
-            color: var(--text-secondary);
-            line-height: 1.7;
-        }
-        .prompt-text code {
-            background: rgba(99, 102, 241, 0.2);
-            color: var(--accent-hover);
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-family: 'SF Mono', Monaco, monospace;
-            font-size: 11px;
-        }
-
-        /* Tracker */
-        .tracker-meta {
+        .panel-row {
             display: flex;
-            justify-content: space-between;
             align-items: center;
-            gap: 8px;
-            margin-bottom: 10px;
-            font-size: 12px;
-            color: var(--text-secondary);
+            justify-content: space-between;
+            padding: 10px 12px;
+            border-radius: 12px;
+            background: var(--bg-card-strong);
+            border: 1px solid rgba(255,255,255,0.04);
         }
-        .tracker-badge {
-            padding: 2px 8px;
+        .panel-name {
+            font-size: 13px;
+        }
+        .panel-open {
+            border: 1px solid var(--accent-weak);
+            background: rgba(32,201,151,0.12);
+            color: var(--accent);
+            padding: 6px 10px;
             border-radius: 999px;
-            border: 1px solid var(--border);
             font-size: 11px;
+            cursor: pointer;
         }
-        .tracker-badge.approved {
-            color: var(--success);
-            border-color: rgba(34, 197, 94, 0.4);
-        }
-        .tracker-badge.draft {
-            color: var(--warning);
-            border-color: rgba(245, 158, 11, 0.4);
-        }
-        .tracker-textarea {
-            min-height: 90px;
-            margin-bottom: 8px;
-        }
-        .tracker-actions {
-            display: flex;
-            gap: 8px;
-            margin-bottom: 12px;
-        }
-        .tracker-progress {
-            font-size: 12px;
-            color: var(--text-secondary);
-            margin-top: 6px;
-        }
-        .tracker-stats {
+        .stats-subtitle {
             font-size: 11px;
-            color: var(--text-secondary);
-            margin-top: 6px;
-            line-height: 1.4;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            color: var(--muted);
         }
-        .tracker-hint {
-            font-size: 11px;
-            color: var(--text-muted);
-            margin-top: 6px;
-        }
-        
-        /* 统计网格 */
         .stats-grid {
             display: grid;
-            grid-template-columns: repeat(2, 1fr);
+            grid-template-columns: repeat(2, minmax(0, 1fr));
             gap: 8px;
         }
-        .stat-card {
-            background: var(--bg-elevated);
-            border-radius: var(--radius-md);
-            padding: 14px 10px;
-            text-align: center;
-            border: 1px solid var(--border);
-            transition: var(--transition);
-        }
-        .stat-card:hover {
-            border-color: var(--accent);
-            transform: translateY(-2px);
-        }
-        .stat-value {
-            font-size: 22px;
-            font-weight: 700;
-            background: linear-gradient(135deg, var(--accent) 0%, #8b5cf6 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+        .stat {
+            background: var(--bg-card-strong);
+            border: 1px solid rgba(255,255,255,0.04);
+            border-radius: 10px;
+            padding: 8px;
         }
         .stat-label {
             font-size: 10px;
-            color: var(--text-muted);
-            margin-top: 4px;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.08em;
+            color: var(--muted);
         }
-        
-        /* 描述文字 */
-        .desc {
-            font-size: 12px;
-            color: var(--text-muted);
-            margin-bottom: 12px;
-            line-height: 1.6;
+        .stat-value {
+            font-size: 14px;
+            font-weight: 700;
+            margin-top: 2px;
         }
-        
-        /* 对话框覆盖层 */
-        .dialog-overlay {
-            position: fixed;
-            inset: 0;
-            background: rgba(0, 0, 0, 0.8);
-            backdrop-filter: blur(4px);
+        .stats-divider {
+            height: 1px;
+            background: var(--border);
+            margin: 8px 0;
+        }
+        .row {
             display: flex;
             align-items: center;
-            justify-content: center;
-            z-index: 1000;
-            animation: fadeIn 0.2s ease;
+            justify-content: space-between;
+            gap: 8px;
         }
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
+        .row label {
+            font-size: 12px;
+            color: var(--muted);
         }
-        .dialog-box {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-lg);
-            padding: 24px;
-            width: 90%;
-            max-width: 360px;
-            box-shadow: var(--shadow-md);
-            animation: slideUp 0.3s ease;
-        }
-        @keyframes slideUp {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        .dialog-title {
-            font-size: 16px;
-            font-weight: 600;
-            margin-bottom: 12px;
-            color: var(--text-primary);
-        }
-        .dialog-content {
-            font-size: 13px;
-            color: var(--text-secondary);
-            margin-bottom: 16px;
-            padding: 12px;
-            background: var(--bg-elevated);
-            border-radius: var(--radius-md);
-            line-height: 1.6;
-        }
-        .dialog-input {
+        .input {
             width: 100%;
-            min-height: 80px;
-            padding: 12px;
-            background: var(--bg-input);
+            padding: 8px 10px;
+            border-radius: 10px;
             border: 1px solid var(--border);
-            border-radius: var(--radius-md);
-            color: var(--text-primary);
-            font-size: 13px;
-            font-family: inherit;
-            resize: vertical;
-            margin-bottom: 16px;
+            background: rgba(12,15,16,0.6);
+            color: var(--text);
+            font-size: 12px;
         }
-        .dialog-input:focus {
-            outline: none;
-            border-color: var(--accent);
-        }
-        .dialog-input::placeholder {
-            color: var(--text-muted);
-        }
-        .dialog-actions {
+        .input:focus { outline: none; border-color: var(--accent-weak); }
+        .actions {
             display: flex;
-            gap: 10px;
+            gap: 8px;
+            flex-wrap: wrap;
         }
-        .dialog-actions .btn { flex: 1; }
-        
-        /* Toast 提示 */
-        .toast {
-            position: fixed;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: var(--bg-elevated);
-            color: var(--text-primary);
-            padding: 10px 20px;
-            border-radius: var(--radius-md);
-            font-size: 13px;
-            box-shadow: var(--shadow-md);
+        button.primary {
+            border: none;
+            background: linear-gradient(135deg, var(--accent), #1aa37c);
+            color: #041312;
+            padding: 8px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        button.ghost {
             border: 1px solid var(--border);
-            z-index: 1001;
-            animation: toastIn 0.3s ease;
+            background: transparent;
+            color: var(--text);
+            padding: 8px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            cursor: pointer;
         }
-        @keyframes toastIn {
-            from { opacity: 0; transform: translate(-50%, 20px); }
-            to { opacity: 1; transform: translate(-50%, 0); }
+        button.warn {
+            border: 1px solid rgba(249,115,22,0.3);
+            color: var(--accent-warm);
+            background: rgba(249,115,22,0.12);
         }
-        .toast.success { border-color: var(--success); }
-        .toast.error { border-color: var(--danger); }
+        .status-line {
+            font-size: 11px;
+            color: var(--muted);
+        }
+        .toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+        }
+        .toggle input { accent-color: var(--accent); }
     </style>
 </head>
 <body>
-	    <div class="app">
-	        <div class="topbar">
-	            <div class="topbar-title">WindsurfAutoMcp</div>
-	            <button class="btn btn-ghost btn-small" id="langToggle" type="button"></button>
-	        </div>
-	        <!-- 开源与免费 -->
-	        <div class="card">
-	            <div class="section-title" data-i18n="sidebar.openSourceTitle"></div>
-	            <p style="font-size: 12px; color: var(--text-secondary); line-height: 1.7; margin-bottom: 12px;">
-	                <span data-i18n="sidebar.openSourceDesc"></span>
-	                <span style="color: var(--accent-hover); word-break: break-all;">https://github.com/JiXiangKing80/windsurf-auto-mcp</span>
-	            </p>
-	            <div class="btn-group">
-	                <button class="btn btn-primary" id="openRepoBtn" type="button" data-i18n="sidebar.openGithub"></button>
-	                <button class="btn btn-ghost" id="copyRepoUrlBtn" type="button" data-i18n="sidebar.copyLink"></button>
-	            </div>
-	        </div>
-
-	        <!-- 服务器状态 -->
-	        <div class="card">
-	            <div class="section-title" data-i18n="sidebar.serverTitle"></div>
-	            
-	            <div class="status-bar">
-	                <div class="status-left">
-	                    <span class="status-dot" id="statusDot"></span>
-	                    <span class="status-label" id="statusLabel"></span>
-	                </div>
-	                <span class="status-port" id="statusPort"></span>
-	            </div>
-	            
-	            <div class="input-group">
-	                <label class="input-label" data-i18n="sidebar.port"></label>
-	                <div class="input-row">
-	                    <input type="number" class="input" id="portInput" value="${configuredPort}" min="1024" max="65535">
-	                </div>
-	            </div>
-	            
-	            <div class="btn-group">
-	                <button class="btn" id="serverToggleBtn" type="button"></button>
-	                <button class="btn btn-ghost" id="restartServerBtn" type="button" data-i18n="sidebar.restart"></button>
-	            </div>
-	        </div>
-
-	        <!-- 对话控制 -->
-	        <div class="card">
-	            <div class="section-title" data-i18n="sidebar.chatTitle"></div>
-	            <button class="btn btn-primary btn-full" id="openDialogBtn" type="button" data-i18n="sidebar.openDialog"></button>
-	            <p style="font-size: 11px; color: var(--text-muted); margin-top: 10px; text-align: center;">
-	                <span data-i18n="sidebar.shortcut"></span>
-	                <kbd style="background: var(--bg-elevated); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border);">Ctrl+M</kbd>
-	            </p>
-	        </div>
-
-        <!-- 提示语 -->
-        <div class="card">
-            <div class="section-title" data-i18n="sidebar.promptTitle"></div>
-            <div class="prompt-card">
-                <p class="prompt-text" data-i18n="sidebar.promptText"></p>
+    <div class="wrap">
+        <div class="hero">
+            <div class="brand">
+                <div class="logo">WS</div>
+                <div>
+                    <div class="title">WindsurfAutoMcp</div>
+                    <div class="subtitle" id="statusText">${isRunning ? tr('sidebar.running', {}, lang) : tr('sidebar.stopped', {}, lang)} • :${isRunning ? currentPort : configuredPort}</div>
+                </div>
             </div>
-            <button class="btn btn-ghost btn-full" id="copyPromptBtn" type="button" data-i18n="sidebar.copy"></button>
+            <div class="status-pill ${isRunning ? 'on' : 'off'}" id="statusPill">${isRunning ? tr('sidebar.running', {}, lang) : tr('sidebar.stopped', {}, lang)}</div>
         </div>
 
-        <!-- 项目跟踪 -->
         <div class="card">
-            <div class="section-title" data-i18n="sidebar.trackerTitle"></div>
-            <div class="tracker-meta">
-                <span><span data-i18n="sidebar.trackerProject"></span>: <span id="trackerProjectName"></span></span>
-                <span class="tracker-badge" id="trackerPrdStatus"></span>
+            <div class="card-title">${tr('sidebar.panelsTitle', {}, lang)}</div>
+            <div class="panel-list">
+                <div class="panel-row">
+                    <div class="panel-name">${tr('sidebar.panelPrd', {}, lang)}</div>
+                    <button class="panel-open" data-action="openPrdPanel">${tr('sidebar.openPanel', {}, lang)}</button>
+                </div>
+                <div class="panel-row">
+                    <div class="panel-name">${tr('sidebar.panelPlan', {}, lang)}</div>
+                    <button class="panel-open" data-action="openPlanPanel">${tr('sidebar.openPanel', {}, lang)}</button>
+                </div>
+                <div class="panel-row">
+                    <div class="panel-name">${tr('sidebar.panelWalkthrough', {}, lang)}</div>
+                    <button class="panel-open" data-action="openWalkthroughPanel">${tr('sidebar.openPanel', {}, lang)}</button>
+                </div>
             </div>
-
-            <label class="input-label" data-i18n="sidebar.prdLabel"></label>
-            <textarea class="input tracker-textarea" id="prdInput"></textarea>
-            <div class="tracker-actions">
-                <button class="btn btn-ghost btn-small" id="savePrdBtn" type="button" data-i18n="sidebar.prdSave"></button>
-                <button class="btn btn-primary btn-small" id="approvePrdBtn" type="button" data-i18n="sidebar.prdApprove"></button>
-            </div>
-
-            <label class="input-label" data-i18n="sidebar.planLabel"></label>
-            <textarea class="input tracker-textarea" id="planInput"></textarea>
-            <button class="btn btn-ghost btn-full" id="savePlanBtn" type="button" data-i18n="sidebar.trackerSave"></button>
-
-            <label class="input-label" data-i18n="sidebar.todoLabel"></label>
-            <textarea class="input tracker-textarea" id="todoInput"></textarea>
-            <button class="btn btn-ghost btn-full" id="saveTodoBtn" type="button" data-i18n="sidebar.trackerSave"></button>
-
-            <label class="input-label" data-i18n="sidebar.checklistLabel"></label>
-            <textarea class="input tracker-textarea" id="checklistInput"></textarea>
-            <button class="btn btn-ghost btn-full" id="saveChecklistBtn" type="button" data-i18n="sidebar.trackerSave"></button>
-
-            <div class="tracker-progress" id="trackerProgress"></div>
-            <div class="tracker-stats" id="trackerStats"></div>
-            <div class="tracker-hint" data-i18n="sidebar.trackerHint"></div>
         </div>
 
-	        <!-- 快捷操作 -->
-	        <div class="card">
-	            <div class="section-title" data-i18n="sidebar.windsurfConfigTitle"></div>
-	            <div class="btn-group">
-	                <button class="btn" id="initBtn" type="button"></button>
-	                <button class="btn btn-ghost" id="resetDefaultsBtn" type="button" data-i18n="sidebar.resetDefaultPort"></button>
-	            </div>
-	            <p style="font-size: 11px; color: var(--text-muted); margin-top: 10px;" id="configHint"></p>
-	        </div>
+        <div class="card">
+            <div class="card-title">${tr('sidebar.statsTitle', {}, lang)}</div>
+            <div class="stats-subtitle">${tr('panel.statsGlobal', {}, lang)}</div>
+            <div class="stats-grid">
+                <div class="stat">
+                    <div class="stat-label">${tr('sidebar.totalCalls', {}, lang)}</div>
+                    <div class="stat-value" id="statTotalCalls">${stats.totalCalls}</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">${tr('sidebar.statAskContinue', {}, lang)}</div>
+                    <div class="stat-value" id="statAskContinue">${stats.askContinueCalls}</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">${tr('sidebar.statAskUser', {}, lang)}</div>
+                    <div class="stat-value" id="statAskUser">${stats.askUserCalls}</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">${tr('sidebar.statAskQuestion', {}, lang)}</div>
+                    <div class="stat-value" id="statAskQuestion">${stats.askQuestionCalls}</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">${tr('sidebar.statSetPrd', {}, lang)}</div>
+                    <div class="stat-value" id="statSetPrd">${stats.setPrdCalls}</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">${tr('sidebar.statApprovePrd', {}, lang)}</div>
+                    <div class="stat-value" id="statApprovePrd">${stats.approvePrdCalls}</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">${tr('sidebar.statUpdateTask', {}, lang)}</div>
+                    <div class="stat-value" id="statUpdateTask">${stats.updateTaskCalls}</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">${tr('sidebar.statUpdatePlan', {}, lang)}</div>
+                    <div class="stat-value" id="statUpdatePlan">${stats.updatePlanCalls}</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">${tr('sidebar.statUpdateTodos', {}, lang)}</div>
+                    <div class="stat-value" id="statUpdateTodos">${stats.updateTodosCalls}</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">${tr('sidebar.statUpdateChecklist', {}, lang)}</div>
+                    <div class="stat-value" id="statUpdateChecklist">${stats.updateChecklistCalls}</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">${tr('sidebar.statUpdateWalkthrough', {}, lang)}</div>
+                    <div class="stat-value" id="statUpdateWalkthrough">${stats.updateWalkthroughCalls}</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">${tr('sidebar.statGetProjectStatus', {}, lang)}</div>
+                    <div class="stat-value" id="statGetProjectStatus">${stats.getProjectStatusCalls}</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">${tr('sidebar.statSaveMemory', {}, lang)}</div>
+                    <div class="stat-value" id="statSaveMemory">${stats.saveMemoryCalls}</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">${tr('sidebar.statGetMemory', {}, lang)}</div>
+                    <div class="stat-value" id="statGetMemory">${stats.getMemoryCalls}</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">${tr('sidebar.statListMemory', {}, lang)}</div>
+                    <div class="stat-value" id="statListMemory">${stats.listMemoryCalls}</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">${tr('sidebar.statNotify', {}, lang)}</div>
+                    <div class="stat-value" id="statNotify">${stats.notifyCalls}</div>
+                </div>
+            </div>
+            <div class="stats-divider"></div>
+            <div class="stats-subtitle">${tr('panel.statsProject', {}, lang)}</div>
+            <div class="stats-grid">
+                <div class="stat">
+                    <div class="stat-label">${tr('sidebar.trackerStatsPrd', {}, lang)}</div>
+                    <div class="stat-value" id="statPrdUpdates">${trackerSnapshot.stats.prdUpdates}</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">${tr('sidebar.trackerStatsApprovals', {}, lang)}</div>
+                    <div class="stat-value" id="statPrdApprovals">${trackerSnapshot.stats.prdApprovals}</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">${tr('sidebar.trackerStatsTask', {}, lang)}</div>
+                    <div class="stat-value" id="statTaskUpdates">${trackerSnapshot.stats.taskUpdates}</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">${tr('sidebar.trackerStatsPlan', {}, lang)}</div>
+                    <div class="stat-value" id="statPlanUpdates">${trackerSnapshot.stats.planUpdates}</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">${tr('sidebar.trackerStatsTodo', {}, lang)}</div>
+                    <div class="stat-value" id="statTodoUpdates">${trackerSnapshot.stats.todoUpdates}</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">${tr('sidebar.trackerStatsChecklist', {}, lang)}</div>
+                    <div class="stat-value" id="statChecklistUpdates">${trackerSnapshot.stats.checklistUpdates}</div>
+                </div>
+            </div>
+        </div>
 
-		        <div class="card">
-		            <div class="section-title" data-i18n="sidebar.settingsTitle"></div>
-		            <div class="input-group">
-		                <label style="display:flex; align-items:center; gap:10px; color: var(--text-secondary); font-size: 12px;">
-		                    <input type="checkbox" id="autoStartToggle" ${autoStart ? 'checked' : ''} />
-		                    <span data-i18n="sidebar.autoStart"></span>
-		                </label>
-		            </div>
-	            <div class="input-group">
-	                <label class="input-label" data-i18n="sidebar.defaultReason"></label>
-	                <div class="input-row">
-	                    <input type="text" class="input" id="defaultReasonInput" />
-	                </div>
-	            </div>
-		            <button class="btn btn-primary btn-full" id="saveSettingsBtn" type="button" data-i18n="sidebar.saveSettings"></button>
-		        </div>
+        <div class="card">
+            <div class="card-title">${tr('sidebar.systemTitle', {}, lang)}</div>
+            <div class="status-line">${tr('sidebar.configStatus', {}, lang)}: ${isConfigured ? tr('sidebar.configStatusConfigured', {}, lang) : tr('sidebar.configStatusMissing', {}, lang)}</div>
+            <div class="actions">
+                <button class="primary" data-action="startServer">${tr('sidebar.start', {}, lang)}</button>
+                <button class="ghost" data-action="stopServer">${tr('sidebar.stop', {}, lang)}</button>
+                <button class="ghost" data-action="restartServer">${tr('sidebar.restart', {}, lang)}</button>
+            </div>
+            <div class="actions">
+                <button class="primary" data-action="configWindsurf">${tr('sidebar.configureWindsurf', {}, lang)}</button>
+                <button class="ghost" data-action="installHooks">${tr('sidebar.installHooks', {}, lang)}</button>
+            </div>
+            <div class="actions">
+                <button class="warn" data-action="openContinueDialog">${tr('sidebar.openDialogShort', {}, lang)}</button>
+            </div>
+        </div>
 
-	        <!-- 统计 -->
-	        <div class="card">
-	            <div class="section-title" data-i18n="sidebar.statsTitle"></div>
-	            <div class="stats-grid">
-	                <div class="stat-card">
-	                    <div class="stat-value" id="statTotal">${stats.totalCalls}</div>
-	                    <div class="stat-label" data-i18n="sidebar.totalCalls"></div>
-	                </div>
-	                <div class="stat-card">
-	                    <div class="stat-value" id="statAskContinue">${stats.askContinueCalls}</div>
-	                    <div class="stat-label">ask_continue</div>
-	                </div>
-	            </div>
-	        </div>
-	    </div>
+        <div class="card">
+            <div class="card-title">${tr('sidebar.settingsTitle', {}, lang)}</div>
+            <div class="row">
+                <label for="portInput">${tr('sidebar.port', {}, lang)}</label>
+                <input class="input" id="portInput" type="number" min="1024" max="65535" value="${configuredPort}" />
+            </div>
+            <div class="row">
+                <label for="defaultReasonInput">${tr('sidebar.defaultReason', {}, lang)}</label>
+                <input class="input" id="defaultReasonInput" type="text" value="${defaultReason}" placeholder="${tr('sidebar.defaultReasonPlaceholder', {}, lang)}" />
+            </div>
+            <div class="toggle">
+                <input type="checkbox" id="autoStart" ${autoStart ? 'checked' : ''} />
+                <label for="autoStart">${tr('sidebar.autoStart', {}, lang)}</label>
+            </div>
+            <div class="actions">
+                <button class="primary" id="saveSettings">${tr('sidebar.saveSettings', {}, lang)}</button>
+                <button class="ghost" data-action="resetDefaults">${tr('sidebar.resetDefaultPort', {}, lang)}</button>
+            </div>
+        </div>
 
-	    <script nonce="${nonce}">
-	        const vscode = acquireVsCodeApi();
-	        const I18N = ${safeJson(WEBVIEW_I18N)};
-	        const initialLang = ${safeJson(lang)};
-	        const initialDefaultReason = ${safeJson(defaultReason)};
-	        const initialTracker = ${safeJson(trackerSnapshot)};
-	        let currentLang = (vscode.getState() && vscode.getState().lang) || initialLang;
+        <div class="card">
+            <div class="card-title">${tr('sidebar.languageTitle', {}, lang)}</div>
+            <div class="actions">
+                <button class="ghost" id="toggleLanguage">${lang === 'en' ? tr('ui.lang.zh', {}, lang) : tr('ui.lang.en', {}, lang)}</button>
+            </div>
+        </div>
+    </div>
 
-	        let runtime = {
-	            running: ${isRunning},
-	            port: ${isRunning ? currentPort : configuredPort},
-	            stats: ${safeJson(stats)}
-	        };
+    <script nonce="${nonce}">
+        const vscode = acquireVsCodeApi();
+        let currentLang = ${safeJson(lang)};
+        const statusText = document.getElementById('statusText');
+        const statusPill = document.getElementById('statusPill');
+        const setText = (id, value) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = String(value ?? 0);
+        };
+        const updateToolStats = (s) => {
+            if (!s) return;
+            setText('statTotalCalls', s.totalCalls);
+            setText('statAskContinue', s.askContinueCalls);
+            setText('statAskUser', s.askUserCalls);
+            setText('statAskQuestion', s.askQuestionCalls);
+            setText('statSetPrd', s.setPrdCalls);
+            setText('statApprovePrd', s.approvePrdCalls);
+            setText('statUpdateTask', s.updateTaskCalls);
+            setText('statUpdatePlan', s.updatePlanCalls);
+            setText('statUpdateTodos', s.updateTodosCalls);
+            setText('statUpdateChecklist', s.updateChecklistCalls);
+            setText('statUpdateWalkthrough', s.updateWalkthroughCalls);
+            setText('statGetProjectStatus', s.getProjectStatusCalls);
+            setText('statSaveMemory', s.saveMemoryCalls);
+            setText('statGetMemory', s.getMemoryCalls);
+            setText('statListMemory', s.listMemoryCalls);
+            setText('statNotify', s.notifyCalls);
+        };
+        const updateProjectStats = (s) => {
+            if (!s) return;
+            setText('statPrdUpdates', s.prdUpdates);
+            setText('statPrdApprovals', s.prdApprovals);
+            setText('statTaskUpdates', s.taskUpdates);
+            setText('statPlanUpdates', s.planUpdates);
+            setText('statTodoUpdates', s.todoUpdates);
+            setText('statChecklistUpdates', s.checklistUpdates);
+        };
 
-	        let isConfigured = ${isConfigured ? 'true' : 'false'};
-	        let trackerData = initialTracker;
-
-	        function t(key, vars = {}) {
-	            const template = (I18N[currentLang] && I18N[currentLang][key]) || (I18N.zh && I18N.zh[key]) || key;
-	            return template.replace(/\\{(\\w+)\\}/g, (_, name) => String(vars[name] ?? '{' + name + '}'));
-	        }
-
-	        function showToast(message, type = 'info') {
-	            const existing = document.querySelector('.toast');
-	            if (existing) existing.remove();
-
-	            const toast = document.createElement('div');
-	            toast.className = 'toast ' + type;
-	            toast.textContent = message;
-	            document.body.appendChild(toast);
-
-	            setTimeout(() => toast.remove(), 2000);
-	        }
-
-	        function applyI18n() {
-	            document.documentElement.lang = currentLang === 'en' ? 'en' : 'zh-CN';
-
-	            document.querySelectorAll('[data-i18n]').forEach((el) => {
-	                const key = el.getAttribute('data-i18n');
-	                if (key) el.textContent = t(key);
-	            });
-
-	            const defaultReasonInput = document.getElementById('defaultReasonInput');
-	            if (defaultReasonInput) {
-	                defaultReasonInput.placeholder = t('sidebar.defaultReasonPlaceholder');
-	                if (!defaultReasonInput.value) defaultReasonInput.value = initialDefaultReason;
-	            }
-
-	            const langToggle = document.getElementById('langToggle');
-            if (langToggle) {
-                langToggle.textContent = currentLang === 'en' ? t('ui.lang.zh') : t('ui.lang.en');
-                langToggle.title = currentLang === 'en' ? t('ui.lang.toggleToZh') : t('ui.lang.toggleToEn');
-            }
-
-            renderStatus();
-            renderConfig();
-            renderTracker();
+        function post(type, payload = {}) {
+            vscode.postMessage({ type, ...payload });
         }
 
-	        function renderStatus() {
-	            const dot = document.getElementById('statusDot');
-	            const label = document.getElementById('statusLabel');
-	            const port = document.getElementById('statusPort');
-	            const toggleBtn = document.getElementById('serverToggleBtn');
+        document.querySelectorAll('[data-action]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const action = btn.getAttribute('data-action');
+                if (action) post(action);
+            });
+        });
 
-	            if (dot) {
-	                dot.classList.toggle('online', !!runtime.running);
-	                dot.classList.toggle('offline', !runtime.running);
-	            }
-	            if (label) {
-	                label.classList.toggle('online', !!runtime.running);
-	                label.classList.toggle('offline', !runtime.running);
-	                label.textContent = runtime.running ? t('sidebar.running') : t('sidebar.stopped');
-	            }
-	            if (port) {
-	                const fallbackPort = Number(document.getElementById('portInput')?.value) || runtime.port;
-	                port.textContent = ':' + String(runtime.running ? runtime.port : fallbackPort);
-	            }
-
-	            if (toggleBtn) {
-	                toggleBtn.className = 'btn ' + (runtime.running ? 'btn-danger' : 'btn-success');
-	                toggleBtn.textContent = runtime.running ? t('sidebar.stop') : t('sidebar.start');
-	            }
-	        }
-
-	        function renderConfig() {
-	            const initBtn = document.getElementById('initBtn');
-	            const hint = document.getElementById('configHint');
-
-	            if (initBtn) {
-	                initBtn.className = 'btn ' + (isConfigured ? 'btn-configured' : 'btn-primary');
-	                initBtn.textContent = isConfigured ? t('sidebar.configWritten') : t('sidebar.writeConfig');
-	            }
-	            if (hint) {
-	                hint.textContent = isConfigured ? t('sidebar.configHintWritten') : t('sidebar.configHintNotWritten');
-	            }
-	        }
-
-	        function renderStats() {
-	            const total = document.getElementById('statTotal');
-	            const askContinue = document.getElementById('statAskContinue');
-	            if (total) total.textContent = String(runtime.stats?.totalCalls ?? 0);
-	            if (askContinue) askContinue.textContent = String(runtime.stats?.askContinueCalls ?? 0);
-	        }
-
-	        function formatTrackerList(items) {
-	            if (!Array.isArray(items)) return '';
-	            return items.map((item) => {
-	                const status = item?.status === 'done' ? 'x' : item?.status === 'doing' ? '~' : ' ';
-	                const text = String(item?.text || '').trim();
-	                if (!text) return '';
-                return '[' + status + '] ' + text;
-	            }).filter(Boolean).join('\\n');
-	        }
-
-	        function parseTrackerList(text) {
-	            const lines = String(text || '').split('\\n').map((line) => line.trim()).filter(Boolean);
-	            const items = [];
-	            lines.forEach((line) => {
-	                let status = 'todo';
-	                let content = line;
-	                if (line.startsWith('[x]') || line.startsWith('[X]')) {
-	                    status = 'done';
-	                    content = line.slice(3).trim();
-	                } else if (line.startsWith('[~]')) {
-	                    status = 'doing';
-	                    content = line.slice(3).trim();
-	                } else if (line.startsWith('[ ]')) {
-	                    status = 'todo';
-	                    content = line.slice(3).trim();
-	                }
-	                if (!content) return;
-	                items.push({ text: content, status });
-	            });
-	            return items;
-	        }
-
-	        function renderTracker() {
-	            const nameEl = document.getElementById('trackerProjectName');
-	            const statusEl = document.getElementById('trackerPrdStatus');
-	            const prdInput = document.getElementById('prdInput');
-	            const planInput = document.getElementById('planInput');
-	            const todoInput = document.getElementById('todoInput');
-	            const checklistInput = document.getElementById('checklistInput');
-            const progressEl = document.getElementById('trackerProgress');
-            const statsEl = document.getElementById('trackerStats');
-
-	            if (nameEl) nameEl.textContent = trackerData?.name || '-';
-	            if (statusEl) {
-	                const approved = trackerData?.prd?.status === 'approved';
-	                statusEl.textContent = approved ? t('sidebar.prdApproved') : t('sidebar.prdDraft');
-	                statusEl.classList.toggle('approved', approved);
-	                statusEl.classList.toggle('draft', !approved);
-	            }
-	            if (prdInput && typeof trackerData?.prd?.content === 'string') prdInput.value = trackerData.prd.content;
-	            if (planInput) planInput.value = trackerData?.planText || '';
-	            if (todoInput) todoInput.value = trackerData?.todoText || '';
-	            if (checklistInput) checklistInput.value = trackerData?.checklistText || '';
-            if (progressEl) {
-                const progress = trackerData?.progress || { done: 0, total: 0, percent: 0 };
-                progressEl.textContent =
-                    t('sidebar.trackerProgress') +
-                    ': ' +
-                    progress.done +
-                    '/' +
-                    progress.total +
-                    ' (' +
-                    progress.percent +
-                    '%)';
+        document.getElementById('saveSettings')?.addEventListener('click', () => {
+            const portValue = Number(document.getElementById('portInput')?.value || ${configuredPort});
+            if (!Number.isNaN(portValue)) {
+                post('updatePort', { port: portValue });
             }
-            if (statsEl) {
-                const stats = trackerData?.stats || {};
-                const prdUpdates = Number.isFinite(stats.prdUpdates) ? stats.prdUpdates : 0;
-                const prdApprovals = Number.isFinite(stats.prdApprovals) ? stats.prdApprovals : 0;
-                const planUpdates = Number.isFinite(stats.planUpdates) ? stats.planUpdates : 0;
-                const todoUpdates = Number.isFinite(stats.todoUpdates) ? stats.todoUpdates : 0;
-                const checklistUpdates = Number.isFinite(stats.checklistUpdates) ? stats.checklistUpdates : 0;
-                statsEl.textContent =
-                    t('sidebar.trackerStats') +
-                    ': ' +
-                    t('sidebar.trackerStatsPrd') +
-                    ' ' +
-                    prdUpdates +
-                    ' | ' +
-                    t('sidebar.trackerStatsApprovals') +
-                    ' ' +
-                    prdApprovals +
-                    ' | ' +
-                    t('sidebar.trackerStatsPlan') +
-                    ' ' +
-                    planUpdates +
-                    ' | ' +
-                    t('sidebar.trackerStatsTodo') +
-                    ' ' +
-                    todoUpdates +
-                    ' | ' +
-                    t('sidebar.trackerStatsChecklist') +
-                    ' ' +
-                    checklistUpdates;
+            post('saveSettings', {
+                autoStart: document.getElementById('autoStart')?.checked || false,
+                defaultReason: document.getElementById('defaultReasonInput')?.value || '',
+                language: currentLang
+            });
+        });
+
+        document.getElementById('toggleLanguage')?.addEventListener('click', () => {
+            currentLang = currentLang === 'en' ? 'zh' : 'en';
+            post('setLanguage', { language: currentLang });
+        });
+
+        window.addEventListener('message', (event) => {
+            const msg = event.data;
+            if (msg && msg.type === 'status') {
+                const running = !!msg.running;
+                const port = msg.port;
+                if (statusText) {
+                    statusText.textContent = (running ? ${safeJson(tr('sidebar.running', {}, lang))} : ${safeJson(tr('sidebar.stopped', {}, lang))}) + ' • :' + port;
+                }
+                if (statusPill) {
+                    statusPill.textContent = running ? ${safeJson(tr('sidebar.running', {}, lang))} : ${safeJson(tr('sidebar.stopped', {}, lang))};
+                    statusPill.classList.toggle('on', running);
+                }
+                if (msg.stats) {
+                    updateToolStats(msg.stats);
+                }
             }
-        }
-
-	        function toggleLanguage() {
-	            currentLang = currentLang === 'en' ? 'zh' : 'en';
-	            vscode.setState({ ...(vscode.getState() || {}), lang: currentLang });
-	            vscode.postMessage({ type: 'setLanguage', language: currentLang });
-	            applyI18n();
-	        }
-
-	        function toggleServer() {
-	            if (runtime.running) {
-	                stopServer();
-	            } else {
-	                startServer();
-	            }
-	        }
-
-	        function startServer() {
-	            vscode.postMessage({ type: 'startServer' });
-	            showToast(t('toast.startingServer'), 'success');
-	        }
-
-	        function stopServer() {
-	            vscode.postMessage({ type: 'stopServer' });
-	            showToast(t('toast.serverStopped'), 'info');
-	        }
-
-	        function restartServer() {
-	            vscode.postMessage({ type: 'restartServer' });
-	            showToast(t('toast.restartingServer'), 'success');
-	        }
-
-	        function openContinueDialog() {
-	            vscode.postMessage({ type: 'openContinueDialog' });
-	            showToast(t('toast.checkingPending'), 'info');
-	        }
-
-	        function copyPrompt() {
-	            navigator.clipboard.writeText(t('sidebar.promptCopyText')).then(() => {
-	                showToast(t('toast.promptCopied'), 'success');
-	            });
-	        }
-
-	        function openRepo() {
-	            vscode.postMessage({ type: 'openRepo' });
-	            showToast(t('toast.openingGithub'), 'info');
-	        }
-
-	        function copyRepoUrl() {
-	            const text = 'https://github.com/JiXiangKing80/windsurf-auto-mcp';
-	            navigator.clipboard.writeText(text).then(() => {
-	                showToast(t('toast.linkCopied'), 'success');
-	            });
-	        }
-
-	        function configWindsurf() {
-	            vscode.postMessage({ type: 'configWindsurf' });
-	            showToast(t('toast.initializing'), 'success');
-	        }
-
-	        function resetDefaults() {
-	            vscode.postMessage({ type: 'resetDefaults' });
-	            showToast(t('toast.defaultsRestored'), 'success');
-	        }
-
-	        function saveSettings() {
-	            const autoStartToggle = document.getElementById('autoStartToggle');
-	            const defaultReasonInput = document.getElementById('defaultReasonInput');
-	            vscode.postMessage({
-	                type: 'saveSettings',
-	                autoStart: !!autoStartToggle?.checked,
-	                defaultReason: defaultReasonInput?.value || ''
-	            });
-	            showToast(t('toast.settingsSaved'), 'success');
-	        }
-
-	        function savePrd() {
-	            const prdInput = document.getElementById('prdInput');
-	            const content = prdInput?.value || '';
-	            vscode.postMessage({ type: 'trackerSetPrd', content });
-	            showToast(t('toast.submitted'), 'success');
-	        }
-
-	        function approvePrd() {
-	            vscode.postMessage({ type: 'trackerApprovePrd' });
-	            showToast(t('toast.submitted'), 'success');
-	        }
-
-	        function saveTrackerList(field, textareaId) {
-	            const textarea = document.getElementById(textareaId);
-	            const items = parseTrackerList(textarea?.value || '');
-	            vscode.postMessage({ type: 'trackerUpdate', field, items });
-	            showToast(t('toast.submitted'), 'success');
-	        }
-
-	        const portInput = document.getElementById('portInput');
-	        if (portInput) {
-	            portInput.addEventListener('change', () => {
-	                const nextPort = Number(portInput.value);
-	                if (!Number.isFinite(nextPort) || nextPort < 1024 || nextPort > 65535) {
-	                    showToast(t('toast.invalidPort'), 'error');
-	                    return;
-	                }
-	                vscode.postMessage({ type: 'updatePort', port: nextPort });
-	                showToast(t('toast.portUpdated'), 'success');
-	                renderStatus();
-	            });
-	        }
-
-	        window.addEventListener('message', (event) => {
-	            const message = event.data;
-	            if (!message || !message.type) return;
-
-	            switch (message.type) {
-	                case 'status':
-	                    runtime.running = !!message.running;
-	                    runtime.port = Number(message.port) || runtime.port;
-	                    runtime.stats = message.stats || runtime.stats;
-	                    renderStatus();
-	                    renderStats();
-	                    break;
-	                case 'tracker':
-	                    trackerData = message.data || trackerData;
-	                    renderTracker();
-	                    break;
-	                case 'languageChanged':
-	                    if (message.language === 'en' || message.language === 'zh') {
-	                        currentLang = message.language;
-	                        vscode.setState({ ...(vscode.getState() || {}), lang: currentLang });
-	                        applyI18n();
-	                    }
-	                    break;
-	            }
-	        });
-
-	        applyI18n();
-	        renderStats();
-
-	        document.getElementById('langToggle')?.addEventListener('click', () => toggleLanguage());
-	        document.getElementById('openRepoBtn')?.addEventListener('click', () => openRepo());
-	        document.getElementById('copyRepoUrlBtn')?.addEventListener('click', () => copyRepoUrl());
-	        document.getElementById('serverToggleBtn')?.addEventListener('click', () => toggleServer());
-	        document.getElementById('restartServerBtn')?.addEventListener('click', () => restartServer());
-	        document.getElementById('openDialogBtn')?.addEventListener('click', () => openContinueDialog());
-	        document.getElementById('copyPromptBtn')?.addEventListener('click', () => copyPrompt());
-	        document.getElementById('savePrdBtn')?.addEventListener('click', () => savePrd());
-	        document.getElementById('approvePrdBtn')?.addEventListener('click', () => approvePrd());
-	        document.getElementById('savePlanBtn')?.addEventListener('click', () => saveTrackerList('plan', 'planInput'));
-	        document.getElementById('saveTodoBtn')?.addEventListener('click', () => saveTrackerList('todos', 'todoInput'));
-	        document.getElementById('saveChecklistBtn')?.addEventListener('click', () => saveTrackerList('checklist', 'checklistInput'));
-	        document.getElementById('initBtn')?.addEventListener('click', () => configWindsurf());
-	        document.getElementById('resetDefaultsBtn')?.addEventListener('click', () => resetDefaults());
-	        document.getElementById('saveSettingsBtn')?.addEventListener('click', () => saveSettings());
-	    </script>
+            if (msg && msg.type === 'tracker') {
+                if (msg.data && msg.data.stats) {
+                    updateProjectStats(msg.data.stats);
+                }
+            }
+        });
+    </script>
 </body>
 </html>`;
     }

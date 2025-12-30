@@ -83,7 +83,7 @@ def append_log(log_file, payload):
 
 
 def get_mcp_config_paths(home_dir):
-    base_dirs = [".windsurf", ".codeium"]
+    base_dirs = [".codeium"]
     variants = ["windsurf", "windsurf-next"]
     paths = []
     for base in base_dirs:

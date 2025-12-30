@@ -17,7 +17,7 @@
   <a href="#installation">Installation</a> •
   <a href="#quick-start">Quick Start</a> •
   <a href="#recommended-global-rules--prompt">Rules</a> •
-  <a href="#project-tracker-prd--plan--todo--checklist">Project Tracker</a> •
+  <a href="#project-tracker-prd--task--plan--todo--checklist--walkthrough">Project Tracker</a> •
   <a href="#windsurf-hooks">Hooks</a> •
   <a href="#mcp-tools">Tools</a> •
   <a href="#faq">FAQ</a>
@@ -27,16 +27,19 @@
 
 ## Overview
 
-WindsurfAutoMcp standardizes task completion with MCP: when the AI finishes a task, it must call `ask_continue` instead of continuing to spend credits. It also provides a control panel and a project tracker (PRD/Plan/TODO/Checklist).
+WindsurfAutoMcp standardizes task completion with MCP: when the AI finishes a task, it must call `ask_continue` instead of continuing to spend credits. It also provides a PRD approval dialog and read-only project panels (PRD/Plan/Walkthrough), where Plan aggregates Task/TODO/Checklist, and stats stay in the sidebar.
 
 ## Features
 
 - ✅ Task completion confirmation via `ask_continue`
-- 🔌 MCP HTTP server
-- 🖼️ Image upload & delete before send
+- ❓ ask_question single-choice clarification (any number of options, can deselect)
+- 🧾 PRD approval dialog (Plan/implementation blocked until approved)
+- 🧭 Project panels: PRD / Plan / Walkthrough (read-only, AI-updated; Plan aggregates Task/TODO/Checklist)
+- 📊 Stats in the sidebar
+- 📊 Per-project stats + Memory storage
 - ⚙️ One-click MCP config for Windsurf / windsurf-next
-- 🧭 Project tracker: PRD/Plan/TODO/Checklist + progress + stats
-- 🛡️ Optional hooks guardrails for commands/writes
+- 🛡️ Optional hooks guardrails (auto-update when missing)
+- 🖼️ Image upload & delete before send
 - 🌐 EN/中文 UI
 - ⌨️ Shortcut: `Ctrl+M`
 
@@ -67,11 +70,12 @@ WindsurfAutoMcp standardizes task completion with MCP: when the AI finishes a ta
 
 1. Open the **WindsurfAutoMcp** sidebar
 2. Ensure the server is running (auto-start by default)
-3. Click **Write Windsurf Config** (writes both windsurf and windsurf-next)
+3. Click **Write Windsurf Config** (writes to `%USERPROFILE%\.codeium\windsurf\mcp_config.json` and `%USERPROFILE%\.codeium\windsurf-next\mcp_config.json`)
 4. **Restart Windsurf** to load MCP config + hooks
-5. Use the assistant; it will call `ask_continue` on completion
+5. Open PRD/Plan/Walkthrough panels (read-only; AI updates via MCP tools; Plan aggregates Task/TODO/Checklist)
+6. Use the assistant; it will call `ask_continue` on completion and `ask_question` when clarification is needed
 
-> Add the prompt below to Windsurf global rules so you do not have to paste it each session.
+> The global prompt below is **documented only**. Please copy it into your Windsurf global rules (or paste per session).
 
 ## Recommended Global Rules / Prompt
 
@@ -98,11 +102,13 @@ WindsurfAutoMcp standardizes task completion with MCP: when the AI finishes a ta
 - Docs: update README/config/usage to be reproducible.
 - Release/DevOps: provide upgrade/rollback guidance, avoid breaking changes.
 
-【Before you start】Read target/current state/constraints first. If key inputs are missing, ask 1-3 questions via ask_question (single choice A/B/C + optional extra text).
+【Before you start】Read target/current state/constraints first. If key inputs are missing, ask questions via ask_question as needed (single-choice, any number of options + optional extra text).
+
+【ask_question vs ask_continue】ask_question is only for clarification/planning prerequisites. ask_continue is only for “task completion” to confirm whether to proceed or accept additional instructions.
 
 【PRD & Approval (required)】Create a PRD draft → user review/adjust → approval before any Plan. Do not implement (write code/run commands/use external tools) before approval.
 
-【Planning & TODO breakdown (required)】For any big feature/complex task (and any non-trivial change), produce a Plan and break it into TODOs. Update progress as you go.
+【Planning & TODO breakdown (required)】For any big feature/complex task (and any non-trivial change), produce a Plan that includes Task/subtasks/TODO/Checklist (split per task when needed). Update progress as you go.
 
 【Do not trust knowledge (required)】Your knowledge can be outdated and harmful. For critical decisions (APIs/configs/versions/security/install), research first.
 
@@ -132,15 +138,25 @@ Read → Research → Plan → TODO → Act → Code Review → Act → Update P
 - Finish with ask_continue(reason) and wait
 ```
 
-## Project Tracker (PRD / Plan / TODO / Checklist)
+## Project Tracker (PRD / Plan / Walkthrough)
 
-- Tracking is **per workspace root**; PRD/Plan/TODO never bleed across projects
+- Tracking is **per workspace root**; data never bleeds across projects
 - Tracker files (user-level):
   - Windows: `%USERPROFILE%\.codeium\windsurf\windsurf-auto-mcp-tracker.json`
   - Windows (windsurf-next): `%USERPROFILE%\.codeium\windsurf-next\windsurf-auto-mcp-tracker.json`
-- Sidebar provides editable PRD/Plan/TODO/Checklist with live progress
-- Per-project stats: PRD updates, approvals, plan updates, TODO updates, checklist updates
-- Hooks validate PRD approval + Plan/TODO before `pre_write_code`; missing gates block writes
+- Memory files (user-level):
+  - Windows: `%USERPROFILE%\.codeium\windsurf\windsurf-auto-mcp-memories.json`
+  - Windows (windsurf-next): `%USERPROFILE%\.codeium\windsurf-next\windsurf-auto-mcp-memories.json`
+- Project artifacts (brain):
+  - Windows: `%USERPROFILE%\.codeium\windsurf\windsurf-auto-mcp\brain\<projectId>\`
+  - Windows (windsurf-next): `%USERPROFILE%\.codeium\windsurf-next\windsurf-auto-mcp\brain\<projectId>\`
+  - Files: `prd.md` / `implementation_plan.md` / `task.md` / `walkthrough.md` / `memory.md` (plus `.metadata.json` / `.resolved` / `.resolved.N` snapshots)
+- `projectId` is included in `get_project_status` JSON output
+- Panels are read-only and updated by the AI via MCP tools (PRD/Plan/Walkthrough); Plan aggregates Task/TODO/Checklist
+- Stats are shown in the sidebar (global calls + per-project)
+- PRD is AI-generated and triggers the approval dialog; Plan/implementation is blocked until approved
+- Per-project stats: PRD updates/approvals, Task/Plan/TODO/Checklist updates
+- Hooks validate PRD approval + Plan/TODO in `pre_write_code`; missing gates block writes
 
 ## Windsurf Hooks
 
@@ -160,7 +176,7 @@ Read → Research → Plan → TODO → Act → Code Review → Act → Update P
 ### Auto-install behavior
 
 - On activation, the extension checks and installs **user-level hooks.json** (enabled by default)
-- If hooks are already installed, it does nothing; it only fills missing entries
+- If hooks are already installed, it only fills missing entries (auto-update)
 - It never overwrites your existing hooks
 - **Restart Windsurf after hooks.json updates** to apply hooks
 
@@ -179,13 +195,18 @@ Read → Research → Plan → TODO → Act → Code Review → Act → Update P
 | Tool | Description |
 |------|-------------|
 | `ask_user` | Request user input/confirmation (supports image) |
-| `ask_question` | Single-choice clarification (A/B/C..., optional text/image) |
+| `ask_question` | Single-choice clarification (any number of options, optional text/image) |
 | `set_prd` | Create/update PRD draft |
 | `approve_prd` | Approve PRD |
+| `update_task` | Set/update task checklist |
 | `update_plan` | Set/update plan checklist |
 | `update_todos` | Set/update TODO checklist |
 | `update_checklist` | Set/update delivery checklist |
+| `update_walkthrough` | Update Walkthrough summary |
 | `get_project_status` | Get current project tracking status |
+| `save_memory` | Save project memory |
+| `get_memory` | Fetch project memory |
+| `list_memories` | List project memory keys |
 | `notify` | Show notification |
 | `ask_continue` | Ask whether to continue after completion |
 
