@@ -108,6 +108,8 @@ WindsurfAutoMcp standardizes task completion with MCP: when the AI finishes a ta
 
 【PRD & Approval (required)】Create a PRD draft → user review/adjust → approval before any Plan. Do not implement (write code/run commands/use external tools) before approval.
 
+【Project Tracking & Memory (required)】Keep tracking updated via set_prd / update_task / update_plan / update_todos / update_checklist / update_walkthrough; store key context in save_memory, and review list_memories/get_memory before starting; never reuse tracking/memory across projects.
+
 【Planning & TODO breakdown (required)】For any big feature/complex task (and any non-trivial change), produce a Plan that includes Task/subtasks/TODO/Checklist (split per task when needed). Update progress as you go.
 
 【Do not trust knowledge (required)】Your knowledge can be outdated and harmful. For critical decisions (APIs/configs/versions/security/install), research first.
@@ -135,6 +137,7 @@ Read → Research → Plan → TODO → Act → Code Review → Act → Update P
 - Code review done (gaps/security/perf/leaks)
 - Progress updated and checked
 - Verified (build/test/lint or clear manual steps)
+- Project tracking + memory updated (if applicable)
 - Finish with ask_continue(reason) and wait
 ```
 

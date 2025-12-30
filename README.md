@@ -108,6 +108,8 @@ WindsurfAutoMcp 通过 MCP 协议标准化交互：AI 完成任务后必须 `ask
 
 【PRD 与审批（必须）】先输出 PRD 草案 → 用户确认/补充 → 审批通过后才能输出 Plan；未审批不得开始实现（写代码/运行命令/调用外部工具）。
 
+【项目跟踪与记忆（必须）】使用 set_prd / update_task / update_plan / update_todos / update_checklist / update_walkthrough 维护项目跟踪；重要上下文用 save_memory 保存，开始前先 list_memories/get_memory；跟踪与记忆必须严格按当前项目，不得跨项目复用。
+
 【计划与拆解（必须做到）】对任何“大功能/复杂任务”（以及任何非小改动），必须先输出 Plan，并在 Plan 中包含 Task/子任务/TODO/Checklist（必要时按任务拆分）。每完成一项就更新进度。
 
 【不信任知识（必须做到）】不要依赖记忆/常识拍脑袋：你的知识可能过时且有害。遇到关键决策（API/配置/版本/安全/安装）必须先研究，再行动。
@@ -135,6 +137,7 @@ Read → Research → Plan → TODO → Act → Code Review → Act → Update P
 - 已完成代码评审（gaps/安全/性能/泄露等）
 - 已更新进度并校验进度
 - 已验证（build/test/lint 或明确的手动验证步骤）
+- 已更新项目跟踪与记忆（如适用）
 - 将用 ask_continue(reason) 结束并等待用户
 ```
 
