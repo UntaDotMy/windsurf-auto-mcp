@@ -28,16 +28,16 @@ type TrackerItem = {
 type ProjectTrackerStats = {
     prdUpdates: number;
     prdApprovals: number;
-    taskUpdates: number;
+    overviewUpdates: number;
     planUpdates: number;
-    todoUpdates: number;
-    checklistUpdates: number;
+    walkthroughUpdates: number;
     updatedAt?: string;
 };
 type ProjectTracker = {
     projectId: string;
     rootPath: string;
     name: string;
+    overview: { content: string; updatedAt?: string; generatedBy?: 'auto' | 'ai' };
     prd: {
         content: string;
         status: 'draft' | 'approved';
@@ -48,10 +48,7 @@ type ProjectTracker = {
         reviewNote?: string;
         reviewedAt?: string;
     };
-    task: { summary: string; items: TrackerItem[] };
     plan: { summary: string; items: TrackerItem[] };
-    todos: { items: TrackerItem[] };
-    checklist: { items: TrackerItem[] };
     walkthrough: { content: string; updatedAt?: string };
     stats: ProjectTrackerStats;
     updatedAt: string;
@@ -65,13 +62,34 @@ type MemoryEntry = {
     key: string;
     content: string;
     updatedAt: string;
+    createdAt?: string;
+    kind?: 'short' | 'long' | 'lesson';
+    tags?: string[];
+    links?: string[];
 };
 type ProjectMemoryStore = {
     memories: Record<string, MemoryEntry>;
+    timeline?: Array<{
+        at: string;
+        kind: 'short' | 'long' | 'lesson';
+        key: string;
+        summary: string;
+    }>;
 };
 type MemoryData = {
     schemaVersion: 1;
     projects: Record<string, ProjectMemoryStore>;
+};
+
+type GlobalMemoryData = {
+    schemaVersion: 1;
+    memories: Record<string, MemoryEntry>;
+    timeline?: Array<{
+        at: string;
+        kind: 'short' | 'long' | 'lesson';
+        key: string;
+        summary: string;
+    }>;
 };
 
 const I18N: Record<UiLanguage, Record<string, string>> = {
@@ -97,11 +115,7 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'ext.statsLineAskContinue': 'ask_continue: {askContinue}\n',
         'ext.statsLineNotify': 'notify: {notify}\n',
         'ext.statsLineSetPrd': 'set_prd: {setPrd}\n',
-        'ext.statsLineApprovePrd': 'approve_prd: {approvePrd}\n',
-        'ext.statsLineUpdateTask': 'update_task: {updateTask}\n',
         'ext.statsLineUpdatePlan': 'update_plan: {updatePlan}\n',
-        'ext.statsLineUpdateTodos': 'update_todos: {updateTodos}\n',
-        'ext.statsLineUpdateChecklist': 'update_checklist: {updateChecklist}\n',
         'ext.statsLineUpdateWalkthrough': 'update_walkthrough: {updateWalkthrough}\n',
         'ext.statsLineGetProjectStatus': 'get_project_status: {getProjectStatus}\n',
         'ext.statsLineSaveMemory': 'save_memory: {saveMemory}\n',
@@ -172,17 +186,21 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
             '',
             '【开始前必须做】先读“目标/现状/约束”。在做任何修改前，必须先阅读目标文件/相关代码/配置/日志；缺关键输入先用 ask_question 提问（单选，选项数量不限，可附补充信息，按需提问）。',
             '',
-            '【读取项目基线（必须）】先用 get_project_status 读取 PRD/Plan/Walkthrough；如已存在内容，必须先阅读并在计划/实现中引用；为空则说明为空。关键上下文用 list_memories/get_memory 读取。',
+            '【架构记录/项目基线（必须）】先用 get_project_status 读取 Overview/PRD/Plan/Walkthrough；把 Overview 视为“架构记录/项目概览”（模块边界、目录结构、关键流程、构建/测试命令、约定）。如已有内容必须先阅读并在计划/实现中引用；为空则说明为空。若 Overview 为空或明显过时：先 generate_overview（必要时 update_overview 修订）再继续。',
             '',
-            '【PRD 与审批（必须）】先输出 PRD 草案 → 用户确认/补充 → 审批通过后才能输出 Plan；未审批不得开始实现（写代码/运行命令/调用外部工具）。',
+            '【记忆检查与初始化（必须）】实现/改动前先 memory_search（项目+全局，重点查 lesson）并 list_memories/get_memory；若该项目还没有可用记忆：基于 Overview 生成“初始记忆”（long：稳定事实/约定/运行验证；short：临时信息；lesson：错误复盘；通用经验存 global，项目细节存 project）。short 会遗忘：定期合并/提炼到 long，避免噪声膨胀。',
             '',
-            '【PRD 标准（必须）】PRD = 项目需求文档。必须包含：问题/背景、目标/非目标、用户/场景、范围、功能需求与非功能需求（建议用表格）、验收标准、风险/依赖、里程碑、开放问题、参考资料（官方文档/Context7）。',
+            '【RAG（必须）】实现/修改前先用 rag_search 找到相关文件与片段（不要凭感觉改）；再结合记忆决定改动点。',
             '',
-            '【项目跟踪与记忆（必须）】使用 set_prd / update_task / update_plan / update_todos / update_checklist / update_walkthrough 维护项目跟踪；重要上下文用 save_memory 保存，开始前先 list_memories/get_memory；跟踪与记忆必须严格按当前项目，不得跨项目复用。',
+            '【PRD（复杂任务才需要）与审批（有 PRD 就必须）】复杂任务/大功能先输出 PRD 草案 → 用户确认/补充 → 审批通过后再输出 Plan 并实现；简单任务可跳过 PRD（保持 PRD 为空）直接 Plan，但只要 PRD 非空就必须先审批，未审批不得开始实现（写代码/运行命令/调用外部工具）。',
+            '',
+            '【PRD 标准（必须）】PRD = 项目需求文档。必须包含：问题/背景、目标/非目标、用户/场景、范围、功能需求与非功能需求（建议用表格）、验收标准、风险/依赖、里程碑、开放问题、参考资料（官方文档/Context7）；复杂需求建议加入示意图/流程图（Mermaid）帮助理解。',
+            '',
+            '【项目跟踪与记忆（必须）】使用 set_prd / update_plan / update_walkthrough 维护项目跟踪（Plan 内包含任务拆解与 Checklist）；重要上下文用 save_memory 保存，开始前先 list_memories/get_memory；跟踪与记忆必须严格按当前项目，不得跨项目复用。',
             '',
             '【Walkthrough（必须）】每次关键实现/决策/修复后都要更新 Walkthrough（update_walkthrough），保证随时可审阅。',
             '',
-            '【计划与拆解（必须做到）】对任何“大功能/复杂任务”（以及任何非小改动），必须先输出 Plan，并在 Plan 中包含 Task/子任务/TODO/Checklist（必要时按任务拆分）。每完成一项就更新进度并同步项目跟踪。',
+            '【计划与拆解（必须做到）】对任何“大功能/复杂任务”（以及任何非小改动），必须先输出 Plan，并在 Plan 中完成任务拆解与 Checklist（必要时进一步细化）。每完成一项就更新进度并同步项目跟踪。',
             '',
             '【不信任知识（必须做到）】不要依赖记忆/常识拍脑袋：你的知识可能过时且有害。遇到关键决策（API/配置/版本/安全/安装）必须先研究，再行动。',
             '',
@@ -198,29 +216,34 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
             '- 发布/运维（Release/DevOps）：给出升级/回滚说明，避免破坏性变更。',
             '',
             '【统一工作流（必须遵循；严格按顺序）】',
-            'Read → Research → Plan → TODO → Act → Update Progress → Check Progress → Code Review → Ask',
-            '1) Read：先读目标/现状/约束；在做任何修改前先阅读目标文件/相关代码/配置/日志；缺关键输入先用 ask_question 提问（按需）。',
-            '2) Research（不要凭空猜，必须拿到可执行信息）：优先查官方文档/官方 README/发布说明/源码；依赖先确认最新版用法与破坏性变更；可用则用 Context7 获取最新文档；web search 把 2024 视为过旧，默认从 2025-10 起筛选（可加 after:2025-09-30）；结果泛泛/无法落地就调整检索词继续搜，直到拿到确切 API/配置/版本/路径/命令。',
-            '3) Plan：给出总体 Plan（里程碑/风险/验收）。',
-            '4) TODO：把 Plan 拆成可验证、可跟踪的小 TODO（能并行则并行）。',
-            '5) Act：动手前先整理入口与模块边界；实现最小正确改动，小步推进、优先修根因、保持风格一致；新增/修改代码必须模块化、易读、易维护（但不要做与任务无关的重构）。',
-            '6) Update Progress：每完成一个 TODO 就更新进度，说明做了什么/为什么。',
-            '7) Check Progress：运行 build/test/lint；无法运行则给出可执行验证步骤与期望结果。',
-            '8) Code Review（必须最后一关）：像 PR 一样评审：检查 gaps、正确性、边界条件、错误处理、安全（注入/权限/泄露/依赖风险）、性能（热点/泄漏）、兼容性；发现问题就回到 Act 修复并重新 Check Progress，然后再 Review。',
-            '9) Ask：最终只允许调用 ask_continue(reason) 并等待；reason 必须包含：完成内容、风险/注意点、验证步骤/命令、下一步。',
+            '架构/记忆 → Read → Research → Ask Questions（循环）→（复杂则 PRD+审批）→ Plan（含 Checklist）→ Act（按 Plan 循环实现）→ Update Progress → Check Progress → Review Session → Learn/Record → Ask',
+            '1) 架构/记忆：先 get_project_status；若 Overview（架构记录）为空/过时则先生成/更新；先 memory_search（项目+全局）确认已有经验/坑；没有就先建立初始记忆（long/short/lesson；global vs project）。',
+            '2) Read：读用户 story/目标/约束/现状；在改动前必须读相关代码/配置/日志；缺关键输入先 ask_question（可多轮）。',
+            '3) Research：不要凭空猜；优先官方文档/官方 README/发布说明/源码；依赖先确认最新版用法与破坏性变更；可用则用 Context7；web search 把 2024 视为过旧，默认从 2025-10 起筛选（可加 after:2025-09-30）；结果泛泛就继续改检索词直到拿到可执行信息（API/配置/版本/路径/命令）。',
+            '4) Ask Questions（循环）：为计划/实现所需澄清点用 ask_question 单选提问（选项数量不限，可附补充说明），直到验收标准明确。',
+            '5) PRD（可选）：仅在复杂任务/大功能时起草 PRD；用户确认并审批后才能进入 Plan/实现；简单任务跳过 PRD（保持为空）。',
+            '6) Plan：基于用户 story 写 Plan（里程碑/风险/验收），并在 Plan 内拆解任务+Checklist；过重则继续细化到可执行的小步。',
+            '7) Act（循环）：按 Plan 小步实现；先整理结构再写代码；改动最小且修根因；保持模块化/可维护；每步都用 rag_search 定位改动点。',
+            '8) Update Progress：每完成一项 Checklist 就 update_plan（状态/进度）；关键决策/实现同步 update_walkthrough。',
+            '9) Check Progress：尽量运行 build/test/lint；否则给出可执行的手动验证步骤+期望结果。',
+            '10) Review Session（最后一关）：像 PR 一样评审：gaps、正确性、边界条件、错误处理、安全、依赖风险、性能（热点/泄漏）、兼容性；发现问题就回到 Act 修复并重复 Check Progress + Review。',
+            '11) Learn/Record：若出现错误/踩坑/回滚，必须 record_lesson 并 save_memory（项目或全局）；必要时合并 short → long；更新 Overview/Walkthrough 以反映新架构/约定。',
+            '12) Ask：最终只允许 ask_continue(reason) 并等待；reason 必须包含：完成内容、风险/注意点、验证步骤/命令、下一步。',
             '',
             '【Windsurf Hooks（推荐，可当强制护栏）】如环境支持 hooks.json：建议配置 pre_run_command/pre_write_code 阻止危险命令/敏感写入，并用 post_cascade_response 审计是否遗漏 ask_continue；官方文档：https://docs.windsurf.com/windsurf/cascade/hooks',
             '',
             '【交付前自检清单（必须逐项满足）】',
-            '- 已读目标/现状/约束',
-            '- 已给出 Plan + TODO（如适用）',
+            '- 已读取并更新 Overview（架构记录，如适用）',
+            '- 已检查项目/全局记忆，并初始化/合并分层记忆（如适用）',
+            '- 已读目标/现状/约束（用户 story + 验收标准清晰）',
+            '- 已给出 Plan（含 Checklist）',
             '- 关键点已研究官方来源/Context7（如适用）',
             '- 代码已整理为模块化/易维护（无无关重构）',
             '- 已完成代码评审（gaps/安全/性能/泄露等）',
             '- 已更新进度并校验进度',
             '- 已验证（build/test/lint 或明确的手动验证步骤）',
-            '- 已更新项目跟踪与记忆（如适用）',
-            '- 已更新 Walkthrough（如适用）',
+            '- 已更新项目跟踪与记忆（必要时记录 lesson 并保存）',
+            '- 已更新 Walkthrough（关键实现/决策已记录）',
             '- 将用 ask_continue(reason) 结束并等待用户'
         ].join('\\n'),
         'sidebar.trackerTitle': '项目跟踪',
@@ -233,27 +256,25 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'sidebar.prdSave': '保存 PRD',
         'sidebar.prdApprove': '审批 PRD',
         'sidebar.planLabel': '计划（Plan）',
-        'sidebar.todoLabel': 'TODO（子任务）',
-        'sidebar.checklistLabel': '检查清单',
         'sidebar.trackerSave': '保存',
         'sidebar.trackerHint': '列表支持 [ ] / [~] / [x] 状态',
         'sidebar.trackerStats': '统计',
         'sidebar.trackerStatsPrd': 'PRD 更新',
         'sidebar.trackerStatsApprovals': '审批',
-        'sidebar.trackerStatsTask': '任务更新',
+        'sidebar.trackerStatsOverview': '概览更新',
         'sidebar.trackerStatsPlan': '计划更新',
-        'sidebar.trackerStatsTodo': 'TODO 更新',
-        'sidebar.trackerStatsChecklist': '清单更新',
+        'sidebar.trackerStatsWalkthrough': 'Walkthrough 更新',
         'sidebar.statAskContinue': 'ask_continue',
         'sidebar.statAskUser': 'ask_user',
         'sidebar.statAskQuestion': 'ask_question',
         'sidebar.statSetPrd': 'set_prd',
-        'sidebar.statApprovePrd': 'approve_prd',
-        'sidebar.statUpdateTask': 'update_task',
+        'sidebar.statUpdateOverview': 'update_overview',
+        'sidebar.statGenerateOverview': 'generate_overview',
         'sidebar.statUpdatePlan': 'update_plan',
-        'sidebar.statUpdateTodos': 'update_todos',
-        'sidebar.statUpdateChecklist': 'update_checklist',
         'sidebar.statUpdateWalkthrough': 'update_walkthrough',
+        'sidebar.statRagSearch': 'rag_search',
+        'sidebar.statMemorySearch': 'memory_search',
+        'sidebar.statRecordLesson': 'record_lesson',
         'sidebar.statGetProjectStatus': 'get_project_status',
         'sidebar.statSaveMemory': 'save_memory',
         'sidebar.statGetMemory': 'get_memory',
@@ -274,15 +295,24 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'sidebar.defaultReasonPlaceholder': '例如：任务已完成',
         'sidebar.saveSettings': '保存设置',
         'sidebar.panelsTitle': '项目面板',
+        'sidebar.panelOverview': '项目概览',
         'sidebar.panelPrd': 'PRD',
-        'sidebar.panelTask': '任务',
         'sidebar.panelPlan': '实施计划',
-        'sidebar.panelTodos': 'TODO',
-        'sidebar.panelChecklist': '检查清单',
         'sidebar.panelWalkthrough': 'Walkthrough',
         'sidebar.panelStats': '统计',
         'sidebar.systemTitle': '系统控制',
         'sidebar.openPanel': '打开',
+        'sidebar.clearTitle': '清理数据',
+        'sidebar.clearOverview': '清空项目概览',
+        'sidebar.clearPrd': '清空 PRD',
+        'sidebar.clearPlan': '清空 Plan',
+        'sidebar.clearWalkthrough': '清空 Walkthrough',
+        'sidebar.clearTracking': '重置项目数据',
+        'sidebar.clearOverviewConfirm': '确定要清空当前项目的“项目概览”吗？',
+        'sidebar.clearPrdConfirm': '确定要清空当前项目的 PRD 吗？',
+        'sidebar.clearPlanConfirm': '确定要清空当前项目的 Plan 吗？',
+        'sidebar.clearWalkthroughConfirm': '确定要清空当前项目的 Walkthrough 吗？',
+        'sidebar.clearTrackingConfirm': '确定要重置当前项目的 PRD/Plan/Walkthrough/统计吗？',
         'sidebar.configureWindsurf': '写入 Windsurf 配置',
         'sidebar.installHooks': '安装/更新 Hooks',
         'sidebar.openDialogShort': '对话确认',
@@ -354,7 +384,7 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'panel.prdApproveHint': '审批后才能进入计划/实现阶段',
         'panel.readOnlyEmpty': '暂无内容',
         'panel.sectionSummary': '摘要',
-        'panel.sectionItems': '清单',
+        'panel.sectionItems': '任务/清单',
         'panel.sectionProgress': '进度',
         'panel.statsGlobal': '全局统计',
         'panel.statsProject': '项目统计',
@@ -362,14 +392,12 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'panel.statsTracker': '项目跟踪',
         'panel.statsUptime': '运行时间',
         'panel.statsMinutes': '{minutes} 分钟',
+        'panel.overviewTitle': '项目概览',
         'panel.prdPanelTitle': 'PRD',
         'panel.prdStatusDraft': '草案',
         'panel.prdStatusApproved': '已审批',
         'panel.reviewNoteLabel': '审核备注',
-        'panel.taskTitle': '任务',
         'panel.planTitle': '实施计划',
-        'panel.todoTitle': 'TODO',
-        'panel.checklistTitle': '检查清单',
         'panel.walkthroughTitle': 'Walkthrough',
         'panel.walkthroughSubtitle': '实施记录',
         'artifact.memoryTitle': '项目记忆',
@@ -402,11 +430,7 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'ext.statsLineAskContinue': 'ask_continue: {askContinue}\n',
         'ext.statsLineNotify': 'notify: {notify}\n',
         'ext.statsLineSetPrd': 'set_prd: {setPrd}\n',
-        'ext.statsLineApprovePrd': 'approve_prd: {approvePrd}\n',
-        'ext.statsLineUpdateTask': 'update_task: {updateTask}\n',
         'ext.statsLineUpdatePlan': 'update_plan: {updatePlan}\n',
-        'ext.statsLineUpdateTodos': 'update_todos: {updateTodos}\n',
-        'ext.statsLineUpdateChecklist': 'update_checklist: {updateChecklist}\n',
         'ext.statsLineUpdateWalkthrough': 'update_walkthrough: {updateWalkthrough}\n',
         'ext.statsLineGetProjectStatus': 'get_project_status: {getProjectStatus}\n',
         'ext.statsLineSaveMemory': 'save_memory: {saveMemory}\n',
@@ -475,19 +499,23 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
             '',
             'Collaboration (must): operate as a full "software engineering department" (cross-functional team) across any language/framework/platform. Output must be unified and concise, but reflect a consolidated team conclusion.',
             '',
-            'Before anything (must): read the target first. Before decisions/edits, read relevant files/config/logs; if key inputs are missing, use ask_question (single-choice, any number of options, ask as needed).',
+            'Before anything (must): read the target/user story first. Before decisions/edits, read relevant files/config/logs; if key inputs are missing, use ask_question (single-choice, any number of options, ask as needed) and loop until acceptance criteria are clear.',
             '',
-            'Project baseline (must): call get_project_status to read PRD/Plan/Walkthrough; if content exists, read and reference it before planning/implementation; if empty, state it. Use list_memories/get_memory for key context.',
+            'Architecture record / baseline (must): call get_project_status to read Overview/PRD/Plan/Walkthrough. Treat Overview as the architecture record (module boundaries, folder map, key flows, build/test commands, conventions). If Overview is empty or clearly outdated, call generate_overview (and update_overview if needed) before proceeding.',
             '',
-            'PRD & approval (must): produce a PRD draft → user review/adjust → approval before any Plan; do not implement (write code/run commands/use external tools) before approval.',
+            'Memory layers (must): before planning/implementation, run memory_search (project + global) and list_memories/get_memory. If there is no usable project memory yet, create initial memories from the architecture record: long = stable facts/conventions/verification, short = temporary notes (can be merged into long), lesson = mistakes/retro. Store reusable lessons in global scope; store project-specific details in project scope. Short memory is allowed to be pruned/forgotten; merge when it becomes stable.',
             '',
-            'PRD standard (must): PRD = Project Requirements Document. Must include problem/background, goals/non-goals, users/personas, scope, functional + non-functional requirements (prefer tables), acceptance criteria, risks/dependencies, milestones, open questions, references (official docs/Context7).',
+            'RAG (must): before edits, use rag_search to locate the exact relevant files/snippets (no guessing), then combine with memory to decide what to change.',
             '',
-            'Project tracking & memory (must): keep tracking updated via set_prd / update_task / update_plan / update_todos / update_checklist / update_walkthrough; store key context in save_memory, and review list_memories/get_memory before starting; never reuse tracking/memory across projects.',
+            'PRD (only for complex work) & approval (required if PRD exists): for complex features, produce a PRD draft → user review/adjust → approval before Plan/implementation; for small/simple tasks you may skip PRD (leave PRD empty) and go directly to Plan, but if PRD is non-empty you must get approval before implementing (writing code/running commands/using external tools).',
+            '',
+            'PRD standard (must): PRD = Project Requirements Document. Must include problem/background, goals/non-goals, users/personas, scope, functional + non-functional requirements (prefer tables), acceptance criteria, risks/dependencies, milestones, open questions, references (official docs/Context7). For complex work, add a diagram/flowchart (Mermaid) when helpful.',
+            '',
+            'Project tracking & memory (must): keep tracking updated via set_prd / update_plan / update_walkthrough (Plan includes task breakdown + checklist); store key context in save_memory, and review list_memories/get_memory before starting; never reuse tracking/memory across projects.',
             '',
             'Walkthrough (must): update walkthrough after every meaningful implementation/decision/fix (update_walkthrough), keep it review-ready.',
             '',
-            'Planning & TODO breakdown (must): for any big feature/complex task (and any non-trivial change), produce a Plan that includes Task/subtasks/TODO/Checklist (split per task when needed). Update progress as you go.',
+            'Planning & breakdown (must): for any big feature/complex task (and any non-trivial change), produce a Plan with task breakdown + checklist (split further when needed). Update progress as you go.',
             '',
             'Do not trust your knowledge (must): your knowledge can be outdated and harmful. For any important decision (API/config/version/security/install), research first, then act.',
             '',
@@ -502,30 +530,35 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
             '- Docs: keep README/config/usage accurate and reproducible.',
             '- Release/DevOps: provide upgrade/rollback notes; avoid breaking changes.',
             '',
-            'Workflow (must follow; strict order):',
-            'Read → Research → Plan → TODO → Act → Update Progress → Check Progress → Code Review → Ask',
-            '1) Read: read the target/current state/constraints first; before any decision/edit, read relevant files/config/logs; if key inputs are missing, ask targeted questions via ask_question as needed.',
-            '2) Research (no guessing): prefer official docs/official README/release notes/source; confirm latest usage + breaking changes before upgrading/replacing; use Context7 if available; treat 2024 as outdated and default to sources updated from Oct 2025 onward (≥ 2025-10, add after:2025-09-30); if results are generic, refine and keep searching until you get exact API/config/version/path/commands.',
-            '3) Plan: provide a high-level plan (milestones/risks/acceptance).',
-            '4) TODO: break the plan into small verifiable TODOs (trackable, parallelizable).',
-            '5) Act: tidy boundaries before coding; implement minimal correct changes; fix root causes; keep style consistent; keep code modular/readable/maintainable (avoid unrelated refactors).',
-            '6) Update Progress: update progress after each TODO, stating what/why.',
-            '7) Check Progress: run build/tests/lint when possible; otherwise give concrete user-run verification steps + expected results.',
-            '8) Code Review (final gate): like a PR—check gaps, correctness, edge cases, error handling, security (injection/permissions/leaks/deps), performance (hot paths/leaks), compatibility; if issues found, go back to Act, then re-run Check Progress and Review.',
-            '9) Ask: deliver ONLY via ask_continue(reason) and wait; reason must include what was done, risks/notes, verification steps/commands, and next steps.',
+            'Workflow (must follow; strict order; agile loops allowed):',
+            'Architecture/Memory → Read → Research → Ask Questions (loop) → (PRD+approval if complex) → Plan (with checklist) → Act (iterate) → Update Progress → Check Progress → Review Session → Learn/Record → Ask',
+            '1) Architecture/Memory: start with get_project_status; if Overview (architecture record) is missing/outdated, generate/update it; run memory_search (project+global) for lessons; if no usable memory, create initial long/short/lesson memories from the architecture record.',
+            '2) Read: read the user story/goal/constraints/current state; before any edit, read the relevant code/config/logs.',
+            '3) Research (no guessing): prefer official docs/README/release notes/source; confirm latest usage + breaking changes before upgrading/replacing; use Context7 if available; treat 2024 as outdated and default to sources updated from Oct 2025 onward (≥ 2025-10, add after:2025-09-30); if results are generic, refine and keep searching until you get exact API/config/version/path/commands.',
+            '4) Ask Questions (loop): use ask_question to clarify planning/implementation blockers (single-choice; any number of options; optional extra text) until acceptance criteria are actionable.',
+            '5) PRD (optional): only for complex work; draft PRD → user review/adjust → approval → then Plan/implementation. For simple work, keep PRD empty.',
+            '6) Plan: produce an executable plan with milestones/risks/acceptance + a checklist breakdown; if too heavy, keep breaking down until tasks are verifiable.',
+            '7) Act (iterate): implement following the Plan; keep changes minimal and modular; use rag_search before edits; update dependencies only when it improves correctness/security/performance.',
+            '8) Update Progress: keep progress current via update_plan (status/progress) and update_walkthrough (key decisions/changes).',
+            '9) Check Progress: run build/tests/lint when possible; otherwise provide concrete user-run verification steps + expected results.',
+            '10) Review Session (final gate): review like a PR—gaps, correctness, edge cases, error handling, security (injection/permissions/leaks/deps), performance (hot paths/leaks), compatibility; if issues found, go back to Act, then re-run Check Progress and Review.',
+            '11) Learn/Record: when a mistake/error/rollback happens, record_lesson and save_memory (project/global); merge short → long when it becomes stable; update Overview/Walkthrough when architecture/conventions changed.',
+            '12) Ask: deliver ONLY via ask_continue(reason) and wait; reason must include what was done, risks/notes, verification steps/commands, and next steps.',
             '',
             'Windsurf Hooks (recommended; can be hard guardrails): if your environment supports hooks.json, configure pre_run_command/pre_write_code to block dangerous commands/sensitive writes, and use post_cascade_response to audit missing ask_continue. Official docs: https://docs.windsurf.com/windsurf/cascade/hooks',
             '',
             'Pre-delivery checklist (must satisfy all):',
-            '- Read target/current state/constraints',
-            '- Plan + TODOs provided (if applicable)',
+            '- Overview (architecture record) reviewed/updated (if applicable)',
+            '- Project/global memory reviewed and layered memory initialized/merged (if applicable)',
+            '- Read target/current state/constraints (user story + acceptance clear)',
+            '- Plan provided (with checklist)',
             '- Key decisions researched via official sources/Context7 (if applicable)',
             '- Code tidied: modular/maintainable (no unrelated refactors)',
             '- Code review completed (gaps/security/perf/leaks/etc)',
             '- Progress updated and validated',
             '- Verification completed (build/tests/lint or explicit manual steps)',
-            '- Project tracking + memory updated (if applicable)',
-            '- Walkthrough updated (if applicable)',
+            '- Project tracking + memory updated (record lessons when needed)',
+            '- Walkthrough updated (key changes/decisions captured)',
             '- End with ask_continue(reason) and wait'
         ].join('\\n'),
         'sidebar.trackerTitle': 'Project Tracker',
@@ -538,27 +571,25 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'sidebar.prdSave': 'Save PRD',
         'sidebar.prdApprove': 'Approve PRD',
         'sidebar.planLabel': 'Plan',
-        'sidebar.todoLabel': 'TODOs',
-        'sidebar.checklistLabel': 'Checklist',
         'sidebar.trackerSave': 'Save',
         'sidebar.trackerHint': 'Lists support [ ] / [~] / [x] status',
         'sidebar.trackerStats': 'Activity',
         'sidebar.trackerStatsPrd': 'PRD updates',
         'sidebar.trackerStatsApprovals': 'Approvals',
-        'sidebar.trackerStatsTask': 'Task updates',
+        'sidebar.trackerStatsOverview': 'Overview updates',
         'sidebar.trackerStatsPlan': 'Plan updates',
-        'sidebar.trackerStatsTodo': 'TODO updates',
-        'sidebar.trackerStatsChecklist': 'Checklist updates',
+        'sidebar.trackerStatsWalkthrough': 'Walkthrough updates',
         'sidebar.statAskContinue': 'ask_continue',
         'sidebar.statAskUser': 'ask_user',
         'sidebar.statAskQuestion': 'ask_question',
         'sidebar.statSetPrd': 'set_prd',
-        'sidebar.statApprovePrd': 'approve_prd',
-        'sidebar.statUpdateTask': 'update_task',
+        'sidebar.statUpdateOverview': 'update_overview',
+        'sidebar.statGenerateOverview': 'generate_overview',
         'sidebar.statUpdatePlan': 'update_plan',
-        'sidebar.statUpdateTodos': 'update_todos',
-        'sidebar.statUpdateChecklist': 'update_checklist',
         'sidebar.statUpdateWalkthrough': 'update_walkthrough',
+        'sidebar.statRagSearch': 'rag_search',
+        'sidebar.statMemorySearch': 'memory_search',
+        'sidebar.statRecordLesson': 'record_lesson',
         'sidebar.statGetProjectStatus': 'get_project_status',
         'sidebar.statSaveMemory': 'save_memory',
         'sidebar.statGetMemory': 'get_memory',
@@ -579,15 +610,24 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'sidebar.defaultReasonPlaceholder': 'e.g. Task completed',
         'sidebar.saveSettings': 'Save settings',
         'sidebar.panelsTitle': 'Project Panels',
+        'sidebar.panelOverview': 'Overview',
         'sidebar.panelPrd': 'PRD',
-        'sidebar.panelTask': 'Task',
         'sidebar.panelPlan': 'Implementation Plan',
-        'sidebar.panelTodos': 'TODO',
-        'sidebar.panelChecklist': 'Checklist',
         'sidebar.panelWalkthrough': 'Walkthrough',
         'sidebar.panelStats': 'Stats',
         'sidebar.systemTitle': 'System',
         'sidebar.openPanel': 'Open',
+        'sidebar.clearTitle': 'Maintenance',
+        'sidebar.clearOverview': 'Clear Overview',
+        'sidebar.clearPrd': 'Clear PRD',
+        'sidebar.clearPlan': 'Clear Plan',
+        'sidebar.clearWalkthrough': 'Clear Walkthrough',
+        'sidebar.clearTracking': 'Reset Project',
+        'sidebar.clearOverviewConfirm': 'Clear project overview for the current project?',
+        'sidebar.clearPrdConfirm': 'Clear PRD for the current project?',
+        'sidebar.clearPlanConfirm': 'Clear Plan for the current project?',
+        'sidebar.clearWalkthroughConfirm': 'Clear Walkthrough for the current project?',
+        'sidebar.clearTrackingConfirm': 'Reset PRD/Plan/Walkthrough/stats for the current project?',
         'sidebar.configureWindsurf': 'Write Windsurf Config',
         'sidebar.installHooks': 'Install/Update Hooks',
         'sidebar.openDialogShort': 'Confirm Dialog',
@@ -659,7 +699,7 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'panel.prdApproveHint': 'Approval is required before planning/implementation',
         'panel.readOnlyEmpty': 'No content yet',
         'panel.sectionSummary': 'Summary',
-        'panel.sectionItems': 'Checklist',
+        'panel.sectionItems': 'Tasks / Checklist',
         'panel.sectionProgress': 'Progress',
         'panel.statsGlobal': 'Global Stats',
         'panel.statsProject': 'Project Stats',
@@ -667,14 +707,12 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'panel.statsTracker': 'Tracking',
         'panel.statsUptime': 'Uptime',
         'panel.statsMinutes': '{minutes} minutes',
+        'panel.overviewTitle': 'Overview',
         'panel.prdPanelTitle': 'PRD',
         'panel.prdStatusDraft': 'Draft',
         'panel.prdStatusApproved': 'Approved',
         'panel.reviewNoteLabel': 'Review note',
-        'panel.taskTitle': 'Task',
         'panel.planTitle': 'Implementation Plan',
-        'panel.todoTitle': 'TODO',
-        'panel.checklistTitle': 'Checklist',
         'panel.walkthroughTitle': 'Walkthrough',
         'panel.walkthroughSubtitle': 'Delivery log',
         'artifact.memoryTitle': 'Project Memory',
@@ -745,6 +783,7 @@ function renderMarkdownToHtml(content: string): string {
         }
 
         if (line.trim().startsWith('```')) {
+            const fence = line.trim().slice(3).trim().toLowerCase();
             const codeLines: string[] = [];
             i += 1;
             while (i < lines.length && !lines[i].trim().startsWith('```')) {
@@ -752,7 +791,11 @@ function renderMarkdownToHtml(content: string): string {
                 i += 1;
             }
             i += 1;
-            blocks.push(`<pre><code>${escapeHtml(codeLines.join('\n'))}</code></pre>`);
+            if (fence === 'mermaid') {
+                blocks.push(`<div class="mermaid">${escapeHtml(codeLines.join('\n'))}</div>`);
+            } else {
+                blocks.push(`<pre><code>${escapeHtml(codeLines.join('\n'))}</code></pre>`);
+            }
             continue;
         }
 
@@ -964,7 +1007,8 @@ function getWindsurfHooksConfigPaths(homeDirs: string[] = getWriteHomeDirs()): A
     return items;
 }
 
-const HOOK_EVENTS = [
+// Official Cascade hook events (per Windsurf docs).
+const WINDSURF_HOOK_EVENTS = [
     'pre_read_code',
     'post_read_code',
     'pre_write_code',
@@ -977,10 +1021,16 @@ const HOOK_EVENTS = [
     'post_cascade_response'
 ] as const;
 
+// Auto-install only what we enforce in the guard to reduce overhead.
+const AUTO_INSTALL_HOOK_EVENTS = ['pre_run_command', 'pre_write_code', 'post_cascade_response'] as const;
+
 const TRACKER_FILE_NAME = 'windsurf-auto-mcp-tracker.json';
 const MEMORY_FILE_NAME = 'windsurf-auto-mcp-memories.json';
+const GLOBAL_MEMORY_FILE_NAME = 'windsurf-auto-mcp-global-memories.json';
 const ARTIFACT_ROOT_DIR = 'windsurf-auto-mcp';
 const ARTIFACT_BRAIN_DIR = 'brain';
+const INDEX_DIR_NAME = 'index';
+const RAG_INDEX_FILE_NAME = 'rag-index.json';
 
 function nowIso(): string {
     return new Date().toISOString();
@@ -1033,6 +1083,20 @@ function getMemoryPaths(homeDirs: string[] = getWriteHomeDirs()): Array<{ varian
     return items;
 }
 
+function getGlobalMemoryPaths(homeDirs: string[] = getWriteHomeDirs()): string[] {
+    const items: string[] = [];
+    const seen = new Set<string>();
+    for (const homeDir of homeDirs) {
+        const memoryPath = path.join(homeDir, '.codeium', ARTIFACT_ROOT_DIR, GLOBAL_MEMORY_FILE_NAME);
+        const key = normalizePathForCompare(memoryPath);
+        if (!seen.has(key)) {
+            seen.add(key);
+            items.push(memoryPath);
+        }
+    }
+    return items;
+}
+
 type ArtifactSpec = {
     fileName: string;
     artifactType: string;
@@ -1055,6 +1119,30 @@ function getProjectBrainDirs(homeDirs: string[] = getWriteHomeDirs(), projectId:
         }
     }
     return items;
+}
+
+function getProjectIndexDirs(homeDirs: string[] = getWriteHomeDirs(), projectId: string): Array<{ variant: string; dir: string }> {
+    const variants = ['windsurf', 'windsurf-next'];
+    const items: Array<{ variant: string; dir: string }> = [];
+    const seen = new Set<string>();
+    for (const homeDir of homeDirs) {
+        for (const variant of variants) {
+            const dir = path.join(homeDir, '.codeium', variant, ARTIFACT_ROOT_DIR, INDEX_DIR_NAME, projectId);
+            const key = normalizePathForCompare(dir);
+            if (!seen.has(key)) {
+                seen.add(key);
+                items.push({ variant, dir });
+            }
+        }
+    }
+    return items;
+}
+
+function getRagIndexPaths(homeDirs: string[] = getWriteHomeDirs(), projectId: string): Array<{ variant: string; indexPath: string }> {
+    return getProjectIndexDirs(homeDirs, projectId).map(({ variant, dir }) => ({
+        variant,
+        indexPath: path.join(dir, RAG_INDEX_FILE_NAME)
+    }));
 }
 
 function readArtifactMetadata(metaPath: string): { version: number; summary?: string; updatedAt?: string } | null {
@@ -1129,6 +1217,40 @@ function writeArtifactFiles(dir: string, spec: ArtifactSpec): boolean {
     return true;
 }
 
+function removeArtifactFiles(dir: string, fileName: string): void {
+    if (!dir || !fileName) return;
+    if (!fs.existsSync(dir)) return;
+    const basePath = path.join(dir, fileName);
+    const targets = [
+        basePath,
+        `${basePath}.resolved`,
+        `${basePath}.metadata.json`
+    ];
+    for (const target of targets) {
+        try {
+            if (fs.existsSync(target)) fs.unlinkSync(target);
+        } catch {
+            // ignore cleanup failures
+        }
+    }
+    try {
+        const entries = fs.readdirSync(dir);
+        const prefix = `${fileName}.resolved.`;
+        for (const entry of entries) {
+            if (entry.startsWith(prefix)) {
+                const full = path.join(dir, entry);
+                try {
+                    if (fs.existsSync(full)) fs.unlinkSync(full);
+                } catch {
+                    // ignore cleanup failures
+                }
+            }
+        }
+    } catch {
+        // ignore cleanup failures
+    }
+}
+
 function readTrackerFile(trackerPath: string): TrackerData | null {
     try {
         if (!fs.existsSync(trackerPath)) return null;
@@ -1157,6 +1279,20 @@ function readMemoryFile(memoryPath: string): MemoryData | null {
     }
 }
 
+function readGlobalMemoryFile(memoryPath: string): GlobalMemoryData | null {
+    try {
+        if (!fs.existsSync(memoryPath)) return null;
+        const raw = fs.readFileSync(memoryPath, 'utf-8');
+        if (!raw.trim()) return null;
+        const data = JSON.parse(raw);
+        if (!data || typeof data !== 'object') return null;
+        if (data.schemaVersion !== 1 || typeof (data as any).memories !== 'object') return null;
+        return data as GlobalMemoryData;
+    } catch {
+        return null;
+    }
+}
+
 function loadTrackerData(): TrackerData {
     const paths = getTrackerPaths(getReadHomeDirs());
     for (const { trackerPath } of paths) {
@@ -1173,6 +1309,15 @@ function loadMemoryData(): MemoryData {
         if (data) return data;
     }
     return { schemaVersion: 1, projects: {} };
+}
+
+function loadGlobalMemoryData(): GlobalMemoryData {
+    const paths = getGlobalMemoryPaths(getReadHomeDirs());
+    for (const memoryPath of paths) {
+        const data = readGlobalMemoryFile(memoryPath);
+        if (data) return data;
+    }
+    return { schemaVersion: 1, memories: {} };
 }
 
 function saveTrackerData(data: TrackerData): void {
@@ -1193,6 +1338,15 @@ function saveMemoryData(data: MemoryData): void {
     }
 }
 
+function saveGlobalMemoryData(data: GlobalMemoryData): void {
+    const paths = getGlobalMemoryPaths(getWriteHomeDirs());
+    for (const memoryPath of paths) {
+        const dir = path.dirname(memoryPath);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(memoryPath, JSON.stringify(data, null, 2));
+    }
+}
+
 function getWorkspaceRootPath(): string | null {
     const workspaceFolders = vscode.workspace.workspaceFolders;
     if (!workspaceFolders || workspaceFolders.length === 0) return null;
@@ -1207,58 +1361,72 @@ function getProjectNameFromPath(rootPath: string): string {
 function defaultPrdTemplate(lang: UiLanguage): string {
     if (lang === 'en') {
         return [
-            '# PRD (Project Requirements Document)',
+            '# PRD (Project Requirements Document) — for complex work',
+            '## One-liner',
             '## Problem / Background',
             '## Goals',
             '## Non-goals',
             '## Users / Personas',
-            '## User Scenarios',
+            '## User stories (Agile)',
+            '- As a ___, I want ___, so that ___.',
             '## Scope',
+            '## Flow / Diagram (Mermaid)',
+            '```mermaid',
+            'flowchart LR',
+            '  User --> App',
+            '  App --> API',
+            '```',
             '## Requirements (Functional)',
-            '| ID | Requirement | Priority | Notes |',
-            '| --- | --- | --- | --- |',
-            '| R-1 |  |  |  |',
+            '| ID | Requirement | Priority | Acceptance Criteria | Notes |',
+            '| --- | --- | --- | --- | --- |',
+            '| FR-1 |  |  |  |  |',
             '## Requirements (Non-Functional)',
-            '| ID | Requirement | Priority | Notes |',
-            '| --- | --- | --- | --- |',
-            '| NFR-1 |  |  |  |',
+            '| ID | Requirement | Priority | Acceptance Criteria | Notes |',
+            '| --- | --- | --- | --- | --- |',
+            '| NFR-1 |  |  |  |  |',
             '## UX / Workflow',
             '## Data / Analytics',
             '## Constraints',
             '## Dependencies / Integrations',
             '## Risks / Mitigations',
-            '## Success Metrics',
-            '## Milestones',
-            '## Acceptance Criteria',
+            '## Milestones (Sprints / Phases)',
+            '## Acceptance Criteria (Release gate)',
             '## Open Questions',
             '## References (official docs / Context7)',
             ''
         ].join('\n');
     }
     return [
-        '# PRD（项目需求文档）',
+        '# PRD（项目需求文档）— 仅用于复杂任务',
+        '## 一句话说明',
         '## 问题/背景',
         '## 目标',
         '## 非目标',
         '## 用户/角色',
-        '## 使用场景',
+        '## 用户故事（敏捷）',
+        '- 作为___，我希望___，以便___。',
         '## 范围',
+        '## 流程/示意图（Mermaid）',
+        '```mermaid',
+        'flowchart LR',
+        '  用户 --> 产品',
+        '  产品 --> 后端',
+        '```',
         '## 需求（功能）',
-        '| ID | 需求 | 优先级 | 备注 |',
-        '| --- | --- | --- | --- |',
-        '| R-1 |  |  |  |',
+        '| ID | 需求 | 优先级 | 验收标准 | 备注 |',
+        '| --- | --- | --- | --- | --- |',
+        '| FR-1 |  |  |  |  |',
         '## 需求（非功能）',
-        '| ID | 需求 | 优先级 | 备注 |',
-        '| --- | --- | --- | --- |',
-        '| NFR-1 |  |  |  |',
+        '| ID | 需求 | 优先级 | 验收标准 | 备注 |',
+        '| --- | --- | --- | --- | --- |',
+        '| NFR-1 |  |  |  |  |',
         '## 体验/流程',
         '## 数据/埋点',
         '## 约束',
         '## 依赖/集成',
         '## 风险/缓解',
-        '## 成功指标',
-        '## 里程碑',
-        '## 验收标准',
+        '## 里程碑（迭代/阶段）',
+        '## 验收标准（发布门禁）',
         '## 未决问题',
         '## 参考资料（官方文档/Context7）',
         ''
@@ -1269,10 +1437,9 @@ function createDefaultTrackerStats(): ProjectTrackerStats {
     return {
         prdUpdates: 0,
         prdApprovals: 0,
-        taskUpdates: 0,
+        overviewUpdates: 0,
         planUpdates: 0,
-        todoUpdates: 0,
-        checklistUpdates: 0
+        walkthroughUpdates: 0
     };
 }
 
@@ -1283,10 +1450,9 @@ function normalizeTrackerStats(raw: any): ProjectTrackerStats {
     return {
         prdUpdates: safe(raw.prdUpdates),
         prdApprovals: safe(raw.prdApprovals),
-        taskUpdates: safe(raw.taskUpdates),
+        overviewUpdates: safe(raw.overviewUpdates),
         planUpdates: safe(raw.planUpdates),
-        todoUpdates: safe(raw.todoUpdates),
-        checklistUpdates: safe(raw.checklistUpdates),
+        walkthroughUpdates: safe(raw.walkthroughUpdates),
         updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined
     };
 }
@@ -1298,23 +1464,20 @@ function ensureProjectTracker(data: TrackerData, rootPath: string, lang: UiLangu
             existing.projectId = createProjectId();
         }
         existing.stats = normalizeTrackerStats(existing.stats);
-        if (!existing.task || typeof existing.task !== 'object') {
-            existing.task = { summary: '', items: [] };
-        } else {
-            if (typeof existing.task.summary !== 'string') existing.task.summary = '';
-            if (!Array.isArray(existing.task.items)) existing.task.items = [];
+        const legacy = existing as any;
+        if (legacy.task) delete legacy.task;
+        if (legacy.todos) delete legacy.todos;
+        if (legacy.checklist) delete legacy.checklist;
+        if (!existing.overview || typeof (existing as any).overview !== 'object') {
+            (existing as any).overview = { content: '' };
+        } else if (typeof (existing as any).overview.content !== 'string') {
+            (existing as any).overview.content = '';
         }
         if (!existing.plan || typeof existing.plan !== 'object') {
             existing.plan = { summary: '', items: [] };
         } else {
             if (typeof existing.plan.summary !== 'string') existing.plan.summary = '';
             if (!Array.isArray(existing.plan.items)) existing.plan.items = [];
-        }
-        if (!existing.todos || typeof existing.todos !== 'object' || !Array.isArray(existing.todos.items)) {
-            existing.todos = { items: [] };
-        }
-        if (!existing.checklist || typeof existing.checklist !== 'object' || !Array.isArray(existing.checklist.items)) {
-            existing.checklist = { items: [] };
         }
         if (!existing.walkthrough || typeof existing.walkthrough !== 'object') {
             existing.walkthrough = { content: '' };
@@ -1327,15 +1490,13 @@ function ensureProjectTracker(data: TrackerData, rootPath: string, lang: UiLangu
         projectId: createProjectId(),
         rootPath,
         name: getProjectNameFromPath(rootPath),
+        overview: { content: '' },
         prd: {
-            content: defaultPrdTemplate(lang),
+            content: '',
             status: 'draft',
             updatedAt: nowIso()
         },
-        task: { summary: '', items: [] },
         plan: { summary: '', items: [] },
-        todos: { items: [] },
-        checklist: { items: [] },
         walkthrough: { content: '' },
         stats: createDefaultTrackerStats(),
         updatedAt: nowIso()
@@ -1346,16 +1507,8 @@ function ensureProjectTracker(data: TrackerData, rootPath: string, lang: UiLangu
 }
 
 function computeProgress(project: ProjectTracker): { done: number; total: number; percent: number } {
-    const source =
-        project.checklist.items.length > 0
-            ? project.checklist.items
-            : project.todos.items.length > 0
-                ? project.todos.items
-                : project.plan.items.length > 0
-                    ? project.plan.items
-                    : project.task.items;
-    const total = source.length;
-    const done = source.filter((item) => item.status === 'done').length;
+    const total = project.plan.items.length;
+    const done = project.plan.items.filter((item) => item.status === 'done').length;
     const percent = total > 0 ? Math.round((done / total) * 100) : 0;
     return { done, total, percent };
 }
@@ -1466,18 +1619,6 @@ function buildPlanArtifactContent(project: ProjectTracker, lang: UiLanguage): st
     return [`# ${header}`, '', ...sections].join('\n\n');
 }
 
-function buildTaskArtifactContent(project: ProjectTracker, lang: UiLanguage): string {
-    const title = tr('panel.taskTitle', {}, lang);
-    const header = project.name ? `${title}: ${project.name}` : title;
-    const sections = [
-        `## ${tr('panel.sectionSummary', {}, lang)}\n${formatSummaryBlock(project.task.summary, lang)}`,
-        `## ${tr('panel.taskTitle', {}, lang)}\n${formatItemsTable(project.task.items, lang)}`,
-        `## ${tr('panel.todoTitle', {}, lang)}\n${formatItemsTable(project.todos.items, lang)}`,
-        `## ${tr('panel.checklistTitle', {}, lang)}\n${formatItemsTable(project.checklist.items, lang)}`
-    ];
-    return [`# ${header}`, '', ...sections].join('\n\n');
-}
-
 function buildWalkthroughArtifactContent(project: ProjectTracker, lang: UiLanguage): string {
     const title = tr('panel.walkthroughTitle', {}, lang);
     const header = project.name ? `${title}: ${project.name}` : title;
@@ -1512,6 +1653,11 @@ function buildTrackerSnapshot(project: ProjectTracker) {
         projectId: project.projectId,
         rootPath: project.rootPath,
         name: project.name,
+        overview: {
+            content: project.overview?.content || '',
+            updatedAt: project.overview?.updatedAt || '',
+            generatedBy: project.overview?.generatedBy || ''
+        },
         prd: {
             status: project.prd.status,
             content: project.prd.content || '',
@@ -1521,30 +1667,16 @@ function buildTrackerSnapshot(project: ProjectTracker) {
             updatedAt: project.prd.updatedAt || '',
             generatedBy: project.prd.generatedBy || ''
         },
-        task: {
-            summary: project.task.summary || '',
-            items: project.task.items
-        },
         plan: {
             summary: project.plan.summary || '',
             items: project.plan.items
-        },
-        todos: {
-            items: project.todos.items
-        },
-        checklist: {
-            items: project.checklist.items
         },
         walkthrough: {
             content: project.walkthrough.content || '',
             updatedAt: project.walkthrough.updatedAt || ''
         },
-        taskSummary: project.task.summary || '',
-        taskText: formatChecklistText(project.task.items),
         planSummary: project.plan.summary || '',
         planText: formatChecklistText(project.plan.items),
-        todoText: formatChecklistText(project.todos.items),
-        checklistText: formatChecklistText(project.checklist.items),
         walkthroughText: project.walkthrough.content || '',
         progress,
         stats: normalizeTrackerStats(project.stats)
@@ -1554,10 +1686,9 @@ function buildTrackerSnapshot(project: ProjectTracker) {
 type TrackerStatKey =
     | 'prdUpdates'
     | 'prdApprovals'
-    | 'taskUpdates'
+    | 'overviewUpdates'
     | 'planUpdates'
-    | 'todoUpdates'
-    | 'checklistUpdates';
+    | 'walkthroughUpdates';
 
 function bumpProjectStat(project: ProjectTracker, key: TrackerStatKey) {
     project.stats = normalizeTrackerStats(project.stats);
@@ -1593,19 +1724,41 @@ function buildHooksCommand(variantHooksDir: string): string {
 
 function isLegacyHookCommand(command: unknown): boolean {
     if (!command || typeof command !== 'string') return false;
-    return /windsurf-auto-mcp-guard\.(ps1|js)/i.test(command);
+    // Previous versions used PowerShell/JS; we always use Python now.
+    return /windsurf-auto-mcp-guard\.(ps1|js)/i.test(command) || /powershell\b/i.test(command);
 }
 
 function hooksContainCommand(config: any, command: string): boolean {
     if (!config || typeof config !== 'object') return false;
     if (!config.hooks || typeof config.hooks !== 'object') return false;
-    for (const eventName of HOOK_EVENTS) {
+    for (const eventName of AUTO_INSTALL_HOOK_EVENTS) {
         const list = config.hooks[eventName];
         if (!Array.isArray(list) || !list.some((h: any) => h && h.command === command)) {
             return false;
         }
     }
     return true;
+}
+
+function hooksContainLegacyCommand(config: any): boolean {
+    if (!config || typeof config !== 'object') return false;
+    if (!config.hooks || typeof config.hooks !== 'object') return false;
+    for (const eventName of WINDSURF_HOOK_EVENTS) {
+        const list = config.hooks[eventName];
+        if (!Array.isArray(list)) continue;
+        if (list.some((h: any) => isLegacyHookCommand(h?.command))) return true;
+    }
+    return false;
+}
+
+function filesAreEqual(a: string, b: string): boolean {
+    try {
+        const aBuf = fs.readFileSync(a);
+        const bBuf = fs.readFileSync(b);
+        return aBuf.length === bBuf.length && aBuf.equals(bBuf);
+    } catch {
+        return false;
+    }
 }
 
 function installWindsurfHooks() {
@@ -1636,7 +1789,9 @@ function installWindsurfHooks() {
                 }
             }
 
-            const alreadyInstalled = hooksContainCommand(config, command) && fs.existsSync(guardTarget);
+            const guardUpToDate = fs.existsSync(guardTarget) && filesAreEqual(guardPySource, guardTarget);
+            const needsCleanup = hooksContainLegacyCommand(config);
+            const alreadyInstalled = hooksContainCommand(config, command) && guardUpToDate && !needsCleanup;
             if (alreadyInstalled) {
                 skipped.push(`${variant}: ${hooksPath}`);
                 outputChannel.appendLine(`Hooks already installed (${variant}): ${hooksPath}`);
@@ -1663,20 +1818,23 @@ function installWindsurfHooks() {
             }
 
             const desiredHooks = Object.fromEntries(
-                HOOK_EVENTS.map((eventName) => [eventName, [{ command, show_output: true }]])
+                AUTO_INSTALL_HOOK_EVENTS.map((eventName) => [eventName, [{ command, show_output: true }]])
             ) as Record<string, Array<{ command: string; show_output: boolean }>>;
 
             if (!config.hooks || typeof config.hooks !== 'object') config.hooks = {};
 
+            // Remove legacy PowerShell/JS hooks across all official events.
+            for (const eventName of WINDSURF_HOOK_EVENTS) {
+                if (!Array.isArray(config.hooks[eventName])) continue;
+                config.hooks[eventName] = config.hooks[eventName].filter((h: any) => !isLegacyHookCommand(h?.command));
+            }
+
+            // Install our Python guard for the minimal set of events we enforce.
             for (const [eventName, hooks] of Object.entries(desiredHooks)) {
                 if (!Array.isArray(config.hooks[eventName])) config.hooks[eventName] = [];
-                // Drop legacy PS1/JS hooks from earlier versions.
-                config.hooks[eventName] = config.hooks[eventName].filter(
-                    (h: any) => !isLegacyHookCommand(h?.command)
-                );
                 for (const hook of hooks) {
-                    const already = config.hooks[eventName].some((h: any) => h && h.command === hook.command);
-                    if (!already) config.hooks[eventName].push(hook);
+                    const exists = config.hooks[eventName].some((h: any) => h && h.command === hook.command);
+                    if (!exists) config.hooks[eventName].push(hook);
                 }
             }
 
@@ -1724,10 +1882,17 @@ function uninstallWindsurfHooks() {
                         throw new Error(tr('ext.invalidHooksJson', { path: hooksPath, error: e?.message ?? String(e) }, lang));
                     }
                     if (config?.hooks && typeof config.hooks === 'object') {
-                        for (const ev of HOOK_EVENTS) {
+                        for (const ev of WINDSURF_HOOK_EVENTS) {
                             if (!Array.isArray(config.hooks[ev])) continue;
                             config.hooks[ev] = config.hooks[ev].filter(
-                                (h: any) => !h || (h.command !== command && !isLegacyHookCommand(h.command))
+                                (h: any) => {
+                                    if (!h) return false;
+                                    const cmd = String(h.command || '');
+                                    if (cmd === command) return false;
+                                    if (/windsurf-auto-mcp-guard\.py/i.test(cmd)) return false;
+                                    if (isLegacyHookCommand(cmd)) return false;
+                                    return true;
+                                }
                             );
                             if (config.hooks[ev].length === 0) delete config.hooks[ev];
                         }
@@ -1804,12 +1969,13 @@ let stats = {
     askContinueCalls: 0,
     notifyCalls: 0,
     setPrdCalls: 0,
-    approvePrdCalls: 0,
-    updateTaskCalls: 0,
+    updateOverviewCalls: 0,
+    generateOverviewCalls: 0,
     updatePlanCalls: 0,
-    updateTodosCalls: 0,
-    updateChecklistCalls: 0,
     updateWalkthroughCalls: 0,
+    ragSearchCalls: 0,
+    memorySearchCalls: 0,
+    recordLessonCalls: 0,
     getProjectStatusCalls: 0,
     saveMemoryCalls: 0,
     getMemoryCalls: 0,
@@ -1824,6 +1990,20 @@ const pendingRequests = new Map<string, {
     reject: (reason: any) => void;
     timestamp: number;
 }>();
+
+function prunePendingRequests(maxAgeMs = 2 * 60 * 60 * 1000) {
+    const now = Date.now();
+    for (const [requestId, pending] of pendingRequests.entries()) {
+        if (!pending) continue;
+        if (now - pending.timestamp <= maxAgeMs) continue;
+        try {
+            pending.reject(new Error('Dialog request timed out'));
+        } catch {
+            // ignore
+        }
+        pendingRequests.delete(requestId);
+    }
+}
 
 // ==================== 工具定义 ====================
 
@@ -1897,49 +2077,15 @@ const TOOLS = [
         }
     },
     {
-        name: 'approve_prd',
-        description: 'Approve PRD for current project / 审批当前项目 PRD',
-        inputSchema: {
-            type: 'object',
-            properties: {
-                approver: { type: 'string', description: 'Approver name / 审批人' },
-                note: { type: 'string', description: 'Approval note / 审批说明' }
-            }
-        }
-    },
-    {
-        name: 'update_task',
-        description: 'Set/update task overview after PRD approval / 在 PRD 审批后设置任务概览',
-        inputSchema: {
-            type: 'object',
-            properties: {
-                summary: { type: 'string', description: 'Task summary / 任务摘要' },
-                items: {
-                    type: 'array',
-                    description: 'Task checklist items / 任务清单条目',
-                    items: {
-                        type: 'object',
-                        properties: {
-                            text: { type: 'string' },
-                            status: { type: 'string', enum: ['todo', 'doing', 'done'] }
-                        },
-                        required: ['text']
-                    }
-                },
-                text: { type: 'string', description: 'Task checklist text (supports [x]/[~]/[ ]) / 任务清单文本（支持 [x]/[~]/[ ]）' }
-            }
-        }
-    },
-    {
         name: 'update_plan',
-        description: 'Set/replace plan checklist after PRD approval / 在 PRD 审批后设置计划清单',
+        description: 'Set/replace plan (include tasks/checklist) / 设置或更新计划（含任务/清单）',
         inputSchema: {
             type: 'object',
             properties: {
                 summary: { type: 'string', description: 'Plan summary / 计划摘要' },
                 items: {
                     type: 'array',
-                    description: 'Plan items / 计划条目',
+                    description: 'Plan items (tasks/checklist) / 计划条目（任务/清单）',
                     items: {
                         type: 'object',
                         properties: {
@@ -1954,47 +2100,68 @@ const TOOLS = [
         }
     },
     {
-        name: 'update_todos',
-        description: 'Set/replace TODO checklist after plan / 在计划后设置 TODO 清单',
+        name: 'update_overview',
+        description: 'Set/update project overview (architecture/context) / 设置或更新项目概览（架构/上下文）',
         inputSchema: {
             type: 'object',
             properties: {
-                items: {
-                    type: 'array',
-                    description: 'TODO items / TODO 条目',
-                    items: {
-                        type: 'object',
-                        properties: {
-                            text: { type: 'string' },
-                            status: { type: 'string', enum: ['todo', 'doing', 'done'] }
-                        },
-                        required: ['text']
-                    }
-                },
-                text: { type: 'string', description: 'TODO text lines (supports [x]/[~]/[ ]) / TODO 文本（支持 [x]/[~]/[ ]）' }
-            }
+                content: { type: 'string', description: 'Overview content (Markdown) / 概览内容（Markdown）' }
+            },
+            required: ['content']
         }
     },
     {
-        name: 'update_checklist',
-        description: 'Set/replace delivery checklist / 设置交付检查清单',
+        name: 'generate_overview',
+        description: 'Auto-generate project overview from workspace / 从工作区自动生成项目概览',
+        inputSchema: {
+            type: 'object',
+            properties: {}
+        }
+    },
+    {
+        name: 'rag_search',
+        description: 'Search workspace context (RAG) for faster/safer edits / 通过检索增强（RAG）搜索工作区上下文',
         inputSchema: {
             type: 'object',
             properties: {
-                items: {
+                query: { type: 'string', description: 'Search query / 查询内容' },
+                maxResults: { type: 'number', description: 'Max results / 最大返回数量' }
+            },
+            required: ['query']
+        }
+    },
+    {
+        name: 'memory_search',
+        description: 'Search project/global memories / 搜索项目/全局记忆',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                query: { type: 'string', description: 'Search query / 查询内容' },
+                scope: { type: 'string', enum: ['project', 'global', 'both'], description: 'Search scope / 搜索范围' },
+                kinds: {
                     type: 'array',
-                    description: 'Checklist items / 检查条目',
-                    items: {
-                        type: 'object',
-                        properties: {
-                            text: { type: 'string' },
-                            status: { type: 'string', enum: ['todo', 'doing', 'done'] }
-                        },
-                        required: ['text']
-                    }
+                    items: { type: 'string', enum: ['short', 'long', 'lesson'] },
+                    description: 'Filter by kinds / 类型过滤'
                 },
-                text: { type: 'string', description: 'Checklist text lines (supports [x]/[~]/[ ]) / 清单文本（支持 [x]/[~]/[ ]）' }
-            }
+                maxResults: { type: 'number', description: 'Max results / 最大返回数量' }
+            },
+            required: ['query']
+        }
+    },
+    {
+        name: 'record_lesson',
+        description: 'Record a lesson learned from a mistake (human-like learning) / 记录错误经验（类人学习）',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                title: { type: 'string', description: 'Short title / 标题' },
+                mistake: { type: 'string', description: 'What went wrong / 错误描述' },
+                fix: { type: 'string', description: 'How it was fixed / 修复方式' },
+                prevention: { type: 'string', description: 'How to prevent it / 预防措施' },
+                scope: { type: 'string', enum: ['project', 'global', 'both'], description: 'Where to store / 保存范围' },
+                tags: { type: 'array', items: { type: 'string' }, description: 'Tags / 标签' }
+            },
+            required: ['mistake', 'fix']
         }
     },
     {
@@ -2038,7 +2205,11 @@ const TOOLS = [
             type: 'object',
             properties: {
                 key: { type: 'string', description: 'Memory key identifier / 内存键标识符' },
-                value: { type: 'string', description: 'Memory value to store / 要存储的内存值' }
+                value: { type: 'string', description: 'Memory value to store / 要存储的内存值' },
+                scope: { type: 'string', enum: ['project', 'global', 'both'], description: 'Where to store / 保存范围' },
+                kind: { type: 'string', enum: ['short', 'long', 'lesson'], description: 'Memory kind / 记忆类型' },
+                tags: { type: 'array', items: { type: 'string' }, description: 'Tags / 标签' },
+                links: { type: 'array', items: { type: 'string' }, description: 'Related keys / 关联键' }
             },
             required: ['key', 'value']
         }
@@ -2120,6 +2291,14 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('mcpService.installHooks', () => installWindsurfHooks()),
         vscode.commands.registerCommand('mcpService.uninstallHooks', () => uninstallWindsurfHooks())
     );
+
+    // Best-effort cleanup to avoid leaking pending dialog requests.
+    try {
+        const timer = setInterval(() => prunePendingRequests(), 5 * 60 * 1000);
+        context.subscriptions.push(new vscode.Disposable(() => clearInterval(timer)));
+    } catch {
+        // ignore
+    }
 
     // 自动启动服务器
     const config = vscode.workspace.getConfiguration('mcpService');
@@ -2350,25 +2529,29 @@ async function handleToolCall(name: string, args: any): Promise<any> {
             stats.setPrdCalls++;
             result = await handleSetPrd(args);
             break;
-        case 'approve_prd':
-            stats.approvePrdCalls++;
-            result = await handleApprovePrd(args);
+        case 'update_overview':
+            stats.updateOverviewCalls++;
+            result = await handleUpdateOverview(args);
             break;
-        case 'update_task':
-            stats.updateTaskCalls++;
-            result = await handleUpdateTask(args);
+        case 'generate_overview':
+            stats.generateOverviewCalls++;
+            result = await handleGenerateOverview(args);
             break;
         case 'update_plan':
             stats.updatePlanCalls++;
             result = await handleUpdatePlan(args);
             break;
-        case 'update_todos':
-            stats.updateTodosCalls++;
-            result = await handleUpdateTodos(args);
+        case 'rag_search':
+            stats.ragSearchCalls++;
+            result = await handleRagSearch(args);
             break;
-        case 'update_checklist':
-            stats.updateChecklistCalls++;
-            result = await handleUpdateChecklist(args);
+        case 'memory_search':
+            stats.memorySearchCalls++;
+            result = await handleMemorySearch(args);
+            break;
+        case 'record_lesson':
+            stats.recordLessonCalls++;
+            result = await handleRecordLesson(args);
             break;
         case 'get_project_status':
             stats.getProjectStatusCalls++;
@@ -2564,6 +2747,9 @@ function resolveProjectMemory(rootPathOverride?: string): { data: MemoryData; pr
     if (!data.projects[rootPath]) {
         data.projects[rootPath] = { memories: {} };
     }
+    if (!Array.isArray(data.projects[rootPath].timeline)) {
+        data.projects[rootPath].timeline = [];
+    }
     return { data, project: data.projects[rootPath], rootPath };
 }
 
@@ -2583,11 +2769,36 @@ function saveMemoryAndNotify(data: MemoryData): void {
     saveMemoryData(data);
 }
 
+function removeProjectArtifacts(project: ProjectTracker, fileNames: string[]): void {
+    if (!project.projectId) return;
+    const dirs = getProjectBrainDirs(getWriteHomeDirs(), project.projectId);
+    for (const { dir } of dirs) {
+        for (const fileName of fileNames) {
+            removeArtifactFiles(dir, fileName);
+        }
+    }
+}
+
+function cleanupLegacyArtifacts(project: ProjectTracker): void {
+    removeProjectArtifacts(project, ['task.md']);
+}
+
 function syncProjectArtifacts(project: ProjectTracker): void {
     const lang = getUiLanguage();
     const specs: ArtifactSpec[] = [];
     if (!project.projectId) {
         project.projectId = createProjectId();
+    }
+    cleanupLegacyArtifacts(project);
+
+    const overviewContent = project.overview?.content?.trim() || '';
+    if (overviewContent) {
+        specs.push({
+            fileName: 'overview.md',
+            artifactType: 'ARTIFACT_TYPE_OVERVIEW',
+            content: overviewContent,
+            summary: createArtifactSummary(overviewContent)
+        });
     }
 
     const prdContent = project.prd.content?.trim() || '';
@@ -2600,25 +2811,12 @@ function syncProjectArtifacts(project: ProjectTracker): void {
         });
     }
 
-    const hasTask = !!project.task.summary?.trim() || project.task.items.length > 0;
     const hasPlan = !!project.plan.summary?.trim() || project.plan.items.length > 0;
-    const hasTodos = project.todos.items.length > 0;
-    const hasChecklist = project.checklist.items.length > 0;
     if (hasPlan) {
         const content = buildPlanArtifactContent(project, lang);
         specs.push({
             fileName: 'implementation_plan.md',
             artifactType: 'ARTIFACT_TYPE_IMPLEMENTATION_PLAN',
-            content,
-            summary: createArtifactSummary(content)
-        });
-    }
-
-    if (hasTask || hasTodos || hasChecklist) {
-        const content = buildTaskArtifactContent(project, lang);
-        specs.push({
-            fileName: 'task.md',
-            artifactType: 'ARTIFACT_TYPE_TASK',
             content,
             summary: createArtifactSummary(content)
         });
@@ -2647,6 +2845,107 @@ function syncProjectArtifacts(project: ProjectTracker): void {
             }
         }
     }
+}
+
+async function requestConfirmation(message: string, title?: string, confirmType: ConfirmDialogType = 'confirm'): Promise<boolean> {
+    const requestId = `confirm_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    return new Promise((resolve) => {
+        sidebarProvider?.showInputDialog(requestId, title || 'WindsurfAutoMcp', message, false, {
+            mode: 'confirm',
+            confirmType
+        });
+
+        pendingRequests.set(requestId, {
+            resolve: (value: any) => {
+                pendingRequests.delete(requestId);
+                resolve(value?.confirmed === true);
+            },
+            reject: () => {
+                pendingRequests.delete(requestId);
+                resolve(false);
+            },
+            timestamp: Date.now()
+        });
+    });
+}
+
+function resetPrdState(project: ProjectTracker) {
+    project.prd.content = '';
+    project.prd.status = 'draft';
+    project.prd.approvedBy = undefined;
+    project.prd.approvedAt = undefined;
+    project.prd.reviewedAt = undefined;
+    project.prd.reviewNote = '';
+    project.prd.generatedBy = undefined;
+    project.prd.updatedAt = nowIso();
+}
+
+async function clearProjectPrd() {
+    const lang = getUiLanguage();
+    const confirmed = await requestConfirmation(tr('sidebar.clearPrdConfirm', {}, lang), tr('sidebar.clearTitle', {}, lang));
+    if (!confirmed) return;
+    const { data, project } = resolveProjectTracker();
+    resetPrdState(project);
+    bumpProjectStat(project, 'prdUpdates');
+    appendWalkthroughEntry(project, lang === 'en' ? 'PRD cleared by user.' : 'PRD 已被清空。', lang);
+    project.updatedAt = nowIso();
+    removeProjectArtifacts(project, ['prd.md']);
+    saveTrackerAndNotify(data, project);
+}
+
+async function clearProjectOverview() {
+    const lang = getUiLanguage();
+    const confirmed = await requestConfirmation(tr('sidebar.clearOverviewConfirm', {}, lang), tr('sidebar.clearTitle', {}, lang));
+    if (!confirmed) return;
+    const { data, project } = resolveProjectTracker();
+    project.overview = { content: '', updatedAt: nowIso(), generatedBy: undefined };
+    bumpProjectStat(project, 'overviewUpdates');
+    appendWalkthroughEntry(project, lang === 'en' ? 'Overview cleared by user.' : '项目概览已被清空。', lang);
+    project.updatedAt = nowIso();
+    removeProjectArtifacts(project, ['overview.md']);
+    saveTrackerAndNotify(data, project);
+}
+
+async function clearProjectPlan() {
+    const lang = getUiLanguage();
+    const confirmed = await requestConfirmation(tr('sidebar.clearPlanConfirm', {}, lang), tr('sidebar.clearTitle', {}, lang));
+    if (!confirmed) return;
+    const { data, project } = resolveProjectTracker();
+    project.plan.summary = '';
+    project.plan.items = [];
+    bumpProjectStat(project, 'planUpdates');
+    appendWalkthroughEntry(project, lang === 'en' ? 'Plan cleared by user.' : '计划已被清空。', lang);
+    project.updatedAt = nowIso();
+    removeProjectArtifacts(project, ['implementation_plan.md']);
+    saveTrackerAndNotify(data, project);
+}
+
+async function clearProjectWalkthrough() {
+    const lang = getUiLanguage();
+    const confirmed = await requestConfirmation(tr('sidebar.clearWalkthroughConfirm', {}, lang), tr('sidebar.clearTitle', {}, lang));
+    if (!confirmed) return;
+    const { data, project } = resolveProjectTracker();
+    project.walkthrough = { content: '', updatedAt: nowIso() };
+    bumpProjectStat(project, 'walkthroughUpdates');
+    project.updatedAt = nowIso();
+    removeProjectArtifacts(project, ['walkthrough.md']);
+    saveTrackerAndNotify(data, project);
+}
+
+async function clearProjectTracking() {
+    const lang = getUiLanguage();
+    const confirmed = await requestConfirmation(tr('sidebar.clearTrackingConfirm', {}, lang), tr('sidebar.clearTitle', {}, lang));
+    if (!confirmed) return;
+    const { data, project } = resolveProjectTracker();
+    project.overview = { content: '', updatedAt: nowIso(), generatedBy: undefined };
+    resetPrdState(project);
+    project.plan.summary = '';
+    project.plan.items = [];
+    project.walkthrough = { content: '', updatedAt: nowIso() };
+    project.stats = createDefaultTrackerStats();
+    project.updatedAt = nowIso();
+    removeProjectArtifacts(project, ['overview.md', 'prd.md', 'implementation_plan.md', 'walkthrough.md']);
+    saveTrackerAndNotify(data, project);
 }
 
 function syncMemoryArtifacts(project: ProjectTracker, memoryStore: ProjectMemoryStore): void {
@@ -2764,23 +3063,269 @@ async function handleSetPrd(args: any): Promise<any> {
     };
 }
 
-async function handleApprovePrd(args: any): Promise<any> {
+function isIgnoredOverviewDir(name: string): boolean {
+    const n = String(name || '').toLowerCase();
+    return [
+        '.git',
+        'node_modules',
+        '.vscode',
+        '.windsurf',
+        '.idea',
+        'dist',
+        'out',
+        'build',
+        '.next',
+        '.turbo',
+        '.cache',
+        'target',
+        '.venv',
+        'venv',
+        '__pycache__'
+    ].includes(n);
+}
+
+function buildProjectTree(rootPath: string, maxDepth = 4, maxEntriesPerDir = 80, maxTotalEntries = 1200): string {
+    const lines: string[] = [];
+    let total = 0;
+
+    const walk = (dir: string, depth: number, prefix: string) => {
+        if (total >= maxTotalEntries) return;
+        if (depth > maxDepth) return;
+        let entries: fs.Dirent[] = [];
+        try {
+            entries = fs.readdirSync(dir, { withFileTypes: true });
+        } catch {
+            return;
+        }
+        entries = entries
+            .filter((e) => !!e && !!e.name && !isIgnoredOverviewDir(e.name))
+            .sort((a, b) => {
+                const ad = a.isDirectory() ? 0 : 1;
+                const bd = b.isDirectory() ? 0 : 1;
+                if (ad !== bd) return ad - bd;
+                return a.name.localeCompare(b.name);
+            });
+
+        const shown = entries.slice(0, maxEntriesPerDir);
+        const remaining = entries.length - shown.length;
+
+        for (const entry of shown) {
+            if (total >= maxTotalEntries) return;
+            total += 1;
+            const isDir = entry.isDirectory();
+            const label = isDir ? `${entry.name}/` : entry.name;
+            lines.push(`${prefix}- ${label}`);
+            if (isDir) {
+                walk(path.join(dir, entry.name), depth + 1, `${prefix}  `);
+            }
+        }
+        if (remaining > 0 && total < maxTotalEntries) {
+            lines.push(`${prefix}- … (${remaining} more)`);
+        }
+    };
+
+    walk(rootPath, 1, '');
+    return lines.join('\n');
+}
+
+function detectProjectSignals(rootPath: string): string[] {
+    const signals: string[] = [];
+    const has = (p: string) => fs.existsSync(path.join(rootPath, p));
+
+    if (has('package.json')) signals.push('Node.js / package.json');
+    if (has('pnpm-lock.yaml')) signals.push('pnpm');
+    if (has('yarn.lock')) signals.push('yarn');
+    if (has('package-lock.json')) signals.push('npm');
+    if (has('tsconfig.json')) signals.push('TypeScript');
+    if (has('pyproject.toml') || has('requirements.txt')) signals.push('Python');
+    if (has('go.mod')) signals.push('Go');
+    if (has('Cargo.toml')) signals.push('Rust');
+    if (has('pom.xml') || has('build.gradle') || has('build.gradle.kts')) signals.push('Java/Kotlin');
+    if (has('.github/workflows')) signals.push('GitHub Actions');
+    return signals;
+}
+
+function readPackageJsonSummary(rootPath: string): string {
+    try {
+        const pkgPath = path.join(rootPath, 'package.json');
+        if (!fs.existsSync(pkgPath)) return '';
+        const raw = fs.readFileSync(pkgPath, 'utf-8');
+        const pkg = JSON.parse(raw);
+        const name = typeof pkg?.name === 'string' ? pkg.name : '';
+        const scripts = pkg?.scripts && typeof pkg.scripts === 'object' ? Object.keys(pkg.scripts) : [];
+        const deps = pkg?.dependencies && typeof pkg.dependencies === 'object' ? Object.keys(pkg.dependencies) : [];
+        const devDeps = pkg?.devDependencies && typeof pkg.devDependencies === 'object' ? Object.keys(pkg.devDependencies) : [];
+        const lines: string[] = [];
+        if (name) lines.push(`- name: ${name}`);
+        if (scripts.length) lines.push(`- scripts: ${scripts.slice(0, 12).join(', ')}${scripts.length > 12 ? '…' : ''}`);
+        if (deps.length) lines.push(`- dependencies: ${deps.slice(0, 12).join(', ')}${deps.length > 12 ? '…' : ''}`);
+        if (devDeps.length) lines.push(`- devDependencies: ${devDeps.slice(0, 12).join(', ')}${devDeps.length > 12 ? '…' : ''}`);
+        return lines.join('\n');
+    } catch {
+        return '';
+    }
+}
+
+function generateOverviewMarkdown(project: ProjectTracker, lang: UiLanguage): string {
+    const rootPath = project.rootPath;
+    const title = lang === 'en' ? 'Project Overview' : '项目概览';
+    const signals = detectProjectSignals(rootPath);
+    const tree = buildProjectTree(rootPath);
+    const pkgSummary = readPackageJsonSummary(rootPath);
+    const signalLines = signals.length ? signals.map((s) => `- ${s}`).join('\n') : `_${tr('panel.readOnlyEmpty', {}, lang)}_`;
+    const pkgLines = pkgSummary ? pkgSummary : `_${tr('panel.readOnlyEmpty', {}, lang)}_`;
+
+    return [
+        `# ${project.name ? `${project.name} - ${title}` : title}`,
+        '',
+        `## ${lang === 'en' ? 'Signals' : '技术信号'}`,
+        signalLines,
+        '',
+        `## ${lang === 'en' ? 'package.json summary' : 'package.json 摘要'}`,
+        pkgLines,
+        '',
+        `## ${lang === 'en' ? 'Folder tree (trimmed)' : '目录结构（节选）'}`,
+        '```text',
+        tree || tr('panel.readOnlyEmpty', {}, lang),
+        '```',
+        '',
+        `## ${lang === 'en' ? 'Architecture sketch (Mermaid)' : '架构草图（Mermaid）'}`,
+        '```mermaid',
+        'flowchart LR',
+        '  User[User] -->|prompt| AI[AI / Cascade]',
+        '  AI -->|MCP tools| MCP[WindsurfAutoMcp]',
+        '  MCP -->|tracking/artifacts| Home[~/.codeium/.../windsurf-auto-mcp/brain]',
+        '  AI -->|code changes| Repo[(Workspace Repo)]',
+        '```',
+        ''
+    ].join('\n');
+}
+
+function isIgnoredRagFile(filePath: string): boolean {
+    const p = normalizePathForCompare(filePath);
+    if (!p) return true;
+    const name = path.basename(p);
+    if (name.startsWith('.env')) return true;
+    if (name.includes('id_rsa') || name.includes('id_ed25519')) return true;
+    const blockedExt = [
+        '.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.ico',
+        '.zip', '.7z', '.tar', '.gz', '.rar',
+        '.exe', '.dll', '.so', '.dylib',
+        '.pdf', '.mp4', '.mov', '.avi',
+        '.lock'
+    ];
+    if (blockedExt.some((ext) => name.endsWith(ext))) return true;
+    return false;
+}
+
+function decodeUtf8(bytes: Uint8Array): string {
+    try {
+        return new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+    } catch {
+        // Node < 11 fallback not needed in this environment
+        return Buffer.from(bytes).toString('utf-8');
+    }
+}
+
+function pickBestSnippet(content: string, queryTokens: string[], maxLines = 5): { snippet: string; startLine: number } {
+    const lines = String(content || '').split(/\r?\n/);
+    let bestIdx = 0;
+    let bestScore = 0;
+    for (let i = 0; i < lines.length; i++) {
+        const s = scoreByTokenOverlap(queryTokens, lines[i]);
+        if (s > bestScore) {
+            bestScore = s;
+            bestIdx = i;
+        }
+    }
+    const half = Math.max(1, Math.floor(maxLines / 2));
+    const start = Math.max(0, bestIdx - half);
+    const end = Math.min(lines.length, start + maxLines);
+    return { snippet: lines.slice(start, end).join('\n'), startLine: start + 1 };
+}
+
+async function handleRagSearch(args: any): Promise<any> {
     const lang = getUiLanguage();
-    const { data, project } = resolveProjectTracker();
-    if (!project.prd.content) {
-        const msg = lang === 'en' ? 'PRD is empty; generate PRD first.' : 'PRD 为空，请先生成 PRD。';
+    const query = typeof args?.query === 'string' ? args.query.trim() : '';
+    if (!query) {
+        const msg = lang === 'en' ? 'rag_search requires query.' : 'rag_search 需要 query。';
         throw new Error(msg);
     }
-    project.prd.status = 'approved';
-    project.prd.approvedBy = typeof args?.approver === 'string' ? args.approver.trim() : undefined;
-    project.prd.approvedAt = nowIso();
-    project.prd.reviewedAt = nowIso();
-    bumpProjectStat(project, 'prdApprovals');
-    appendWalkthroughEntry(project, lang === 'en' ? 'PRD approved.' : 'PRD 已审批。', lang);
+    const maxResults = Number.isFinite(args?.maxResults) ? Math.max(1, Math.min(10, Math.floor(args.maxResults))) : 6;
+    const rootPath = getWorkspaceRootPath();
+    if (!rootPath) {
+        const msg = lang === 'en' ? 'Workspace is required for rag_search.' : 'rag_search 需要打开工作区。';
+        throw new Error(msg);
+    }
+
+    const queryTokens = tokenizeForSearch(query);
+    const exclude = '{**/.git/**,**/node_modules/**,**/.windsurf/**,**/.vscode/**,**/dist/**,**/out/**,**/build/**,**/target/**,**/.venv/**,**/venv/**,**/__pycache__/**}';
+    const files = await vscode.workspace.findFiles('**/*', exclude, 1400);
+
+    const candidates: Array<{ path: string; score: number; snippet: string; startLine: number }> = [];
+    for (const uri of files) {
+        const filePath = uri.fsPath;
+        if (isIgnoredRagFile(filePath)) continue;
+        try {
+            const stat = await vscode.workspace.fs.stat(uri);
+            if (stat.size > 320_000) continue;
+            const raw = await vscode.workspace.fs.readFile(uri);
+            if (raw.length === 0) continue;
+            // quick binary check
+            const head = raw.subarray(0, Math.min(raw.length, 2048));
+            if (head.includes(0)) continue;
+            const text = decodeUtf8(raw.subarray(0, Math.min(raw.length, 96_000)));
+            const score = scoreByTokenOverlap(queryTokens, `${filePath}\n${text}`);
+            if (score <= 0) continue;
+            const { snippet, startLine } = pickBestSnippet(text, queryTokens);
+            candidates.push({ path: filePath, score, snippet, startLine });
+        } catch {
+            // ignore unreadable files
+        }
+    }
+
+    candidates.sort((a, b) => (b.score - a.score) || a.path.localeCompare(b.path));
+    const top = candidates.slice(0, maxResults);
+    const header = lang === 'en' ? `RAG results (${top.length})` : `RAG 结果（${top.length}）`;
+    const lines = top.map((r, i) => `${i + 1}. ${r.path}:${r.startLine}\n${r.snippet}`);
+
+    return {
+        content: [
+            { type: 'text', text: header },
+            { type: 'text', text: lines.join('\n\n') || (lang === 'en' ? 'No matches.' : '无匹配结果。') },
+            { type: 'text', text: `RAG_JSON:\n${JSON.stringify({ query, results: top }, null, 2)}` }
+        ]
+    };
+}
+
+async function handleUpdateOverview(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const content = typeof args?.content === 'string' ? args.content.trim() : '';
+    if (!content) {
+        const msg = lang === 'en' ? 'update_overview requires content.' : 'update_overview 需要提供 content。';
+        throw new Error(msg);
+    }
+    const { data, project } = resolveProjectTracker();
+    project.overview = { content, updatedAt: nowIso(), generatedBy: 'ai' };
+    bumpProjectStat(project, 'overviewUpdates');
+    appendWalkthroughEntry(project, lang === 'en' ? 'Overview updated.' : '项目概览已更新。', lang);
     project.updatedAt = nowIso();
     saveTrackerAndNotify(data, project);
-    const text = lang === 'en' ? 'PRD approved.' : 'PRD 已审批。';
-    return { content: [{ type: 'text', text }, { type: 'text', text: `PRD_JSON:\n${JSON.stringify(buildTrackerSnapshot(project), null, 2)}` }] };
+    const text = lang === 'en' ? 'Overview updated.' : '项目概览已更新。';
+    return { content: [{ type: 'text', text }, { type: 'text', text: `OVERVIEW_JSON:\n${JSON.stringify(buildTrackerSnapshot(project), null, 2)}` }] };
+}
+
+async function handleGenerateOverview(_args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const { data, project } = resolveProjectTracker();
+    const content = generateOverviewMarkdown(project, lang);
+    project.overview = { content, updatedAt: nowIso(), generatedBy: 'auto' };
+    bumpProjectStat(project, 'overviewUpdates');
+    appendWalkthroughEntry(project, lang === 'en' ? 'Overview generated.' : '项目概览已生成。', lang);
+    project.updatedAt = nowIso();
+    saveTrackerAndNotify(data, project);
+    const text = lang === 'en' ? 'Overview generated.' : '项目概览已生成。';
+    return { content: [{ type: 'text', text }, { type: 'text', text: `OVERVIEW_JSON:\n${JSON.stringify(buildTrackerSnapshot(project), null, 2)}` }] };
 }
 
 function extractItemsFromArgs(args: any): TrackerItem[] {
@@ -2803,42 +3348,9 @@ function extractSummaryFromArgs(args: any): string | undefined {
     return undefined;
 }
 
-function assertPrdApproved(project: ProjectTracker, lang: UiLanguage) {
-    if (project.prd.status !== 'approved') {
-        const msg = lang === 'en' ? 'PRD must be approved before planning or tasks.' : 'PRD 审批后才能进行计划或任务。';
-        throw new Error(msg);
-    }
-}
-
-async function handleUpdateTask(args: any): Promise<any> {
-    const lang = getUiLanguage();
-    const { data, project } = resolveProjectTracker();
-    assertPrdApproved(project, lang);
-    const items = extractItemsFromArgs(args);
-    const summary = extractSummaryFromArgs(args);
-    if (items.length === 0 && !summary) {
-        const msg = lang === 'en' ? 'update_task requires items/text or summary.' : 'update_task 需要 items/text 或 summary。';
-        throw new Error(msg);
-    }
-    if (summary !== undefined) {
-        project.task.summary = summary;
-        bumpProjectStat(project, 'taskUpdates');
-    }
-    if (items.length > 0) {
-        project.task.items = items;
-        bumpProjectStat(project, 'taskUpdates');
-    }
-    appendWalkthroughEntry(project, lang === 'en' ? 'Task checklist updated.' : '任务清单已更新。', lang);
-    project.updatedAt = nowIso();
-    saveTrackerAndNotify(data, project);
-    const text = lang === 'en' ? 'Task updated.' : '任务已更新。';
-    return { content: [{ type: 'text', text }, { type: 'text', text: `TASK_JSON:\n${JSON.stringify(buildTrackerSnapshot(project), null, 2)}` }] };
-}
-
 async function handleUpdatePlan(args: any): Promise<any> {
     const lang = getUiLanguage();
     const { data, project } = resolveProjectTracker();
-    assertPrdApproved(project, lang);
     const items = extractItemsFromArgs(args);
     const summary = extractSummaryFromArgs(args);
     if (items.length === 0 && !summary) {
@@ -2860,46 +3372,6 @@ async function handleUpdatePlan(args: any): Promise<any> {
     return { content: [{ type: 'text', text }, { type: 'text', text: `PLAN_JSON:\n${JSON.stringify(buildTrackerSnapshot(project), null, 2)}` }] };
 }
 
-async function handleUpdateTodos(args: any): Promise<any> {
-    const lang = getUiLanguage();
-    const { data, project } = resolveProjectTracker();
-    assertPrdApproved(project, lang);
-    if (project.plan.items.length === 0 && !project.plan.summary) {
-        const msg = lang === 'en' ? 'Plan is required before TODOs.' : '需要先有计划再创建 TODO。';
-        throw new Error(msg);
-    }
-    const items = extractItemsFromArgs(args);
-    if (items.length === 0) {
-        const msg = lang === 'en' ? 'update_todos requires items or text.' : 'update_todos 需要 items 或 text。';
-        throw new Error(msg);
-    }
-    project.todos.items = items;
-    bumpProjectStat(project, 'todoUpdates');
-    appendWalkthroughEntry(project, lang === 'en' ? 'TODO list updated.' : 'TODO 已更新。', lang);
-    project.updatedAt = nowIso();
-    saveTrackerAndNotify(data, project);
-    const text = lang === 'en' ? 'TODOs updated.' : 'TODO 已更新。';
-    return { content: [{ type: 'text', text }, { type: 'text', text: `TODO_JSON:\n${JSON.stringify(buildTrackerSnapshot(project), null, 2)}` }] };
-}
-
-async function handleUpdateChecklist(args: any): Promise<any> {
-    const lang = getUiLanguage();
-    const { data, project } = resolveProjectTracker();
-    assertPrdApproved(project, lang);
-    const items = extractItemsFromArgs(args);
-    if (items.length === 0) {
-        const msg = lang === 'en' ? 'update_checklist requires items or text.' : 'update_checklist 需要 items 或 text。';
-        throw new Error(msg);
-    }
-    project.checklist.items = items;
-    bumpProjectStat(project, 'checklistUpdates');
-    appendWalkthroughEntry(project, lang === 'en' ? 'Delivery checklist updated.' : '交付清单已更新。', lang);
-    project.updatedAt = nowIso();
-    saveTrackerAndNotify(data, project);
-    const text = lang === 'en' ? 'Checklist updated.' : '检查清单已更新。';
-    return { content: [{ type: 'text', text }, { type: 'text', text: `CHECKLIST_JSON:\n${JSON.stringify(buildTrackerSnapshot(project), null, 2)}` }] };
-}
-
 async function handleGetProjectStatus(args: any): Promise<any> {
     const lang = getUiLanguage();
     const rootPath = typeof args?.rootPath === 'string' ? args.rootPath : undefined;
@@ -2918,6 +3390,82 @@ async function handleGetProjectStatus(args: any): Promise<any> {
 
 // ==================== Memory Handlers ====================
 
+const STOP_WORDS = new Set<string>([
+    'a', 'an', 'the', 'and', 'or', 'but', 'if', 'then', 'else', 'for', 'to', 'of', 'in', 'on', 'at', 'by', 'with',
+    'is', 'are', 'was', 'were', 'be', 'been', 'being', 'as', 'it', 'this', 'that', 'these', 'those', 'from', 'into',
+    'we', 'you', 'they', 'he', 'she', 'i', 'me', 'my', 'our', 'your', 'their', 'them', 'can', 'could', 'should',
+    'would', 'may', 'might', 'must', 'not', 'no', 'yes', 'do', 'does', 'did', 'done'
+]);
+
+function tokenizeForSearch(text: string): string[] {
+    const raw = String(text || '').toLowerCase();
+    const parts = raw.split(/[^a-z0-9_\u4e00-\u9fff]+/g).filter(Boolean);
+    const tokens: string[] = [];
+    for (const p of parts) {
+        if (p.length <= 1) continue;
+        if (/^[a-z]+$/.test(p) && STOP_WORDS.has(p)) continue;
+        tokens.push(p);
+    }
+    return tokens.slice(0, 64);
+}
+
+function scoreByTokenOverlap(queryTokens: string[], text: string): number {
+    if (queryTokens.length === 0) return 0;
+    const hay = String(text || '').toLowerCase();
+    let score = 0;
+    for (const token of queryTokens) {
+        if (!token) continue;
+        let idx = hay.indexOf(token);
+        while (idx !== -1) {
+            score += 1;
+            idx = hay.indexOf(token, idx + token.length);
+        }
+    }
+    return score;
+}
+
+function pushTimelineEntry(
+    timeline: Array<{ at: string; kind: 'short' | 'long' | 'lesson'; key: string; summary: string }>,
+    entry: { kind: 'short' | 'long' | 'lesson'; key: string; content: string }
+) {
+    const summary = String(entry.content || '').trim().replace(/\s+/g, ' ').slice(0, 160);
+    timeline.push({ at: nowIso(), kind: entry.kind, key: entry.key, summary });
+    if (timeline.length > 800) {
+        timeline.splice(0, timeline.length - 800);
+    }
+}
+
+function normalizeMemoryKind(kind: any): 'short' | 'long' | 'lesson' {
+    if (kind === 'short' || kind === 'lesson') return kind;
+    return 'long';
+}
+
+function normalizeStringArray(raw: any, maxItems = 24): string[] {
+    if (!Array.isArray(raw)) return [];
+    const out: string[] = [];
+    for (const item of raw) {
+        if (typeof item !== 'string') continue;
+        const v = item.trim();
+        if (!v) continue;
+        out.push(v);
+        if (out.length >= maxItems) break;
+    }
+    return out;
+}
+
+function pruneShortMemories(store: ProjectMemoryStore | GlobalMemoryData, maxAgeDays = 7): void {
+    const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
+    const memories = (store as any).memories as Record<string, MemoryEntry>;
+    for (const [key, entry] of Object.entries(memories || {})) {
+        if (!entry) continue;
+        if (entry.kind !== 'short') continue;
+        const updatedAt = Date.parse(entry.updatedAt || '');
+        if (Number.isFinite(updatedAt) && updatedAt < cutoff) {
+            delete memories[key];
+        }
+    }
+}
+
 async function handleSaveMemory(args: any): Promise<any> {
     const lang = getUiLanguage();
     const key = typeof args?.key === 'string' ? args.key.trim() : '';
@@ -2926,21 +3474,69 @@ async function handleSaveMemory(args: any): Promise<any> {
         const msg = lang === 'en' ? 'save_memory requires a key.' : 'save_memory 需要提供 key。';
         throw new Error(msg);
     }
-    const { data, project, rootPath } = resolveProjectMemory();
-    project.memories[key] = {
-        key,
-        content: value,
-        updatedAt: nowIso()
-    };
-    saveMemoryAndNotify(data);
-    try {
-        const trackerInfo = resolveProjectTracker(rootPath);
-        saveTrackerData(trackerInfo.data);
-        syncMemoryArtifacts(trackerInfo.project, project);
-    } catch (e: any) {
-        outputChannel?.appendLine(`Memory artifact sync failed: ${e?.message ?? String(e)}`);
+    const scope = args?.scope === 'global' || args?.scope === 'both' ? args.scope : 'project';
+    const kind = normalizeMemoryKind(args?.kind);
+    const tags = normalizeStringArray(args?.tags);
+    const links = normalizeStringArray(args?.links);
+
+    const now = nowIso();
+    const writeProject = scope === 'project' || scope === 'both';
+    const writeGlobal = scope === 'global' || scope === 'both';
+
+    let rootPath: string | undefined;
+
+    if (writeProject) {
+        const resolved = resolveProjectMemory();
+        rootPath = resolved.rootPath;
+        const { data, project } = resolved;
+        const existing = project.memories[key];
+        project.memories[key] = {
+            key,
+            content: value,
+            kind,
+            tags,
+            links,
+            createdAt: existing?.createdAt || now,
+            updatedAt: now
+        };
+        if (!Array.isArray(project.timeline)) project.timeline = [];
+        pushTimelineEntry(project.timeline, { kind, key, content: value });
+        pruneShortMemories(project);
+        saveMemoryAndNotify(data);
+        try {
+            const trackerInfo = resolveProjectTracker(rootPath);
+            saveTrackerData(trackerInfo.data);
+            syncMemoryArtifacts(trackerInfo.project, project);
+        } catch (e: any) {
+            outputChannel?.appendLine(`Memory artifact sync failed: ${e?.message ?? String(e)}`);
+        }
     }
-    const text = lang === 'en' ? `Memory saved: ${key}` : `内存已保存: ${key}`;
+
+    if (writeGlobal) {
+        const global = loadGlobalMemoryData();
+        if (!global.timeline) global.timeline = [];
+        const existing = global.memories[key];
+        global.memories[key] = {
+            key,
+            content: value,
+            kind,
+            tags,
+            links,
+            createdAt: existing?.createdAt || now,
+            updatedAt: now
+        };
+        pushTimelineEntry(global.timeline, { kind, key, content: value });
+        pruneShortMemories(global);
+        saveGlobalMemoryData(global);
+    }
+
+    const where =
+        scope === 'both'
+            ? (lang === 'en' ? 'project + global' : '项目 + 全局')
+            : scope === 'global'
+                ? (lang === 'en' ? 'global' : '全局')
+                : (lang === 'en' ? 'project' : '项目');
+    const text = lang === 'en' ? `Memory saved (${where}): ${key}` : `内存已保存（${where}）: ${key}`;
     return { content: [{ type: 'text', text }] };
 }
 
@@ -2952,25 +3548,126 @@ async function handleGetMemory(args: any): Promise<any> {
         throw new Error(msg);
     }
     const { project } = resolveProjectMemory();
-    const entry = project.memories?.[key];
+    let entry = project.memories?.[key];
+    let source: 'project' | 'global' = 'project';
+    if (!entry) {
+        const global = loadGlobalMemoryData();
+        entry = global.memories?.[key];
+        source = 'global';
+    }
     if (!entry) {
         const text = lang === 'en' ? `Memory not found: ${key}` : `未找到内存: ${key}`;
         return { content: [{ type: 'text', text }] };
     }
     const text = lang === 'en' ? `Memory [${key}]:` : `内存 [${key}]:`;
-    return { content: [{ type: 'text', text }, { type: 'text', text: entry.content }] };
+    const head = lang === 'en' ? `${text} (${source})` : `${text}（${source === 'global' ? '全局' : '项目'}）`;
+    return { content: [{ type: 'text', text: head }, { type: 'text', text: entry.content }] };
 }
 
 async function handleListMemories(_args: any): Promise<any> {
     const lang = getUiLanguage();
     const { project } = resolveProjectMemory();
-    const keys = Object.keys(project.memories || {});
-    if (keys.length === 0) {
-        const text = lang === 'en' ? 'No memories saved for this project.' : '此项目没有保存的内存。';
-        return { content: [{ type: 'text', text }] };
+    const global = loadGlobalMemoryData();
+    const projectKeys = Object.keys(project.memories || {});
+    const globalKeys = Object.keys(global.memories || {});
+    const lines: string[] = [];
+    lines.push(lang === 'en' ? `Project (${projectKeys.length})` : `项目（${projectKeys.length}）`);
+    lines.push(...projectKeys.sort().slice(0, 200).map((k) => `- ${k}`));
+    if (projectKeys.length > 200) lines.push(`- … (${projectKeys.length - 200} more)`);
+    lines.push('');
+    lines.push(lang === 'en' ? `Global (${globalKeys.length})` : `全局（${globalKeys.length}）`);
+    lines.push(...globalKeys.sort().slice(0, 200).map((k) => `- ${k}`));
+    if (globalKeys.length > 200) lines.push(`- … (${globalKeys.length - 200} more)`);
+
+    const text = lang === 'en' ? 'Saved memory keys:' : '保存的内存键：';
+    return { content: [{ type: 'text', text }, { type: 'text', text: lines.join('\n') }] };
+}
+
+async function handleMemorySearch(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const query = typeof args?.query === 'string' ? args.query.trim() : '';
+    if (!query) {
+        const msg = lang === 'en' ? 'memory_search requires query.' : 'memory_search 需要 query。';
+        throw new Error(msg);
     }
-    const text = lang === 'en' ? `Saved memory keys (${keys.length}):` : `保存的内存键 (${keys.length}):`;
-    return { content: [{ type: 'text', text }, { type: 'text', text: keys.join('\n') }] };
+    const scope: 'project' | 'global' | 'both' = args?.scope === 'global' || args?.scope === 'both' ? args.scope : 'project';
+    const kinds = Array.isArray(args?.kinds) ? args.kinds.filter((k: any) => k === 'short' || k === 'long' || k === 'lesson') : [];
+    const maxResults = Number.isFinite(args?.maxResults) ? Math.max(1, Math.min(20, Math.floor(args.maxResults))) : 8;
+
+    const queryTokens = tokenizeForSearch(query);
+    const results: Array<{ scope: 'project' | 'global'; key: string; kind: string; updatedAt: string; score: number; snippet: string }> = [];
+
+    const consider = (scopeName: 'project' | 'global', memories: Record<string, MemoryEntry>) => {
+        for (const [key, entry] of Object.entries(memories || {})) {
+            if (!entry) continue;
+            const kind = normalizeMemoryKind(entry.kind);
+            if (kinds.length > 0 && !kinds.includes(kind)) continue;
+            const combined = `${key}\n${entry.content}\n${(entry.tags || []).join(' ')}\n${(entry.links || []).join(' ')}`;
+            const score = scoreByTokenOverlap(queryTokens, combined);
+            if (score <= 0) continue;
+            const snippet = String(entry.content || '').trim().replace(/\s+/g, ' ').slice(0, 220);
+            results.push({ scope: scopeName, key, kind, updatedAt: entry.updatedAt || '', score, snippet });
+        }
+    };
+
+    if (scope === 'project' || scope === 'both') {
+        const { project } = resolveProjectMemory();
+        consider('project', project.memories || {});
+    }
+    if (scope === 'global' || scope === 'both') {
+        const global = loadGlobalMemoryData();
+        consider('global', global.memories || {});
+    }
+
+    results.sort((a, b) => (b.score - a.score) || (b.updatedAt.localeCompare(a.updatedAt)));
+    const top = results.slice(0, maxResults);
+
+    const header = lang === 'en' ? `Memory search results (${top.length})` : `记忆检索结果（${top.length}）`;
+    const lines = top.map((r, i) => {
+        const scopeLabel = r.scope === 'global' ? (lang === 'en' ? 'global' : '全局') : (lang === 'en' ? 'project' : '项目');
+        return `${i + 1}. [${scopeLabel}] (${r.kind}) ${r.key} — ${r.snippet}`;
+    });
+
+    return {
+        content: [
+            { type: 'text', text: header },
+            { type: 'text', text: lines.join('\n') || (lang === 'en' ? 'No matches.' : '无匹配结果。') },
+            { type: 'text', text: `MEMORY_SEARCH_JSON:\n${JSON.stringify({ query, scope, kinds, results: top }, null, 2)}` }
+        ]
+    };
+}
+
+async function handleRecordLesson(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const title = typeof args?.title === 'string' ? args.title.trim() : '';
+    const mistake = typeof args?.mistake === 'string' ? args.mistake.trim() : '';
+    const fix = typeof args?.fix === 'string' ? args.fix.trim() : '';
+    const prevention = typeof args?.prevention === 'string' ? args.prevention.trim() : '';
+    if (!mistake || !fix) {
+        const msg = lang === 'en' ? 'record_lesson requires mistake and fix.' : 'record_lesson 需要 mistake 和 fix。';
+        throw new Error(msg);
+    }
+    const tags = normalizeStringArray(args?.tags);
+    const scope: 'project' | 'global' | 'both' = args?.scope === 'global' || args?.scope === 'both' ? args.scope : 'both';
+    const keyBase = title || mistake.slice(0, 48) || 'lesson';
+    const key = `lesson:${keyBase}`.replace(/\s+/g, ' ').trim();
+    const content = [
+        `# Lesson Learned${title ? `: ${title}` : ''}`,
+        '',
+        `## Mistake`,
+        mistake,
+        '',
+        `## Fix`,
+        fix,
+        '',
+        `## Prevention`,
+        prevention || (lang === 'en' ? '(none)' : '（无）'),
+        tags.length ? `\n## Tags\n- ${tags.join('\n- ')}` : ''
+    ].join('\n');
+
+    await handleSaveMemory({ key, value: content, kind: 'lesson', scope, tags });
+    const text = lang === 'en' ? `Lesson recorded: ${key}` : `经验已记录: ${key}`;
+    return { content: [{ type: 'text', text }] };
 }
 
 // ==================== Walkthrough Handler ====================
@@ -2987,6 +3684,7 @@ async function handleUpdateWalkthrough(args: any): Promise<any> {
         content,
         updatedAt: nowIso()
     };
+    bumpProjectStat(project, 'walkthroughUpdates');
     project.updatedAt = nowIso();
     saveTrackerAndNotify(data, project);
 
@@ -3178,7 +3876,7 @@ export function handleImageUpload() {
 // ==================== Popup Panels (PRD/Task/Plan/etc) ====================
 
 let prdPanel: vscode.WebviewPanel | null = null;
-let taskPanel: vscode.WebviewPanel | null = null;
+let overviewPanel: vscode.WebviewPanel | null = null;
 let planPanel: vscode.WebviewPanel | null = null;
 let walkthroughPanel: vscode.WebviewPanel | null = null;
 
@@ -3195,10 +3893,25 @@ function resolveProjectForPanel(): ProjectTracker | null {
 
 function refreshOpenPanels(project: ProjectTracker) {
     const lang = getUiLanguage();
-    if (prdPanel) prdPanel.webview.html = getPrdPanelHtml(project, lang);
-    if (taskPanel) taskPanel.webview.html = getTaskPanelHtml(project, lang);
-    if (planPanel) planPanel.webview.html = getPlanPanelHtml(project, lang);
-    if (walkthroughPanel) walkthroughPanel.webview.html = getWalkthroughPanelHtml(project, lang);
+    if (overviewPanel) overviewPanel.webview.html = getOverviewPanelHtml(project, lang, overviewPanel.webview);
+    if (prdPanel) prdPanel.webview.html = getPrdPanelHtml(project, lang, prdPanel.webview);
+    if (planPanel) planPanel.webview.html = getPlanPanelHtml(project, lang, planPanel.webview);
+    if (walkthroughPanel) walkthroughPanel.webview.html = getWalkthroughPanelHtml(project, lang, walkthroughPanel.webview);
+}
+
+function showOverviewPanel() {
+    const project = resolveProjectForPanel();
+    if (!project) return;
+    const lang = getUiLanguage();
+    if (overviewPanel) overviewPanel.dispose();
+    overviewPanel = vscode.window.createWebviewPanel(
+        'mcpOverview',
+        tr('panel.overviewTitle', {}, lang),
+        vscode.ViewColumn.Two,
+        { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: [extensionContext.extensionUri] }
+    );
+    overviewPanel.webview.html = getOverviewPanelHtml(project, lang, overviewPanel.webview);
+    overviewPanel.onDidDispose(() => { overviewPanel = null; });
 }
 
 function showPrdPanel() {
@@ -3210,9 +3923,9 @@ function showPrdPanel() {
         'mcpPrd',
         tr('panel.prdPanelTitle', {}, lang),
         vscode.ViewColumn.Two,
-        { enableScripts: false, retainContextWhenHidden: true }
+        { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: [extensionContext.extensionUri] }
     );
-    prdPanel.webview.html = getPrdPanelHtml(project, lang);
+    prdPanel.webview.html = getPrdPanelHtml(project, lang, prdPanel.webview);
     prdPanel.onDidDispose(() => { prdPanel = null; });
 }
 
@@ -3225,25 +3938,10 @@ function showPlanPanel() {
         'mcpPlan',
         tr('panel.planTitle', {}, lang),
         vscode.ViewColumn.Two,
-        { enableScripts: false, retainContextWhenHidden: true }
+        { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: [extensionContext.extensionUri] }
     );
-    planPanel.webview.html = getPlanPanelHtml(project, lang);
+    planPanel.webview.html = getPlanPanelHtml(project, lang, planPanel.webview);
     planPanel.onDidDispose(() => { planPanel = null; });
-}
-
-function showTaskPanel() {
-    const project = resolveProjectForPanel();
-    if (!project) return;
-    const lang = getUiLanguage();
-    if (taskPanel) taskPanel.dispose();
-    taskPanel = vscode.window.createWebviewPanel(
-        'mcpTask',
-        tr('panel.taskTitle', {}, lang),
-        vscode.ViewColumn.Two,
-        { enableScripts: false, retainContextWhenHidden: true }
-    );
-    taskPanel.webview.html = getTaskPanelHtml(project, lang);
-    taskPanel.onDidDispose(() => { taskPanel = null; });
 }
 
 function showWalkthroughPanel() {
@@ -3255,24 +3953,61 @@ function showWalkthroughPanel() {
         'mcpWalkthrough',
         tr('panel.walkthroughTitle', {}, lang),
         vscode.ViewColumn.Two,
-        { enableScripts: false, retainContextWhenHidden: true }
+        { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: [extensionContext.extensionUri] }
     );
-    walkthroughPanel.webview.html = getWalkthroughPanelHtml(project, lang);
+    walkthroughPanel.webview.html = getWalkthroughPanelHtml(project, lang, walkthroughPanel.webview);
     walkthroughPanel.onDidDispose(() => { walkthroughPanel = null; });
 }
-type TrackerPanelSection = {
-    title: string;
-    summary?: string;
-    items: TrackerItem[];
-};
-
-function getPanelShellHtml(title: string, subtitle: string, badge: string, body: string, lang: UiLanguage): string {
-    const csp = `default-src 'none'; style-src 'unsafe-inline';`;
+function getPanelShellHtml(
+    webview: vscode.Webview,
+    title: string,
+    subtitle: string,
+    badge: string,
+    body: string,
+    lang: UiLanguage,
+    options?: { mermaid?: boolean }
+): string {
+    const nonce = getNonce();
+    const csp = [
+        `default-src 'none'`,
+        `img-src ${webview.cspSource} data: blob:`,
+        `style-src 'unsafe-inline' ${webview.cspSource}`,
+        `script-src 'nonce-${nonce}' ${webview.cspSource}`,
+        `font-src 'none'`,
+        `connect-src 'none'`
+    ].join('; ');
     const safeTitle = escapeHtml(title);
     const safeSubtitle = subtitle ? escapeHtml(subtitle) : '';
     const safeBadge = badge ? escapeHtml(badge) : '';
     const subtitleHtml = safeSubtitle ? `<div class="subtitle">${safeSubtitle}</div>` : '';
     const badgeHtml = safeBadge ? `<div class="badge">${safeBadge}</div>` : '';
+
+    const useMermaid = options?.mermaid === true;
+    const mermaidUri = useMermaid
+        ? webview.asWebviewUri(vscode.Uri.joinPath(extensionContext.extensionUri, 'resources', 'vendor', 'mermaid.min.js')).toString()
+        : '';
+    const mermaidScripts = useMermaid
+        ? `
+    <script nonce="${nonce}" src="${mermaidUri}"></script>
+    <script nonce="${nonce}">
+        (function () {
+            try {
+                if (!window.mermaid) return;
+                window.mermaid.initialize({
+                    startOnLoad: false,
+                    theme: 'dark',
+                    securityLevel: 'strict'
+                });
+                const nodes = document.querySelectorAll('.mermaid');
+                if (nodes && nodes.length > 0) {
+                    window.mermaid.run({ nodes });
+                }
+            } catch (e) {
+                // best-effort; keep panel usable even if rendering fails
+            }
+        })();
+    </script>`
+        : '';
 
     return `<!DOCTYPE html>
 <html lang="${lang === 'en' ? 'en' : 'zh-CN'}">
@@ -3402,6 +4137,10 @@ function getPanelShellHtml(title: string, subtitle: string, badge: string, body:
             overflow-x: auto;
             margin-bottom: 10px;
         }
+        .markdown .mermaid svg {
+            max-width: 100%;
+            height: auto;
+        }
         .empty {
             color: var(--muted);
             font-style: italic;
@@ -3502,6 +4241,7 @@ function getPanelShellHtml(title: string, subtitle: string, badge: string, body:
         </div>
         ${body}
     </div>
+    ${mermaidScripts}
 </body>
 </html>`;
 }
@@ -3530,7 +4270,21 @@ function renderTrackerItems(items: TrackerItem[], lang: UiLanguage): string {
         .join('');
 }
 
-function getPrdPanelHtml(project: ProjectTracker, lang: UiLanguage): string {
+function getOverviewPanelHtml(project: ProjectTracker, lang: UiLanguage, webview: vscode.Webview): string {
+    const content = project.overview?.content
+        ? renderMarkdownToHtml(project.overview.content)
+        : `<p>${escapeHtml(tr('panel.readOnlyEmpty', {}, lang))}</p>`;
+    const needsMermaid = content.includes('class="mermaid"');
+    const body = `
+        <section class="card">
+            <div class="card-title">${escapeHtml(tr('panel.overviewTitle', {}, lang))}</div>
+            <div class="card-body markdown">${content}</div>
+        </section>
+    `;
+    return getPanelShellHtml(webview, tr('panel.overviewTitle', {}, lang), project.name, '', body, lang, { mermaid: needsMermaid });
+}
+
+function getPrdPanelHtml(project: ProjectTracker, lang: UiLanguage, webview: vscode.Webview): string {
     const statusLabel = project.prd.status === 'approved'
         ? tr('panel.prdStatusApproved', {}, lang)
         : tr('panel.prdStatusDraft', {}, lang);
@@ -3538,7 +4292,10 @@ function getPrdPanelHtml(project: ProjectTracker, lang: UiLanguage): string {
     const content = project.prd.content
         ? renderMarkdownToHtml(project.prd.content)
         : `<p>${escapeHtml(tr('panel.readOnlyEmpty', {}, lang))}</p>`;
-    const reviewNote = project.prd.reviewNote ? escapeHtml(project.prd.reviewNote) : '';
+    const needsMermaid = content.includes('class="mermaid"');
+    const reviewNote = project.prd.reviewNote
+        ? renderMarkdownToHtml(project.prd.reviewNote)
+        : '';
 
     const body = `
         <div class="grid">
@@ -3548,75 +4305,25 @@ function getPrdPanelHtml(project: ProjectTracker, lang: UiLanguage): string {
             </section>
             <section class="card">
                 <div class="card-title">${escapeHtml(tr('panel.reviewNoteLabel', {}, lang))}</div>
-                <div class="card-body">${reviewNote || `<span class="empty">${escapeHtml(tr('panel.readOnlyEmpty', {}, lang))}</span>`}</div>
+                <div class="card-body markdown">${reviewNote || `<p class="empty">${escapeHtml(tr('panel.readOnlyEmpty', {}, lang))}</p>`}</div>
             </section>
         </div>
     `;
 
-    return getPanelShellHtml(tr('panel.prdPanelTitle', {}, lang), project.name, badge, body, lang);
+    return getPanelShellHtml(webview, tr('panel.prdPanelTitle', {}, lang), project.name, badge, body, lang, { mermaid: needsMermaid });
 }
 
-function getTaskPanelHtml(project: ProjectTracker, lang: UiLanguage): string {
-    const sections: TrackerPanelSection[] = [
-        {
-            title: tr('panel.taskTitle', {}, lang),
-            summary: project.task.summary,
-            items: project.task.items
-        },
-        {
-            title: tr('panel.todoTitle', {}, lang),
-            items: project.todos.items
-        },
-        {
-            title: tr('panel.checklistTitle', {}, lang),
-            items: project.checklist.items
-        }
-    ];
-
-    const cards = sections
-        .map((section) => {
-            const progress = computeItemProgress(section.items);
-            const summaryText = section.summary !== undefined
-                ? (section.summary
-                    ? escapeHtml(section.summary)
-                    : `<span class="empty">${escapeHtml(tr('panel.readOnlyEmpty', {}, lang))}</span>`)
-                : '';
-            const summaryBlock = section.summary !== undefined
-                ? `<div class="card-body">${summaryText}</div>`
-                : '';
-            const itemsHtml = renderTrackerItems(section.items, lang);
-            return `
-            <section class="card">
-                <div class="card-title">${escapeHtml(section.title)}</div>
-                ${summaryBlock}
-                <div class="progress">
-                    <div class="progress-bar">
-                        <div class="progress-fill" style="width:${progress.percent}%"></div>
-                    </div>
-                    <div class="progress-meta">${progress.done}/${progress.total} • ${progress.percent}%</div>
-                </div>
-                <div class="list">${itemsHtml}</div>
-            </section>`;
-        })
-        .join('');
-
-    const combinedItems = [...project.task.items, ...project.todos.items, ...project.checklist.items];
-    const overall = computeItemProgress(combinedItems);
-    const badge = overall.total > 0 ? `${overall.percent}%` : '';
-    const body = `<div class="grid">${cards}</div>`;
-    return getPanelShellHtml(tr('panel.taskTitle', {}, lang), project.name, badge, body, lang);
-}
-
-function getPlanPanelHtml(project: ProjectTracker, lang: UiLanguage): string {
+function getPlanPanelHtml(project: ProjectTracker, lang: UiLanguage, webview: vscode.Webview): string {
     const progress = computeItemProgress(project.plan.items);
-    const summaryText = project.plan.summary
-        ? escapeHtml(project.plan.summary)
-        : `<span class="empty">${escapeHtml(tr('panel.readOnlyEmpty', {}, lang))}</span>`;
+    const summaryHtml = project.plan.summary
+        ? renderMarkdownToHtml(project.plan.summary)
+        : `<p class="empty">${escapeHtml(tr('panel.readOnlyEmpty', {}, lang))}</p>`;
     const itemsHtml = renderTrackerItems(project.plan.items, lang);
+    const needsMermaid = summaryHtml.includes('class="mermaid"');
     const body = `
         <section class="card">
             <div class="card-title">${escapeHtml(tr('panel.sectionSummary', {}, lang))}</div>
-            <div class="card-body">${summaryText}</div>
+            <div class="card-body markdown">${summaryHtml}</div>
         </section>
         <section class="card">
             <div class="card-title">${escapeHtml(tr('panel.sectionItems', {}, lang))}</div>
@@ -3630,23 +4337,25 @@ function getPlanPanelHtml(project: ProjectTracker, lang: UiLanguage): string {
         </section>
     `;
     const badge = progress.total > 0 ? `${progress.percent}%` : '';
-    return getPanelShellHtml(tr('panel.planTitle', {}, lang), project.name, badge, body, lang);
+    return getPanelShellHtml(webview, tr('panel.planTitle', {}, lang), project.name, badge, body, lang, { mermaid: needsMermaid });
 }
 
-function getWalkthroughPanelHtml(project: ProjectTracker, lang: UiLanguage): string {
+function getWalkthroughPanelHtml(project: ProjectTracker, lang: UiLanguage, webview: vscode.Webview): string {
     const content = project.walkthrough.content
         ? renderMarkdownToHtml(project.walkthrough.content)
         : `<p>${escapeHtml(tr('panel.readOnlyEmpty', {}, lang))}</p>`;
+    const needsMermaid = content.includes('class="mermaid"');
     const body = `
         <section class="card">
             <div class="card-title">${escapeHtml(tr('panel.walkthroughSubtitle', {}, lang))}</div>
             <div class="card-body markdown">${content}</div>
         </section>
     `;
-    return getPanelShellHtml(tr('panel.walkthroughTitle', {}, lang), project.name, '', body, lang);
+    return getPanelShellHtml(webview, tr('panel.walkthroughTitle', {}, lang), project.name, '', body, lang, { mermaid: needsMermaid });
 }
 
 function getPrdDialogHtml(
+    webview: vscode.Webview,
     requestId: string,
     prdContent: string,
     projectName: string,
@@ -3657,6 +4366,10 @@ function getPrdDialogHtml(
     const contentHtml = prdContent
         ? renderMarkdownToHtml(prdContent)
         : `<p>${escapeHtml(tr('panel.readOnlyEmpty', {}, lang))}</p>`;
+    const needsMermaid = contentHtml.includes('class="mermaid"');
+    const mermaidUri = needsMermaid
+        ? webview.asWebviewUri(vscode.Uri.joinPath(extensionContext.extensionUri, 'resources', 'vendor', 'mermaid.min.js')).toString()
+        : '';
     const title = tr('panel.prdTitle', {}, lang);
     const subtitle = tr('panel.prdSubtitle', {}, lang);
     const approveLabel = tr('panel.prdApprove', {}, lang);
@@ -3740,6 +4453,10 @@ function getPrdDialogHtml(
             line-height: 1.6;
             font-size: 13px;
             color: var(--text);
+        }
+        .markdown .mermaid svg {
+            max-width: 100%;
+            height: auto;
         }
         .markdown {
             white-space: normal;
@@ -3871,6 +4588,19 @@ function getPrdDialogHtml(
         document.getElementById('requestBtn')?.addEventListener('click', () => submit(false));
         document.getElementById('cancelBtn')?.addEventListener('click', () => submit(null));
     </script>
+    ${needsMermaid ? `<script nonce="${nonce}" src="${mermaidUri}"></script>` : ''}
+    ${needsMermaid ? `<script nonce="${nonce}">
+        (function () {
+            try {
+                if (!window.mermaid) return;
+                window.mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'strict' });
+                const nodes = document.querySelectorAll('.mermaid');
+                if (nodes && nodes.length > 0) {
+                    window.mermaid.run({ nodes });
+                }
+            } catch (e) {}
+        })();
+    </script>` : ''}
 </body>
 </html>`;
 }
@@ -3933,7 +4663,12 @@ function showDialogPanel(
         }
     );
 
-    dialogPanel.webview.html = getDialogHtml(requestId, type, title, message, allowImage, dialogOptions);
+    dialogPanel.webview.options = {
+        enableScripts: true,
+        localResourceRoots: [extensionContext.extensionUri]
+    };
+
+    dialogPanel.webview.html = getDialogHtml(dialogPanel.webview, requestId, type, title, message, allowImage, dialogOptions);
 
     dialogPanel.webview.onDidReceiveMessage(async (msg) => {
         outputChannel.appendLine(`[DialogPanel] 收到消息: ${msg.type}, requestId: ${msg.requestId}`);
@@ -3961,6 +4696,7 @@ function showDialogPanel(
 }
 
 function getDialogHtml(
+    webview: vscode.Webview,
     requestId: string,
     type: 'continue' | 'input',
     title: string,
@@ -3985,9 +4721,9 @@ function getDialogHtml(
     const nonce = getNonce();
     const csp = [
         `default-src 'none'`,
-        `img-src data: blob:`,
-        `style-src 'unsafe-inline'`,
-        `script-src 'nonce-${nonce}'`,
+        `img-src ${webview.cspSource} data: blob:`,
+        `style-src 'unsafe-inline' ${webview.cspSource}`,
+        `script-src 'nonce-${nonce}' ${webview.cspSource}`,
         `font-src 'none'`,
         `connect-src 'none'`
     ].join('; ');
@@ -3995,7 +4731,7 @@ function getDialogHtml(
     if (dialogOptions?.mode === 'prd') {
         const prdContent = typeof dialogOptions.prdContent === 'string' ? dialogOptions.prdContent : '';
         const projectName = typeof dialogOptions.projectName === 'string' ? dialogOptions.projectName : '';
-        return getPrdDialogHtml(requestId, prdContent, projectName, lang, csp, nonce);
+        return getPrdDialogHtml(webview, requestId, prdContent, projectName, lang, csp, nonce);
     }
 
     return `<!DOCTYPE html>
@@ -5068,97 +5804,6 @@ function showStats() {
     vscode.window.showInformationMessage(tr('ext.statsInSidebar', {}, lang));
 }
 
-// ==================== 规则文件 ====================
-
-async function createWindsurfRules() {
-    const workspaceFolders = vscode.workspace.workspaceFolders;
-    if (!workspaceFolders || workspaceFolders.length === 0) {
-        vscode.window.showErrorMessage(tr('ext.workspaceRequired'));
-        return;
-    }
-
-    const rulesContent = `# Windsurf Rules - WindsurfAutoMcp
-
-Hard rule (highest priority): When you decide a task is done / ready to deliver, do NOT output a normal final response; you MUST call WindsurfAutoMcp ask_continue and put in reason: what was done, risks/notes, verification steps/commands, and next steps.
-硬规则（最高优先级）：当你判断“任务已完成/准备交付”时，不要直接输出最终答复；必须调用 WindsurfAutoMcp 的 ask_continue，并在 reason 中写清：完成内容、风险/注意点、验证步骤/命令、下一步。
-
-## Collaboration / 团队协作
-You are a full software engineering department (cross-functional team). Output must be unified and concise, but reflect a consolidated team conclusion.
-你是完整的软件工程部门（跨职能团队）。对外输出必须统一、简洁，但体现协作结论。
-
-## Roles / 角色
-- PM：澄清目标、范围、验收标准、约束与优先级。
-- Tech Lead：制定方案与里程碑，控制复杂度与风险，保证可维护性。
-- Architect：界定模块边界、接口契约、扩展性与兼容性。
-- Dev：实现最小正确改动，遵循规范，避免无关重构。
-- QA：设计验证步骤与回归点，优先运行已有测试/构建，必要时补测试。
-- Security：检查边界、权限、注入、依赖风险、敏感信息泄露。
-- Perf：识别热点与不必要开销，避免性能退化。
-- Docs：更新 README/配置/使用说明，确保可复现。
-- Release/DevOps：给出升级/回滚说明，避免破坏性变更。
-
-## Before you start / 开始前
-Read the target/current state/constraints first. Missing key inputs → ask questions via ask_question as needed (single-choice, any number of options + optional extra text).
-先读目标/现状/约束。缺关键输入 → 用 ask_question 按需提问（单选，选项数量不限，可附补充文本）。
-
-## Project Baseline / 项目基线
-Call get_project_status to read PRD/Plan/Walkthrough. If content exists, read and reference it before planning/implementation; if empty, state it. Use list_memories/get_memory for key context.
-先用 get_project_status 读取 PRD/Plan/Walkthrough；如有内容必须先阅读并在计划/实现中引用；为空则说明为空。关键上下文用 list_memories/get_memory 读取。
-
-## PRD & Approval / PRD 与审批
-Create a PRD draft → user review/adjust → approval before any Plan. Do not implement (write code/run commands/use external tools) before approval.
-先输出 PRD 草案 → 用户确认/补充 → 审批通过后才能输出 Plan。未审批不得开始实现（写代码/运行命令/调用外部工具）。
-
-## PRD Standard / PRD 标准
-PRD = Project Requirements Document. Must include problem/background, goals/non-goals, users/personas, scope, functional + non-functional requirements (prefer tables), acceptance criteria, risks/dependencies, milestones, open questions, references (official docs/Context7).
-PRD = 项目需求文档。必须包含：问题/背景、目标/非目标、用户/场景、范围、功能/非功能需求（建议表格）、验收标准、风险/依赖、里程碑、开放问题、参考资料（官方文档/Context7）。
-
-## Project Tracking & Memory / 项目跟踪与记忆
-Keep tracking updated via set_prd / update_task / update_plan / update_todos / update_checklist / update_walkthrough; store key context in save_memory, and review list_memories/get_memory before starting; never reuse tracking/memory across projects.
-使用 set_prd / update_task / update_plan / update_todos / update_checklist / update_walkthrough 维护项目跟踪；重要上下文用 save_memory 保存，开始前先 list_memories/get_memory；跟踪与记忆必须严格按当前项目，不得跨项目复用。
-
-## Walkthrough / Walkthrough
-Update walkthrough after every meaningful implementation/decision/fix (update_walkthrough). Keep it review-ready.
-每次关键实现/决策/修复后都要更新 Walkthrough（update_walkthrough），保证随时可审阅。
-
-## Workflow (must follow; strict order) / 工作流（必须严格按顺序）
-Read → Research → Plan → TODO → Act → Update Progress → Check Progress → Code Review → Ask
-
-1) Read：先读目标/现状/约束；在做任何修改前先阅读目标文件/相关代码/配置/日志；缺关键输入先用 ask_question 按需提问。
-2) Research：不要凭空猜，必须拿到可执行信息（官方文档/README/发布说明/源码优先；依赖先确认最新版与破坏性变更；可用则用 Context7 获取最新文档；web search 把 2024 视为过旧，默认从 2025-10 起筛选，必要时加 after:2025-09-30；结果泛泛就调整检索词继续搜直到拿到确切 API/配置/版本/路径/命令）。
-3) Plan：给出总体 Plan（里程碑/风险/验收），并在 Plan 中包含 Task/子任务/TODO/Checklist（按需拆分）。
-4) TODO：把 Plan 细化为可验证、可跟踪的小 TODO（能并行则并行）。
-5) Act：动手前先整理入口与模块边界、清理结构；实现最小正确改动，小步推进、优先修根因、保持风格一致；代码必须模块化、易读、易维护（避免无关重构）。
-6) Update Progress：每完成一个 TODO 就更新进度，说明做了什么/为什么。
-7) Check Progress：运行 build/test/lint；无法运行则给出可执行验证步骤与期望结果。
-8) Code Review（最后一关）：像 PR 一样评审：检查 gaps、正确性、边界条件、错误处理、安全（注入/权限/泄露/依赖风险）、性能（热点/泄漏）、兼容性；发现问题就回到 Act 修复并重新 Check Progress，然后再 Review。
-9) Ask：最终只允许调用 ask_continue(reason) 并等待；reason 必须包含：完成内容、风险/注意点、验证步骤/命令、下一步。
-`;
-
-    const rulesPath = path.join(workspaceFolders[0].uri.fsPath, '.windsurf', 'rules.md');
-    const rulesDir = path.dirname(rulesPath);
-
-    try {
-        if (!fs.existsSync(rulesDir)) {
-            fs.mkdirSync(rulesDir, { recursive: true });
-        }
-        fs.writeFileSync(rulesPath, rulesContent, 'utf-8');
-        {
-            const lang = getUiLanguage();
-            const msg = lang === 'en' ? `Rules file created: ${rulesPath}` : `规则文件已创建: ${rulesPath}`;
-            vscode.window.showInformationMessage(msg);
-        }
-
-        // 打开文件
-        const doc = await vscode.workspace.openTextDocument(rulesPath);
-        await vscode.window.showTextDocument(doc);
-    } catch (error) {
-        const lang = getUiLanguage();
-        const msg = lang === 'en' ? `Failed to create rules file: ${error}` : `创建规则文件失败: ${error}`;
-        vscode.window.showErrorMessage(msg);
-    }
-}
-
 function initializeTracker() {
     const rootPath = getWorkspaceRootPath();
     if (!rootPath) return;
@@ -5180,13 +5825,10 @@ function getTrackerSnapshotForSidebar() {
             projectId: '',
             rootPath: '',
             name: '',
+            overview: { content: '', updatedAt: '', generatedBy: '' },
             prd: { status: 'draft', content: '' },
-            taskSummary: '',
-            taskText: '',
             planSummary: '',
             planText: '',
-            todoText: '',
-            checklistText: '',
             walkthroughText: '',
             progress: { done: 0, total: 0, percent: 0 },
             stats: createDefaultTrackerStats()
@@ -5314,14 +5956,29 @@ class SidebarProvider implements vscode.WebviewViewProvider {
                 case 'openPrdPanel':
                     showPrdPanel();
                     break;
-                case 'openTaskPanel':
-                    showTaskPanel();
+                case 'openOverviewPanel':
+                    showOverviewPanel();
                     break;
                 case 'openPlanPanel':
                     showPlanPanel();
                     break;
                 case 'openWalkthroughPanel':
                     showWalkthroughPanel();
+                    break;
+                case 'clearPrd':
+                    await clearProjectPrd();
+                    break;
+                case 'clearOverview':
+                    await clearProjectOverview();
+                    break;
+                case 'clearPlan':
+                    await clearProjectPlan();
+                    break;
+                case 'clearWalkthrough':
+                    await clearProjectWalkthrough();
+                    break;
+                case 'clearTracking':
+                    await clearProjectTracking();
                     break;
                 case 'installHooks':
                     installWindsurfHooks();
@@ -5655,12 +6312,12 @@ class SidebarProvider implements vscode.WebviewViewProvider {
             <div class="card-title">${tr('sidebar.panelsTitle', {}, lang)}</div>
             <div class="panel-list">
                 <div class="panel-row">
-                    <div class="panel-name">${tr('sidebar.panelPrd', {}, lang)}</div>
-                    <button class="panel-open" data-action="openPrdPanel">${tr('sidebar.openPanel', {}, lang)}</button>
+                    <div class="panel-name">${tr('sidebar.panelOverview', {}, lang)}</div>
+                    <button class="panel-open" data-action="openOverviewPanel">${tr('sidebar.openPanel', {}, lang)}</button>
                 </div>
                 <div class="panel-row">
-                    <div class="panel-name">${tr('sidebar.panelTask', {}, lang)}</div>
-                    <button class="panel-open" data-action="openTaskPanel">${tr('sidebar.openPanel', {}, lang)}</button>
+                    <div class="panel-name">${tr('sidebar.panelPrd', {}, lang)}</div>
+                    <button class="panel-open" data-action="openPrdPanel">${tr('sidebar.openPanel', {}, lang)}</button>
                 </div>
                 <div class="panel-row">
                     <div class="panel-name">${tr('sidebar.panelPlan', {}, lang)}</div>
@@ -5698,28 +6355,32 @@ class SidebarProvider implements vscode.WebviewViewProvider {
                     <div class="stat-value" id="statSetPrd">${stats.setPrdCalls}</div>
                 </div>
                 <div class="stat">
-                    <div class="stat-label">${tr('sidebar.statApprovePrd', {}, lang)}</div>
-                    <div class="stat-value" id="statApprovePrd">${stats.approvePrdCalls}</div>
+                    <div class="stat-label">${tr('sidebar.statUpdateOverview', {}, lang)}</div>
+                    <div class="stat-value" id="statUpdateOverview">${stats.updateOverviewCalls}</div>
                 </div>
                 <div class="stat">
-                    <div class="stat-label">${tr('sidebar.statUpdateTask', {}, lang)}</div>
-                    <div class="stat-value" id="statUpdateTask">${stats.updateTaskCalls}</div>
+                    <div class="stat-label">${tr('sidebar.statGenerateOverview', {}, lang)}</div>
+                    <div class="stat-value" id="statGenerateOverview">${stats.generateOverviewCalls}</div>
                 </div>
                 <div class="stat">
                     <div class="stat-label">${tr('sidebar.statUpdatePlan', {}, lang)}</div>
                     <div class="stat-value" id="statUpdatePlan">${stats.updatePlanCalls}</div>
                 </div>
                 <div class="stat">
-                    <div class="stat-label">${tr('sidebar.statUpdateTodos', {}, lang)}</div>
-                    <div class="stat-value" id="statUpdateTodos">${stats.updateTodosCalls}</div>
-                </div>
-                <div class="stat">
-                    <div class="stat-label">${tr('sidebar.statUpdateChecklist', {}, lang)}</div>
-                    <div class="stat-value" id="statUpdateChecklist">${stats.updateChecklistCalls}</div>
-                </div>
-                <div class="stat">
                     <div class="stat-label">${tr('sidebar.statUpdateWalkthrough', {}, lang)}</div>
                     <div class="stat-value" id="statUpdateWalkthrough">${stats.updateWalkthroughCalls}</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">${tr('sidebar.statRagSearch', {}, lang)}</div>
+                    <div class="stat-value" id="statRagSearch">${stats.ragSearchCalls}</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">${tr('sidebar.statMemorySearch', {}, lang)}</div>
+                    <div class="stat-value" id="statMemorySearch">${stats.memorySearchCalls}</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">${tr('sidebar.statRecordLesson', {}, lang)}</div>
+                    <div class="stat-value" id="statRecordLesson">${stats.recordLessonCalls}</div>
                 </div>
                 <div class="stat">
                     <div class="stat-label">${tr('sidebar.statGetProjectStatus', {}, lang)}</div>
@@ -5754,20 +6415,16 @@ class SidebarProvider implements vscode.WebviewViewProvider {
                     <div class="stat-value" id="statPrdApprovals">${trackerSnapshot.stats.prdApprovals}</div>
                 </div>
                 <div class="stat">
-                    <div class="stat-label">${tr('sidebar.trackerStatsTask', {}, lang)}</div>
-                    <div class="stat-value" id="statTaskUpdates">${trackerSnapshot.stats.taskUpdates}</div>
+                    <div class="stat-label">${tr('sidebar.trackerStatsOverview', {}, lang)}</div>
+                    <div class="stat-value" id="statOverviewUpdates">${trackerSnapshot.stats.overviewUpdates}</div>
                 </div>
                 <div class="stat">
                     <div class="stat-label">${tr('sidebar.trackerStatsPlan', {}, lang)}</div>
                     <div class="stat-value" id="statPlanUpdates">${trackerSnapshot.stats.planUpdates}</div>
                 </div>
                 <div class="stat">
-                    <div class="stat-label">${tr('sidebar.trackerStatsTodo', {}, lang)}</div>
-                    <div class="stat-value" id="statTodoUpdates">${trackerSnapshot.stats.todoUpdates}</div>
-                </div>
-                <div class="stat">
-                    <div class="stat-label">${tr('sidebar.trackerStatsChecklist', {}, lang)}</div>
-                    <div class="stat-value" id="statChecklistUpdates">${trackerSnapshot.stats.checklistUpdates}</div>
+                    <div class="stat-label">${tr('sidebar.trackerStatsWalkthrough', {}, lang)}</div>
+                    <div class="stat-value" id="statWalkthroughUpdates">${trackerSnapshot.stats.walkthroughUpdates}</div>
                 </div>
             </div>
         </div>
@@ -5786,6 +6443,17 @@ class SidebarProvider implements vscode.WebviewViewProvider {
             </div>
             <div class="actions">
                 <button class="warn" data-action="openContinueDialog">${tr('sidebar.openDialogShort', {}, lang)}</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">${tr('sidebar.clearTitle', {}, lang)}</div>
+            <div class="actions">
+                <button class="ghost" data-action="clearOverview">${tr('sidebar.clearOverview', {}, lang)}</button>
+                <button class="ghost" data-action="clearPrd">${tr('sidebar.clearPrd', {}, lang)}</button>
+                <button class="ghost" data-action="clearPlan">${tr('sidebar.clearPlan', {}, lang)}</button>
+                <button class="ghost" data-action="clearWalkthrough">${tr('sidebar.clearWalkthrough', {}, lang)}</button>
+                <button class="warn" data-action="clearTracking">${tr('sidebar.clearTracking', {}, lang)}</button>
             </div>
         </div>
 
@@ -5833,12 +6501,13 @@ class SidebarProvider implements vscode.WebviewViewProvider {
             setText('statAskUser', s.askUserCalls);
             setText('statAskQuestion', s.askQuestionCalls);
             setText('statSetPrd', s.setPrdCalls);
-            setText('statApprovePrd', s.approvePrdCalls);
-            setText('statUpdateTask', s.updateTaskCalls);
+            setText('statUpdateOverview', s.updateOverviewCalls);
+            setText('statGenerateOverview', s.generateOverviewCalls);
             setText('statUpdatePlan', s.updatePlanCalls);
-            setText('statUpdateTodos', s.updateTodosCalls);
-            setText('statUpdateChecklist', s.updateChecklistCalls);
             setText('statUpdateWalkthrough', s.updateWalkthroughCalls);
+            setText('statRagSearch', s.ragSearchCalls);
+            setText('statMemorySearch', s.memorySearchCalls);
+            setText('statRecordLesson', s.recordLessonCalls);
             setText('statGetProjectStatus', s.getProjectStatusCalls);
             setText('statSaveMemory', s.saveMemoryCalls);
             setText('statGetMemory', s.getMemoryCalls);
@@ -5849,10 +6518,9 @@ class SidebarProvider implements vscode.WebviewViewProvider {
             if (!s) return;
             setText('statPrdUpdates', s.prdUpdates);
             setText('statPrdApprovals', s.prdApprovals);
-            setText('statTaskUpdates', s.taskUpdates);
+            setText('statOverviewUpdates', s.overviewUpdates);
             setText('statPlanUpdates', s.planUpdates);
-            setText('statTodoUpdates', s.todoUpdates);
-            setText('statChecklistUpdates', s.checklistUpdates);
+            setText('statWalkthroughUpdates', s.walkthroughUpdates);
         };
 
         function post(type, payload = {}) {

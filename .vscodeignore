@@ -12,3 +12,5 @@ package-lock.json
 .vscodeignore
 examples/**
 !out/**
+**/__pycache__/**
+*.pyc

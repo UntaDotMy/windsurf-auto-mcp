@@ -9,6 +9,7 @@ from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
 
 TRACKER_FILE_NAME = "windsurf-auto-mcp-tracker.json"
+MEMORY_FILE_NAME = "windsurf-auto-mcp-memories.json"
 
 
 def read_stdin(max_bytes=5 * 1024 * 1024):
@@ -138,8 +139,38 @@ def find_tracker_path():
     return os.path.join(home, ".codeium", "windsurf", TRACKER_FILE_NAME)
 
 
+def find_memory_path():
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        variant_root = os.path.dirname(os.path.dirname(script_dir))
+        candidate = os.path.join(variant_root, MEMORY_FILE_NAME)
+        if os.path.exists(candidate):
+            return candidate
+    except Exception:
+        pass
+    home = os.path.expanduser("~")
+    return os.path.join(home, ".codeium", "windsurf", MEMORY_FILE_NAME)
+
+
 def load_tracker():
     path = find_tracker_path()
+    try:
+        if not os.path.exists(path):
+            return None
+        with open(path, "r", encoding="utf-8") as f:
+            raw = f.read()
+        if not raw.strip():
+            return None
+        data = json.loads(raw)
+        if not isinstance(data, dict):
+            return None
+        return data
+    except Exception:
+        return None
+
+
+def load_memory():
+    path = find_memory_path()
     try:
         if not os.path.exists(path):
             return None
@@ -178,16 +209,73 @@ def select_project(tracker, file_path=None, cwd=None):
     return None
 
 
-def check_prd_gate(project):
+def _get_project_root_path(project):
+    try:
+        root = project.get("rootPath")
+        root = str(root or "").strip()
+        return root or None
+    except Exception:
+        return None
+
+
+def _get_overview_content(project):
+    try:
+        ov = project.get("overview") or {}
+        return str(ov.get("content") or "").strip()
+    except Exception:
+        return ""
+
+
+def _project_has_memories(memory_data, project_root_path):
+    if not memory_data or not project_root_path:
+        return False
+    projects = memory_data.get("projects") or {}
+    if not isinstance(projects, dict):
+        return False
+    # Memory is keyed by workspace root path in the extension, so try exact match first,
+    # then fall back to normalized matching for path separator/case differences.
+    store = projects.get(project_root_path)
+    if not store:
+        root_norm = normalize_path(project_root_path)
+        for key, value in projects.items():
+            if normalize_path(key) == root_norm:
+                store = value
+                break
+    store = store or {}
+    memories = store.get("memories") or {}
+    return isinstance(memories, dict) and len(memories) > 0
+
+
+def check_project_gates(project, memory_data=None):
+    overview = _get_overview_content(project)
+    if not overview:
+        return (
+            "Blocked: Architecture record (Overview) is missing.\n"
+            "Required flow: get_project_status → generate_overview/update_overview → initialize layered memory (save_memory: long/short/lesson) → update_plan → then implement.\n"
+            "Think-first: do not guess; use rag_search to locate exact files before edits, and memory_search to reuse lessons."
+        )
+
+    project_root = _get_project_root_path(project)
+    if project_root and not _project_has_memories(memory_data, project_root):
+        return (
+            "Blocked: Project memory is not initialized.\n"
+            "Create initial layered memories from the architecture record: long (stable facts), short (temporary notes), lesson (mistakes/retro). "
+            "Use global memory for reusable lessons; use project memory for project-specific details.\n"
+            "Think-first: do not trust prior knowledge; research when needed and record_lesson for mistakes."
+        )
+
     prd = project.get("prd") or {}
-    if prd.get("status") != "approved":
-        return "Blocked: PRD is not approved. Create PRD → user approve → then Plan/TODO."
-    plan_items = ((project.get("plan") or {}).get("items")) or []
-    if not plan_items:
-        return "Blocked: Plan is missing. Create Plan before implementation."
-    todo_items = ((project.get("todos") or {}).get("items")) or []
-    if not todo_items:
-        return "Blocked: TODOs are missing. Create TODOs before implementation."
+    prd_content = str(prd.get("content") or "").strip()
+    if prd_content and prd.get("status") != "approved":
+        return (
+            "Blocked: PRD is not approved.\n"
+            "Required flow: draft PRD → user approve → then Plan → then implement."
+        )
+    plan = project.get("plan") or {}
+    plan_items = plan.get("items") or []
+    plan_summary = plan.get("summary") or ""
+    if not plan_items and not str(plan_summary).strip():
+        return "Blocked: Plan is missing. Create a Plan checklist (with breakdown) before implementation."
     return None
 
 
@@ -241,9 +329,10 @@ def main():
     if action == "pre_write_code":
         file_path = tool_info.get("file_path")
         tracker = load_tracker()
+        memory_data = load_memory()
         project = select_project(tracker, file_path=file_path)
         if project:
-            gate = check_prd_gate(project)
+            gate = check_project_gates(project, memory_data=memory_data)
             if gate:
                 print(gate, file=sys.stderr)
                 return 2
