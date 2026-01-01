@@ -5713,20 +5713,24 @@ function configureWindsurf() {
 
             let config: any = { mcpServers: {} };
             if (fs.existsSync(configPath)) {
-                const raw = fs.readFileSync(configPath, 'utf-8');
-                try {
-                    config = JSON.parse(raw);
-                } catch (e: any) {
-                    const lang = getUiLanguage();
-                    throw new Error(
-                        tr(
-                            'ext.invalidConfigJson',
-                            { path: configPath, error: e?.message ?? String(e) },
-                            lang
-                        )
-                    );
+                let raw = fs.readFileSync(configPath, 'utf-8');
+                raw = raw.replace(/^\uFEFF/, ''); // strip BOM if present
+                if (raw.trim()) {
+                    try {
+                        config = JSON.parse(raw);
+                    } catch (e: any) {
+                        const lang = getUiLanguage();
+                        throw new Error(
+                            tr(
+                                'ext.invalidConfigJson',
+                                { path: configPath, error: e?.message ?? String(e) },
+                                lang
+                            )
+                        );
+                    }
                 }
-                if (!config.mcpServers) config.mcpServers = {};
+                if (!config || typeof config !== 'object') config = {};
+                if (!config.mcpServers || typeof config.mcpServers !== 'object') config.mcpServers = {};
             }
 
             config.mcpServers.windsurf_auto_mcp = {
@@ -5752,6 +5756,15 @@ function configureWindsurf() {
 
     if (written.length > 0) {
         vscode.window.showInformationMessage(tr('ext.configuredWindsurf', { port: currentPort }));
+        if (failed.length > 0) {
+            const lang = getUiLanguage();
+            const detail = failed.map((f) => `${f.path}: ${f.error}`).join('\n');
+            const msg =
+                lang === 'en'
+                    ? `Some config files failed to write:\n${detail}`
+                    : `部分配置写入失败：\n${detail}`;
+            vscode.window.showWarningMessage(msg);
+        }
         try {
             const cfg = vscode.workspace.getConfiguration('mcpService');
             if (cfg.get('autoInstallHooks', true)) {
