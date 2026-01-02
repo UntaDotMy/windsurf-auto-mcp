@@ -113,7 +113,6 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'ext.statsLineAskUser': 'ask_user: {askUser}\n',
         'ext.statsLineAskQuestion': 'ask_question: {askQuestion}\n',
         'ext.statsLineAskContinue': 'ask_continue: {askContinue}\n',
-        'ext.statsLineNotify': 'notify: {notify}\n',
         'ext.statsLineSetPrd': 'set_prd: {setPrd}\n',
         'ext.statsLineUpdatePlan': 'update_plan: {updatePlan}\n',
         'ext.statsLineUpdateWalkthrough': 'update_walkthrough: {updateWalkthrough}\n',
@@ -217,6 +216,7 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
             '【Walkthrough（必须）】每次关键实现/决策/修复后都要更新 Walkthrough（update_walkthrough），保证随时可审阅。',
             '',
             '【计划与拆解（必须做到）】对任何“大功能/复杂任务”（以及任何非小改动），必须先输出 Plan，并在 Plan 中完成任务拆解与 Checklist（必要时进一步细化）。每完成一项就更新进度并同步项目跟踪。',
+            '【Plan 更新规则（必须）】Plan 是唯一的任务清单与进度来源：更新时默认“增量合并”而不是覆盖（update_plan(mode=merge)）；新增需求要追加到现有 Plan 并标注影响范围/验收点；禁止随意重写/替换导致丢任务。如确需整体重写，必须明确声明并使用 mode=replace，且先用 WAM 记录可回滚点。',
             '',
             '【不信任知识（必须做到）】不要依赖记忆/常识拍脑袋：你的知识可能过时且有害。遇到关键决策（API/配置/版本/安全/安装）必须先研究，再行动。',
             '',
@@ -295,7 +295,6 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'sidebar.statSaveMemory': 'save_memory',
         'sidebar.statGetMemory': 'get_memory',
         'sidebar.statListMemory': 'list_memories',
-        'sidebar.statNotify': 'notify',
         'sidebar.copy': '复制',
         'sidebar.windsurfConfigTitle': 'Windsurf 配置',
         'sidebar.writeConfig': '写入 Windsurf 配置',
@@ -455,7 +454,6 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'ext.statsLineAskUser': 'ask_user: {askUser}\n',
         'ext.statsLineAskQuestion': 'ask_question: {askQuestion}\n',
         'ext.statsLineAskContinue': 'ask_continue: {askContinue}\n',
-        'ext.statsLineNotify': 'notify: {notify}\n',
         'ext.statsLineSetPrd': 'set_prd: {setPrd}\n',
         'ext.statsLineUpdatePlan': 'update_plan: {updatePlan}\n',
         'ext.statsLineUpdateWalkthrough': 'update_walkthrough: {updateWalkthrough}\n',
@@ -581,6 +579,7 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
             '4) Ask Questions (loop): use ask_question to clarify planning/implementation blockers (single-choice; any number of options; optional extra text) until acceptance criteria are actionable.',
             '5) PRD (optional): only for complex work; draft PRD → user review/adjust → approval → then Plan/implementation. For simple work, keep PRD empty.',
             '6) Plan: produce an executable plan with milestones/risks/acceptance + TODO/checklist breakdown; if too heavy, keep breaking down until tasks are verifiable.',
+            '   Plan update rules (must): the Plan is the single source of truth. Default to incremental merge (update_plan(mode=merge))—do not overwrite and lose tasks. When requirements change, append/update items in the existing Plan and note impacts/acceptance. Only use mode=replace when explicitly requested, and ensure WAM has a rollback point first.',
             '7) Act (iterate): implement following the Plan; keep changes minimal and modular; use rag_search before edits; update dependencies only when it improves correctness/security/performance.',
             '8) Update Progress: keep progress current via update_plan (status/progress) and update_walkthrough (key decisions/changes).',
             '9) Check Progress: run build/tests/lint when possible; otherwise provide concrete user-run verification steps + expected results.',
@@ -637,7 +636,6 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'sidebar.statSaveMemory': 'save_memory',
         'sidebar.statGetMemory': 'get_memory',
         'sidebar.statListMemory': 'list_memories',
-        'sidebar.statNotify': 'notify',
         'sidebar.copy': 'Copy',
         'sidebar.windsurfConfigTitle': 'Windsurf Config',
         'sidebar.writeConfig': 'Write Windsurf config',
@@ -3118,29 +3116,30 @@ const TOOLS = [
             required: ['content']
         }
     },
-    {
-        name: 'update_plan',
-        description: 'Set/replace plan (include tasks/checklist) / 设置或更新计划（含任务/清单）',
-        inputSchema: {
-            type: 'object',
-            properties: {
-                summary: { type: 'string', description: 'Plan summary / 计划摘要' },
-                items: {
-                    type: 'array',
-                    description: 'Plan items (tasks/checklist) / 计划条目（任务/清单）',
-                    items: {
-                        type: 'object',
-                        properties: {
-                            text: { type: 'string' },
-                            status: { type: 'string', enum: ['todo', 'doing', 'done'] }
-                        },
-                        required: ['text']
-                    }
-                },
-                text: { type: 'string', description: 'Plan text lines (supports [x]/[~]/[ ]) / 计划文本（支持 [x]/[~]/[ ]）' }
-            }
-        }
-    },
+	    {
+	        name: 'update_plan',
+	        description: 'Update plan (include tasks/checklist); default merges, avoid accidental loss / 更新计划（含任务/清单）；默认合并，避免误覆盖',
+	        inputSchema: {
+	            type: 'object',
+	            properties: {
+	                mode: { type: 'string', enum: ['merge', 'replace'], description: 'Update mode: merge (default) or replace / 更新模式：merge（默认）或 replace' },
+	                summary: { type: 'string', description: 'Plan summary / 计划摘要' },
+	                items: {
+	                    type: 'array',
+	                    description: 'Plan items (tasks/checklist) / 计划条目（任务/清单）',
+	                    items: {
+	                        type: 'object',
+	                        properties: {
+	                            text: { type: 'string' },
+	                            status: { type: 'string', enum: ['todo', 'doing', 'done'] }
+	                        },
+	                        required: ['text']
+	                    }
+	                },
+	                text: { type: 'string', description: 'Plan text lines (supports [x]/[~]/[ ]) / 计划文本（支持 [x]/[~]/[ ]）' }
+	            }
+	        }
+	    },
     {
         name: 'update_overview',
         description: 'Set/update project overview (architecture/context) / 设置或更新项目概览（架构/上下文）',
@@ -3674,7 +3673,7 @@ async function handleJSONRPC(body: string, res: http.ServerResponse) {
 	            case 'initialize':
 	                result = {
 	                    protocolVersion: '2024-11-05',
-	                    serverInfo: { name: 'windsurf_auto_mcp', version: '1.0.8' },
+	                    serverInfo: { name: 'windsurf_auto_mcp', version: '1.0.9' },
 	                    capabilities: { tools: {} }
 	                };
 	                break;
@@ -4700,11 +4699,56 @@ function extractSummaryFromArgs(args: any): string | undefined {
     return undefined;
 }
 
+function normalizePlanItemKey(text: string): string {
+    return String(text || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function mergePlanItems(existing: TrackerItem[], incoming: TrackerItem[]): TrackerItem[] {
+    const out: TrackerItem[] = Array.isArray(existing) ? existing.map((i) => ({ ...i })) : [];
+    const existingIndex = new Map<string, number>();
+    for (let i = 0; i < out.length; i++) {
+        const it = out[i];
+        const key = normalizePlanItemKey(it?.text);
+        if (!key) continue;
+        if (!existingIndex.has(key)) existingIndex.set(key, i);
+    }
+
+    for (const inc of incoming || []) {
+        if (!inc || !inc.text) continue;
+        const key = normalizePlanItemKey(inc.text);
+        if (!key) continue;
+        const idx = existingIndex.get(key);
+        if (idx === undefined) {
+            out.push({
+                id: inc.id || `item_${Math.random().toString(36).slice(2, 10)}`,
+                text: String(inc.text || '').trim(),
+                status: inc.status === 'doing' || inc.status === 'done' ? inc.status : 'todo',
+                updatedAt: inc.updatedAt || nowIso()
+            });
+            existingIndex.set(key, out.length - 1);
+            continue;
+        }
+        const cur = out[idx];
+        const curRank = statusRank(cur.status);
+        const incRank = statusRank(inc.status);
+        const nextStatus = incRank > curRank ? inc.status : cur.status;
+        const nextUpdatedAt = chooseNewerIso(cur.updatedAt, cur.updatedAt, inc.updatedAt || nowIso(), inc.updatedAt || nowIso());
+        out[idx] = {
+            ...cur,
+            text: String(inc.text || cur.text || '').trim(),
+            status: nextStatus,
+            updatedAt: nextUpdatedAt
+        };
+    }
+    return out;
+}
+
 async function handleUpdatePlan(args: any): Promise<any> {
     const lang = getUiLanguage();
     const { data, project } = resolveProjectTracker();
     const items = extractItemsFromArgs(args);
     const summary = extractSummaryFromArgs(args);
+    const mode: 'merge' | 'replace' = args?.mode === 'replace' ? 'replace' : 'merge';
     if (items.length === 0 && !summary) {
         const msg = lang === 'en' ? 'update_plan requires items/text or summary.' : 'update_plan 需要 items/text 或 summary。';
         throw new Error(msg);
@@ -4714,9 +4758,8 @@ async function handleUpdatePlan(args: any): Promise<any> {
         bumpProjectStat(project, 'planUpdates');
     }
     if (items.length > 0) {
-        project.plan.items = items;
-        // If the plan has todos but no active item, automatically set the first todo to "doing"
-        // to keep progress tracking usable without requiring extra bookkeeping.
+        project.plan.items = mode === 'replace' ? items : mergePlanItems(project.plan.items, items);
+        // Ensure there is an active "doing" item when there are todos.
         const hasDoing = project.plan.items.some((it) => it && it.status === 'doing');
         if (!hasDoing) {
             const firstTodo = project.plan.items.find((it) => it && it.status === 'todo');
