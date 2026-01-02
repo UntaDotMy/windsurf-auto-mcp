@@ -17,7 +17,7 @@
   <a href="#安装">安装</a> •
   <a href="#快速开始">快速开始</a> •
   <a href="#推荐全局规则--提示语">规则</a> •
-  <a href="#项目跟踪overview--prd--plan--walkthrough">项目跟踪</a> •
+  <a href="#项目跟踪overview--prd--plan--wam--walkthrough">项目跟踪</a> •
   <a href="#windsurf-hooks">Hooks</a> •
   <a href="#mcp-工具列表">工具列表</a> •
   <a href="#常见问题">FAQ</a>
@@ -27,17 +27,18 @@
 
 ## 概览
 
-WindsurfAutoMcp 通过 MCP 协议标准化交互：AI 完成任务后必须 `ask_continue`，避免空转消耗；同时提供 PRD 审批弹窗与只读项目面板（Overview/PRD/Plan/Memory/Walkthrough），统计显示在侧边栏。
+WindsurfAutoMcp 通过 MCP 协议标准化交互：AI 完成任务后必须 `ask_continue`，避免空转消耗；同时提供 PRD 审批弹窗与只读项目面板（Overview/PRD/Plan/WAM/Memory/Walkthrough），统计显示在侧边栏。
 
 ## 功能特性
 
 - ✅ 任务完成确认：强制 `ask_continue` 结束
 - ❓ ask_question 单选澄清（选项数量不限，可取消重选）
 - 🧾 PRD 审批弹窗：复杂任务/大功能建议走 PRD 审批；PRD 非空则必须先审批
-- 🧭 项目面板：Overview / PRD / Plan / Walkthrough（只读，AI 更新）
+- 🧭 项目面板：Overview / PRD / Plan / WAM / Walkthrough（只读，AI 更新）
 - 🧠 记忆面板：Project Memory / Global Memory + 关联图（只读）
 - 🧩 Mermaid 渲染：面板/PRD 审批中自动渲染 ` ```mermaid ` 图（离线内置）
 - 🧾 WAM 历史：`.wam` 下的类 git 快照（跟踪+记忆，可 log/checkout/merge/branch/tag/diff/reset/stash）
+- ⚡ 快速 RAG：增量本地索引 + 文件监听（存储在 `.codeium/.../windsurf-auto-mcp/index`）
 - 📊 统计显示在侧边栏
 - 📊 项目级统计 + Memory 存储
 - ⚙️ 一键配置 Windsurf / windsurf-next：写入 MCP 配置
@@ -178,7 +179,7 @@ WindsurfAutoMcp 通过 MCP 协议标准化交互：AI 完成任务后必须 `ask
 - 将用 ask_continue(reason) 结束并等待用户
 ```
 
-## 项目跟踪（Overview / PRD / Plan / Walkthrough）
+## 项目跟踪（Overview / PRD / Plan / WAM / Walkthrough）
 
 - 跟踪按 **项目根目录** 存储，不会混用其它项目数据
 - 跟踪文件（用户级）：
@@ -197,12 +198,15 @@ WindsurfAutoMcp 通过 MCP 协议标准化交互：AI 完成任务后必须 `ask
     - Windows: `%USERPROFILE%\.codeium\windsurf\windsurf-auto-mcp\.wam\<projectId>\`
     - Windows (windsurf-next): `%USERPROFILE%\.codeium\windsurf-next\windsurf-auto-mcp\.wam\<projectId>\`
   - 全局（用于全局记忆）：`%USERPROFILE%\.codeium\windsurf-auto-mcp\.wam\global\`
+- RAG 索引（本地缓存；按 projectId）：
+  - Windows: `%USERPROFILE%\.codeium\windsurf\windsurf-auto-mcp\index\<projectId>\rag-index.json`
+  - Windows (windsurf-next): `%USERPROFILE%\.codeium\windsurf-next\windsurf-auto-mcp\index\<projectId>\rag-index.json`
 - `projectId` 会在 `get_project_status` 返回的 JSON 中提供
-- 面板为只读，由 AI 通过 MCP 工具更新（Overview/PRD/Plan/Walkthrough）
+- 面板为只读，由 AI 通过 MCP 工具更新（Overview/PRD/Plan/WAM/Walkthrough）
 - 统计显示在侧边栏（全局调用 + 项目统计）
 - PRD 适用于复杂任务/大功能；PRD 非空则会触发审批弹窗，未审批不得实现
 - 统计为 **单项目** 级别：Overview/PRD/Plan/Walkthrough 更新计数
-- Hooks 在 `pre_write_code` 会校验：必须已有 Overview（架构记录）+ 已初始化项目记忆 +（若 PRD 非空则必须已审批）+ 必须已有 Plan + **WAM 必须是 clean（已提交最新快照）**；否则阻止写入
+- Hooks 在 `pre_write_code` 会校验：必须已有 Overview（架构记录）+ 已初始化项目记忆 +（若 PRD 非空则必须已审批）+ 必须已有 Plan + WAM 应保持 clean（会尽量自动提交/修复；否则阻止写入）
 
 ### 清理/重置
 
@@ -257,6 +261,7 @@ WindsurfAutoMcp 通过 MCP 协议标准化交互：AI 完成任务后必须 `ask
 | `memory_search` | 搜索项目/全局记忆 |
 | `record_lesson` | 记录错误经验（项目/全局） |
 | `check_plan` | 检查 Plan 进度与未完成项 |
+| `ensure_release_gate` | 确保 Plan 包含发布门禁清单 |
 | `update_walkthrough` | 更新 Walkthrough 总结 |
 | `get_project_status` | 获取当前项目跟踪状态 |
 | `wam_status` | 查看 WAM 状态（clean/dirty + HEAD） |

@@ -17,7 +17,7 @@
   <a href="#installation">Installation</a> •
   <a href="#quick-start">Quick Start</a> •
   <a href="#recommended-global-rules--prompt">Rules</a> •
-  <a href="#project-tracker-overview--prd--plan--walkthrough">Project Tracker</a> •
+  <a href="#project-tracker-overview--prd--plan--wam--walkthrough">Project Tracker</a> •
   <a href="#windsurf-hooks">Hooks</a> •
   <a href="#mcp-tools">Tools</a> •
   <a href="#faq">FAQ</a>
@@ -34,10 +34,11 @@ WindsurfAutoMcp standardizes task completion with MCP: when the AI finishes a ta
 - ✅ Task completion confirmation via `ask_continue`
 - ❓ ask_question single-choice clarification (any number of options, can deselect)
 - 🧾 PRD approval dialog: PRD is for complex work; if PRD is non-empty, it must be approved before implementation
-- 🧭 Project panels: Overview / PRD / Plan / Walkthrough (read-only, AI-updated)
+- 🧭 Project panels: Overview / PRD / Plan / WAM / Walkthrough (read-only, AI-updated)
 - 🧠 Memory panel: Project Memory / Global Memory + relationship graph (read-only)
 - 🧩 Mermaid rendering: panels/PRD review auto-render ` ```mermaid ` diagrams (offline-bundled)
 - 🧾 WAM history: git-like snapshots under `.wam` (tracking+memory; log/checkout/merge/branch/tag/diff/reset/stash)
+- ⚡ Fast RAG: incremental local index + file watcher (stored under `.codeium/.../windsurf-auto-mcp/index`)
 - 📊 Stats in the sidebar
 - 📊 Per-project stats + Memory storage
 - ⚙️ One-click MCP config for Windsurf / windsurf-next
@@ -178,7 +179,7 @@ Architecture/Memory → Read → Research → (Ask Questions loop when needed) �
 - Finish with ask_continue(reason) and wait
 ```
 
-## Project Tracker (Overview / PRD / Plan / Walkthrough)
+## Project Tracker (Overview / PRD / Plan / WAM / Walkthrough)
 
 - Tracking is **per workspace root**; data never bleeds across projects
 - Tracker files (user-level):
@@ -197,12 +198,15 @@ Architecture/Memory → Read → Research → (Ask Questions loop when needed) �
     - Windows: `%USERPROFILE%\.codeium\windsurf\windsurf-auto-mcp\.wam\<projectId>\`
     - Windows (windsurf-next): `%USERPROFILE%\.codeium\windsurf-next\windsurf-auto-mcp\.wam\<projectId>\`
   - Global (for global memories): `%USERPROFILE%\.codeium\windsurf-auto-mcp\.wam\global\`
+- RAG index (local cache; per projectId):
+  - Windows: `%USERPROFILE%\.codeium\windsurf\windsurf-auto-mcp\index\<projectId>\rag-index.json`
+  - Windows (windsurf-next): `%USERPROFILE%\.codeium\windsurf-next\windsurf-auto-mcp\index\<projectId>\rag-index.json`
 - `projectId` is included in `get_project_status` JSON output
-- Panels are read-only and updated by the AI via MCP tools (Overview/PRD/Plan/Walkthrough)
+- Panels are read-only and updated by the AI via MCP tools (Overview/PRD/Plan/WAM/Walkthrough)
 - Stats are shown in the sidebar (global calls + per-project)
 - PRD is for complex work; if PRD is non-empty it triggers the approval dialog and must be approved before implementation
 - Per-project stats: Overview/PRD/Plan/Walkthrough update counters
-- Hooks enforce: Overview (architecture record) must exist + project memory must be initialized + (if PRD is non-empty it must be approved) + a Plan must exist + **WAM must be clean (latest snapshot committed)**; otherwise `pre_write_code` blocks writes
+- Hooks enforce: Overview must exist + project memory must be initialized + (if PRD is non-empty it must be approved) + a Plan must exist + WAM should be clean (best-effort auto-commit/repair; otherwise `pre_write_code` blocks writes)
 
 ### Maintenance / Reset
 
@@ -257,6 +261,7 @@ The sidebar **Maintenance** card lets you:
 | `set_prd` | Create/update PRD draft |
 | `update_plan` | Set/update plan checklist |
 | `check_plan` | Check Plan progress + remaining items |
+| `ensure_release_gate` | Ensure Plan contains a release gate checklist |
 | `update_walkthrough` | Update Walkthrough summary |
 | `get_project_status` | Get current project tracking status |
 | `wam_status` | WAM status (clean/dirty + HEAD) |

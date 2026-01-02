@@ -11,6 +11,7 @@ from urllib.error import URLError, HTTPError
 
 TRACKER_FILE_NAME = "windsurf-auto-mcp-tracker.json"
 MEMORY_FILE_NAME = "windsurf-auto-mcp-memories.json"
+STATE_FILE_NAME = "windsurf-auto-mcp-guard-state.json"
 
 
 def read_stdin(max_bytes=5 * 1024 * 1024):
@@ -126,6 +127,119 @@ def check_health(server_url, timeout_sec=0.35):
     except (URLError, HTTPError, ValueError, json.JSONDecodeError):
         return False
 
+
+def get_healthy_server_url():
+    home = os.path.expanduser("~")
+    for cfg_path in get_mcp_config_paths(home):
+        cfg = try_read_json(cfg_path)
+        if not cfg:
+            continue
+        entry = (cfg.get("mcpServers") or {}).get("windsurf_auto_mcp")
+        if not entry or not isinstance(entry, dict):
+            continue
+        if entry.get("disabled") is True:
+            continue
+        url = entry.get("url")
+        if not url:
+            continue
+        if check_health(url):
+            return str(url)
+    return None
+
+
+def _state_path():
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        return os.path.join(script_dir, STATE_FILE_NAME)
+    except Exception:
+        return None
+
+
+def load_guard_state():
+    p = _state_path()
+    if not p:
+        return {}
+    try:
+        if not os.path.exists(p):
+            return {}
+        with open(p, "r", encoding="utf-8") as f:
+            raw = f.read()
+        if not raw.strip():
+            return {}
+        data = json.loads(raw)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def save_guard_state(state):
+    p = _state_path()
+    if not p:
+        return
+    try:
+        os.makedirs(os.path.dirname(p), exist_ok=True)
+        with open(p, "w", encoding="utf-8") as f:
+            f.write(json.dumps(state or {}, indent=2, ensure_ascii=False))
+    except Exception:
+        return
+
+
+def call_mcp_tool(server_url, tool_name, arguments, timeout_sec=0.8):
+    if not server_url:
+        return None
+    try:
+        payload = {
+            "jsonrpc": "2.0",
+            "id": int(time.time() * 1000),
+            "method": "tools/call",
+            "params": {"name": tool_name, "arguments": arguments or {}},
+        }
+        body = json.dumps(payload).encode("utf-8")
+        req = Request(
+            str(server_url).rstrip("/"),
+            data=body,
+            headers={"Content-Type": "application/json", "Accept": "application/json"},
+        )
+        with urlopen(req, timeout=timeout_sec) as resp:
+            raw = resp.read().decode("utf-8", errors="replace")
+        return json.loads(raw)
+    except Exception:
+        return None
+
+
+def maybe_record_lesson(server_url, project, lesson_key, mistake, fix, prevention):
+    try:
+        project_id = str(project.get("projectId") or "").strip()
+        if not project_id:
+            return
+        state = load_guard_state()
+        recorded = (state.get("recordedLessons") or {})
+        if not isinstance(recorded, dict):
+            recorded = {}
+        per_project = recorded.get(project_id) or {}
+        if not isinstance(per_project, dict):
+            per_project = {}
+        if per_project.get(lesson_key) is True:
+            return
+
+        root_path = str(project.get("rootPath") or "").strip()
+        args = {
+            "title": f"Hook guard: {lesson_key}",
+            "mistake": mistake,
+            "fix": fix,
+            "prevention": prevention,
+            "scope": "project",
+            "tags": ["hook", "guard", "wam"],
+        }
+        # record_lesson uses current workspace by default; pass rootPath to keep it project-local if possible.
+        call_mcp_tool(server_url, "record_lesson", args, timeout_sec=1.0)
+
+        per_project[lesson_key] = True
+        recorded[project_id] = per_project
+        state["recordedLessons"] = recorded
+        save_guard_state(state)
+    except Exception:
+        return
 
 def find_tracker_path():
     try:
@@ -366,9 +480,20 @@ def _find_wam_head_path(project):
         return None
 
 
-def _check_wam_clean(project, memory_data):
+def _check_wam_clean(project, memory_data, server_url):
     head_path = _find_wam_head_path(project)
     if not head_path or not os.path.exists(head_path):
+        # Best-effort auto-init: create the first commit so the model doesn't get stuck in a loop.
+        root_path = str(project.get("rootPath") or "").strip()
+        if server_url and root_path:
+            call_mcp_tool(
+                server_url,
+                "wam_commit",
+                {"message": "auto-init (hooks): initialize WAM history", "author": "auto", "rootPath": root_path},
+                timeout_sec=1.0,
+            )
+        if head_path and os.path.exists(head_path):
+            return None
         return (
             "Blocked: WAM history is missing (no .wam/HEAD.json).\n"
             "Required: keep a git-like history for tracker+memory.\n"
@@ -380,6 +505,21 @@ def _check_wam_clean(project, memory_data):
     except Exception:
         head = None
     if not isinstance(head, dict) or not head.get("head") or not head.get("digest"):
+        root_path = str(project.get("rootPath") or "").strip()
+        if server_url and root_path:
+            call_mcp_tool(
+                server_url,
+                "wam_commit",
+                {"message": "auto-repair (hooks): repair invalid WAM HEAD", "author": "auto", "rootPath": root_path},
+                timeout_sec=1.0,
+            )
+        try:
+            with open(head_path, "r", encoding="utf-8") as f:
+                head = json.load(f)
+        except Exception:
+            head = None
+        if isinstance(head, dict) and head.get("head") and head.get("digest"):
+            return None
         return (
             "Blocked: WAM history is invalid (HEAD.json missing head/digest).\n"
             "Fix: call wam_commit(message) to initialize history, then retry."
@@ -401,6 +541,30 @@ def _check_wam_clean(project, memory_data):
 
     digest = _compute_project_wam_digest(project, memory_store)
     if str(head.get("digest")) != digest:
+        root_path = str(project.get("rootPath") or "").strip()
+        if server_url and root_path:
+            call_mcp_tool(
+                server_url,
+                "wam_commit",
+                {"message": "auto-sync (hooks): commit tracker+memory before write", "author": "auto", "rootPath": root_path},
+                timeout_sec=1.0,
+            )
+        # If auto-commit succeeded, allow.
+        try:
+            with open(head_path, "r", encoding="utf-8") as f:
+                head2 = json.load(f)
+            if isinstance(head2, dict) and str(head2.get("digest")) == digest:
+                maybe_record_lesson(
+                    server_url,
+                    project,
+                    "wam-dirty-auto-commit",
+                    "Tried to write code while WAM history was dirty (tracker/memory changed without a commit).",
+                    "Commit tracker+memory via wam_commit(message) before writing code (or use update_plan/set_prd/save_memory which auto-commit).",
+                    "Before any implementation/write_code, run wam_status and keep WAM clean; update plan/memory and commit as needed.",
+                )
+                return None
+        except Exception:
+            pass
         return (
             "Blocked: WAM history is out-of-date (dirty state).\n"
             "Required: before writing code, tracker+memory must be committed so history stays consistent.\n"
@@ -409,7 +573,7 @@ def _check_wam_clean(project, memory_data):
     return None
 
 
-def check_project_gates(project, memory_data=None):
+def check_project_gates(project, memory_data=None, server_url=None):
     overview = _get_overview_content(project)
     if not overview:
         return (
@@ -440,32 +604,16 @@ def check_project_gates(project, memory_data=None):
     if not plan_items and not str(plan_summary).strip():
         return "Blocked: Plan is missing. Create a Plan checklist (with breakdown) before implementation."
 
-    wam_gate = _check_wam_clean(project, memory_data)
+    wam_gate = _check_wam_clean(project, memory_data, server_url)
     if wam_gate:
         return wam_gate
     return None
 
 
-def should_enforce_guards():
+def should_enforce_guards(server_url):
     if os.environ.get("WINDSURF_AUTO_MCP_GUARD_ALWAYS") == "1":
         return True
-
-    home = os.path.expanduser("~")
-    for cfg_path in get_mcp_config_paths(home):
-        cfg = try_read_json(cfg_path)
-        if not cfg:
-            continue
-        entry = (cfg.get("mcpServers") or {}).get("windsurf_auto_mcp")
-        if not entry or not isinstance(entry, dict):
-            continue
-        if entry.get("disabled") is True:
-            continue
-        url = entry.get("url")
-        if not url:
-            continue
-        if check_health(url):
-            return True
-    return False
+    return bool(server_url)
 
 
 def main():
@@ -484,12 +632,21 @@ def main():
     if action not in ("pre_run_command", "pre_write_code", "post_cascade_response"):
         return 0
 
-    if not should_enforce_guards():
+    server_url = get_healthy_server_url()
+    if not should_enforce_guards(server_url):
         return 0
 
     if action == "pre_run_command":
         command_line = tool_info.get("command_line")
         if looks_dangerous_command(command_line):
+            maybe_record_lesson(
+                server_url,
+                {"projectId": "global", "rootPath": "", "name": "global"},
+                "dangerous-command-blocked",
+                f"Attempted to run a dangerous command: {command_line}",
+                "Do not run destructive commands. Use safe alternatives and ask for confirmation when necessary.",
+                "Always review commands for destructive patterns (rm -rf, disk/registry ops) before running.",
+            )
             print(f"Blocked dangerous command: {command_line}", file=sys.stderr)
             return 2
 
@@ -499,11 +656,20 @@ def main():
         memory_data = load_memory()
         project = select_project(tracker, file_path=file_path)
         if project:
-            gate = check_project_gates(project, memory_data=memory_data)
+            gate = check_project_gates(project, memory_data=memory_data, server_url=server_url)
             if gate:
                 print(gate, file=sys.stderr)
                 return 2
         if looks_sensitive_write_path(file_path):
+            if project:
+                maybe_record_lesson(
+                    server_url,
+                    project,
+                    "sensitive-write-blocked",
+                    f"Attempted to write to a sensitive path: {file_path}",
+                    "Avoid writing to sensitive areas (.git/.ssh/.env/system paths). Use project-local paths or explicit user-approved config directories.",
+                    "Before write_code, verify target paths and never touch credentials/secrets/system folders.",
+                )
             print(f"Blocked write to sensitive path: {file_path}", file=sys.stderr)
             return 2
 

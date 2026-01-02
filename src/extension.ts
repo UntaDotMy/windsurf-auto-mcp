@@ -315,6 +315,7 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'sidebar.panelPrd': 'PRD',
         'sidebar.panelPlan': 'Plan（计划）',
         'sidebar.panelMemory': 'Memory（记忆）',
+        'sidebar.panelWam': 'WAM（历史）',
         'sidebar.panelWalkthrough': 'Walkthrough',
         'sidebar.panelStats': '统计',
         'sidebar.systemTitle': '系统控制',
@@ -416,6 +417,7 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'panel.reviewNoteLabel': '审核备注',
         'panel.planTitle': 'Plan（计划）',
         'panel.memoryTitle': 'Memory（记忆）',
+        'panel.wamTitle': 'WAM（历史）',
         'panel.memoryProjectTitle': '项目记忆',
         'panel.memoryGlobalTitle': '全局记忆',
         'panel.memoryGraphTitle': '记忆关联图',
@@ -655,6 +657,7 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'sidebar.panelPrd': 'PRD',
         'sidebar.panelPlan': 'Plan',
         'sidebar.panelMemory': 'Memory',
+        'sidebar.panelWam': 'WAM',
         'sidebar.panelWalkthrough': 'Walkthrough',
         'sidebar.panelStats': 'Stats',
         'sidebar.systemTitle': 'System',
@@ -756,6 +759,7 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'panel.reviewNoteLabel': 'Review note',
         'panel.planTitle': 'Plan',
         'panel.memoryTitle': 'Memory',
+        'panel.wamTitle': 'WAM',
         'panel.memoryProjectTitle': 'Project Memory',
         'panel.memoryGlobalTitle': 'Global Memory',
         'panel.memoryGraphTitle': 'Memory Graph',
@@ -1270,6 +1274,22 @@ const WAM_STASH_DIR = 'stash';
 const WAM_DEFAULT_BRANCH = 'main';
 const WAM_DEFAULT_BRANCH_REF = `refs/heads/${WAM_DEFAULT_BRANCH}`;
 
+type RagIndexEntry = {
+    path: string; // workspace-relative, normalized with /
+    mtimeMs: number;
+    size: number;
+    tokens?: string[];
+    updatedAt: string;
+};
+
+type RagIndexData = {
+    schemaVersion: 1;
+    rootPath: string;
+    createdAt: string;
+    updatedAt: string;
+    files: Record<string, RagIndexEntry>;
+};
+
 type WamHead = {
     head?: string;
     ref?: string; // e.g. refs/heads/main
@@ -1450,6 +1470,69 @@ function writeTextFileSafe(filePath: string, text: string): void {
     const dir = path.dirname(filePath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(filePath, text, 'utf-8');
+}
+
+function normalizeWorkspaceRelPath(rootPath: string, filePath: string): string {
+    try {
+        const rel = path.relative(rootPath, filePath);
+        return String(rel || '').replace(/\\/g, '/');
+    } catch {
+        return String(filePath || '').replace(/\\/g, '/');
+    }
+}
+
+function resolveExistingFile(candidates: string[]): string | null {
+    let best: { filePath: string; mtimeMs: number } | null = null;
+    for (const c of candidates) {
+        if (!c) continue;
+        try {
+            if (!fs.existsSync(c) || !fs.statSync(c).isFile()) continue;
+            const mtimeMs = fs.statSync(c).mtimeMs;
+            if (!best || mtimeMs > best.mtimeMs) best = { filePath: c, mtimeMs };
+        } catch {
+            // ignore
+        }
+    }
+    return best?.filePath || candidates.find(Boolean) || null;
+}
+
+function loadRagIndexData(rootPath: string, projectId: string): RagIndexData | null {
+    try {
+        const paths = getRagIndexPaths(getReadHomeDirs(), projectId).map((p) => p.indexPath);
+        const chosen = resolveExistingFile(paths);
+        if (!chosen || !fs.existsSync(chosen)) return null;
+        const raw = fs.readFileSync(chosen, 'utf-8');
+        if (!raw.trim()) return null;
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') return null;
+        if ((parsed as any).schemaVersion !== 1) return null;
+        if (typeof (parsed as any).rootPath !== 'string') return null;
+        if ((parsed as any).rootPath !== rootPath) return null;
+        if (!(parsed as any).files || typeof (parsed as any).files !== 'object') return null;
+        return parsed as RagIndexData;
+    } catch {
+        return null;
+    }
+}
+
+function saveRagIndexData(projectId: string, data: RagIndexData): void {
+    const targets = getRagIndexPaths(getWriteHomeDirs(), projectId);
+    for (const { indexPath } of targets) {
+        try {
+            const dir = path.dirname(indexPath);
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            const tmp = `${indexPath}.tmp`;
+            fs.writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf-8');
+            fs.renameSync(tmp, indexPath);
+        } catch (e: any) {
+            outputChannel?.appendLine(`RAG index write failed: ${indexPath} - ${e?.message ?? String(e)}`);
+        }
+    }
+}
+
+function createEmptyRagIndex(rootPath: string): RagIndexData {
+    const now = nowIso();
+    return { schemaVersion: 1, rootPath, createdAt: now, updatedAt: now, files: {} };
 }
 
 function isValidWamRefName(name: string): boolean {
@@ -2614,6 +2697,25 @@ function isLegacyHookCommand(command: unknown): boolean {
     return /windsurf-auto-mcp-guard\.(ps1|js)/i.test(command) || /powershell\b/i.test(command);
 }
 
+function isOurHookCommand(command: unknown): boolean {
+    if (!command || typeof command !== 'string') return false;
+    return /windsurf-auto-mcp-guard\.py/i.test(command) && /windsurf-auto-mcp/i.test(command);
+}
+
+function dedupeHookList(list: any[]): any[] {
+    const out: any[] = [];
+    const seen = new Set<string>();
+    for (const h of Array.isArray(list) ? list : []) {
+        if (!h) continue;
+        const cmd = String(h.command || '');
+        if (!cmd) continue;
+        if (seen.has(cmd)) continue;
+        seen.add(cmd);
+        out.push({ command: cmd, show_output: h.show_output !== false });
+    }
+    return out;
+}
+
 function hooksContainCommand(config: any, command: string): boolean {
     if (!config || typeof config !== 'object') return false;
     if (!config.hooks || typeof config.hooks !== 'object') return false;
@@ -2633,6 +2735,23 @@ function hooksContainLegacyCommand(config: any): boolean {
         const list = config.hooks[eventName];
         if (!Array.isArray(list)) continue;
         if (list.some((h: any) => isLegacyHookCommand(h?.command))) return true;
+    }
+    return false;
+}
+
+function hooksContainWrongOrDuplicateOurCommand(config: any, desiredCommand: string): boolean {
+    if (!config || typeof config !== 'object') return false;
+    if (!config.hooks || typeof config.hooks !== 'object') return false;
+    for (const eventName of WINDSURF_HOOK_EVENTS) {
+        const list = config.hooks[eventName];
+        if (!Array.isArray(list)) continue;
+        const ours = list.filter((h: any) => isOurHookCommand(h?.command));
+        if (ours.length === 0) continue;
+        // Any our command that isn't the desired command is drift.
+        if (ours.some((h: any) => String(h?.command || '') !== desiredCommand)) return true;
+        // Duplicate desired command is also drift (can cause repeated runs).
+        const desiredCount = ours.filter((h: any) => String(h?.command || '') === desiredCommand).length;
+        if (desiredCount > 1) return true;
     }
     return false;
 }
@@ -2662,12 +2781,12 @@ function installWindsurfHooks() {
         // ignore logging failures
     }
 
-    for (const { variant, hooksPath } of items) {
-        try {
-            const variantDir = path.dirname(hooksPath);
-            const scriptDir = path.join(variantDir, 'hooks', 'windsurf-auto-mcp');
-            const guardTarget = path.join(scriptDir, 'windsurf-auto-mcp-guard.py');
-            const command = buildHooksCommand(scriptDir);
+	    for (const { variant, hooksPath } of items) {
+	        try {
+	            const variantDir = path.dirname(hooksPath);
+	            const scriptDir = path.join(variantDir, 'hooks', 'windsurf-auto-mcp');
+	            const guardTarget = path.join(scriptDir, 'windsurf-auto-mcp-guard.py');
+	            const command = buildHooksCommand(scriptDir);
 
             let config: any = {};
             if (fs.existsSync(hooksPath)) {
@@ -2682,14 +2801,14 @@ function installWindsurfHooks() {
 	                }
             }
 
-            const guardUpToDate = fs.existsSync(guardTarget) && filesAreEqual(guardPySource, guardTarget);
-            const needsCleanup = hooksContainLegacyCommand(config);
-            const alreadyInstalled = hooksContainCommand(config, command) && guardUpToDate && !needsCleanup;
-            if (alreadyInstalled) {
-                skipped.push(`${variant}: ${hooksPath}`);
-                outputChannel.appendLine(`Hooks already installed (${variant}): ${hooksPath}`);
-                continue;
-            }
+	            const guardUpToDate = fs.existsSync(guardTarget) && filesAreEqual(guardPySource, guardTarget);
+	            const needsCleanup = hooksContainLegacyCommand(config) || hooksContainWrongOrDuplicateOurCommand(config, command);
+	            const alreadyInstalled = hooksContainCommand(config, command) && guardUpToDate && !needsCleanup;
+	            if (alreadyInstalled) {
+	                skipped.push(`${variant}: ${hooksPath}`);
+	                outputChannel.appendLine(`Hooks already installed (${variant}): ${hooksPath}`);
+	                continue;
+	            }
 
             if (!fs.existsSync(variantDir)) {
                 fs.mkdirSync(variantDir, { recursive: true });
@@ -2710,30 +2829,48 @@ function installWindsurfHooks() {
                 // ignore cleanup failures
             }
 
-            const desiredHooks = Object.fromEntries(
-                AUTO_INSTALL_HOOK_EVENTS.map((eventName) => [eventName, [{ command, show_output: true }]])
-            ) as Record<string, Array<{ command: string; show_output: boolean }>>;
+	            const desiredHooks = Object.fromEntries(
+	                AUTO_INSTALL_HOOK_EVENTS.map((eventName) => [eventName, [{ command, show_output: true }]])
+	            ) as Record<string, Array<{ command: string; show_output: boolean }>>;
 
-            if (!config.hooks || typeof config.hooks !== 'object') config.hooks = {};
+	            if (!config.hooks || typeof config.hooks !== 'object') config.hooks = {};
 
-            // Remove legacy PowerShell/JS hooks across all official events.
-            for (const eventName of WINDSURF_HOOK_EVENTS) {
-                if (!Array.isArray(config.hooks[eventName])) continue;
-                config.hooks[eventName] = config.hooks[eventName].filter((h: any) => !isLegacyHookCommand(h?.command));
-            }
+	            // Normalize hook lists, remove legacy + stale entries that point to our guard.
+	            for (const eventName of WINDSURF_HOOK_EVENTS) {
+	                if (!Array.isArray(config.hooks[eventName])) continue;
+	                config.hooks[eventName] = config.hooks[eventName].filter((h: any) => {
+	                    const cmd = String(h?.command || '');
+	                    if (!cmd) return false;
+	                    if (isLegacyHookCommand(cmd)) return false;
+	                    // Remove any of our previous guard commands that don't match the current desired command.
+	                    if (isOurHookCommand(cmd) && cmd !== command) return false;
+	                    return true;
+	                });
+	                config.hooks[eventName] = dedupeHookList(config.hooks[eventName]);
+	                if (config.hooks[eventName].length === 0) delete config.hooks[eventName];
+	            }
 
-            // Install our Python guard for the minimal set of events we enforce.
-            for (const [eventName, hooks] of Object.entries(desiredHooks)) {
-                if (!Array.isArray(config.hooks[eventName])) config.hooks[eventName] = [];
-                for (const hook of hooks) {
-                    const exists = config.hooks[eventName].some((h: any) => h && h.command === hook.command);
-                    if (!exists) config.hooks[eventName].push(hook);
-                }
-            }
+	            // Install our Python guard for the minimal set of events we enforce.
+	            for (const [eventName, hooks] of Object.entries(desiredHooks)) {
+	                if (!Array.isArray(config.hooks[eventName])) config.hooks[eventName] = [];
+	                // Ensure our desired command is unique (and show_output is enabled).
+	                config.hooks[eventName] = (config.hooks[eventName] as any[]).filter((h: any) => {
+	                    const cmd = String(h?.command || '');
+	                    if (!cmd) return false;
+	                    if (isLegacyHookCommand(cmd)) return false;
+	                    if (isOurHookCommand(cmd) && cmd !== command) return false;
+	                    return true;
+	                });
+	                for (const hook of hooks) {
+	                    const exists = config.hooks[eventName].some((h: any) => h && h.command === hook.command);
+	                    if (!exists) config.hooks[eventName].push(hook);
+	                }
+	                config.hooks[eventName] = dedupeHookList(config.hooks[eventName]);
+	            }
 
-            fs.writeFileSync(hooksPath, JSON.stringify(config, null, 2));
-            installed.push(`${variant}: ${hooksPath}`);
-            outputChannel.appendLine(`Installed hooks (${variant}): ${hooksPath}`);
+	            fs.writeFileSync(hooksPath, JSON.stringify(config, null, 2));
+	            installed.push(`${variant}: ${hooksPath}`);
+	            outputChannel.appendLine(`Installed hooks (${variant}): ${hooksPath}`);
         } catch (e: any) {
             const msg = e?.message ?? String(e);
             failed.push({ path: hooksPath, error: msg });
@@ -2855,27 +2992,28 @@ let lastDialogReason: string = '';
 let extensionContext: vscode.ExtensionContext;
 
 	// 统计数据 - comprehensive tracking for all tools
-	let stats = {
-	    totalCalls: 0,
-	    askUserCalls: 0,
-	    askQuestionCalls: 0,
-	    askContinueCalls: 0,
-	    notifyCalls: 0,
-	    setPrdCalls: 0,
-	    updateOverviewCalls: 0,
-	    generateOverviewCalls: 0,
-	    updatePlanCalls: 0,
-	    updateWalkthroughCalls: 0,
-	    ragSearchCalls: 0,
-	    memorySearchCalls: 0,
-	    recordLessonCalls: 0,
-	    getProjectStatusCalls: 0,
-	    checkPlanCalls: 0,
-	    wamStatusCalls: 0,
-	    wamCommitCalls: 0,
-	    wamLogCalls: 0,
-	    wamShowCalls: 0,
-	    wamCheckoutCalls: 0,
+	    let stats = {
+		    totalCalls: 0,
+		    askUserCalls: 0,
+		    askQuestionCalls: 0,
+		    askContinueCalls: 0,
+		    notifyCalls: 0,
+		    setPrdCalls: 0,
+		    updateOverviewCalls: 0,
+		    generateOverviewCalls: 0,
+		    updatePlanCalls: 0,
+		    updateWalkthroughCalls: 0,
+		    ragSearchCalls: 0,
+		    memorySearchCalls: 0,
+		    recordLessonCalls: 0,
+		    getProjectStatusCalls: 0,
+		    checkPlanCalls: 0,
+		    ensureReleaseGateCalls: 0,
+		    wamStatusCalls: 0,
+		    wamCommitCalls: 0,
+		    wamLogCalls: 0,
+		    wamShowCalls: 0,
+		    wamCheckoutCalls: 0,
 	    wamMergeCalls: 0,
 	    wamBranchCalls: 0,
 	    wamTagCalls: 0,
@@ -3102,20 +3240,30 @@ const TOOLS = [
             required: ['reason']
         }
     },
-    {
-        name: 'check_plan',
-        description: 'Check current Plan progress and remaining items / 检查当前 Plan 进度与未完成项',
-        inputSchema: {
-            type: 'object',
-            properties: {
-                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
-            }
-        }
-    },
-    // ==================== WAM (History) Tools ====================
-    {
-        name: 'wam_status',
-        description: 'Get WAM (git-like) status: head + clean/dirty / 获取 WAM（类 git）状态：HEAD + 是否干净',
+	    {
+	        name: 'check_plan',
+	        description: 'Check current Plan progress and remaining items / 检查当前 Plan 进度与未完成项',
+	        inputSchema: {
+	            type: 'object',
+	            properties: {
+	                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
+	            }
+	        }
+	    },
+	    {
+	        name: 'ensure_release_gate',
+	        description: 'Ensure the Plan contains a release gate checklist (tests/lint/security/perf/docs) / 确保 Plan 包含发布门禁清单（测试/检查/安全/性能/文档）',
+	        inputSchema: {
+	            type: 'object',
+	            properties: {
+	                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
+	            }
+	        }
+	    },
+	    // ==================== WAM (History) Tools ====================
+	    {
+	        name: 'wam_status',
+	        description: 'Get WAM (git-like) status: head + clean/dirty / 获取 WAM（类 git）状态：HEAD + 是否干净',
         inputSchema: {
             type: 'object',
             properties: {
@@ -3347,6 +3495,9 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.window.registerWebviewViewProvider('mcpServicePanel.sidebarView', sidebarProvider)
     );
+    // RAG index: keep a fast, per-project cache under ~/.codeium/... (no workspace writes).
+    void initializeRagIndexing();
+    context.subscriptions.push(new vscode.Disposable(() => disposeRagIndexing()));
 
     // 注册命令
     context.subscriptions.push(
@@ -3387,6 +3538,7 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 export function deactivate() {
+    disposeRagIndexing();
     stopServer();
     outputChannel?.appendLine(tr('ext.deactivated'));
 }
@@ -3532,13 +3684,13 @@ async function handleJSONRPC(body: string, res: http.ServerResponse) {
         let result: any;
 
         switch (method) {
-            case 'initialize':
-                result = {
-                    protocolVersion: '2024-11-05',
-                    serverInfo: { name: 'windsurf_auto_mcp', version: '1.0.6' },
-                    capabilities: { tools: {} }
-                };
-                break;
+	            case 'initialize':
+	                result = {
+	                    protocolVersion: '2024-11-05',
+	                    serverInfo: { name: 'windsurf_auto_mcp', version: '1.0.7' },
+	                    capabilities: { tools: {} }
+	                };
+	                break;
 
             case 'initialized':
                 res.writeHead(200);
@@ -3676,14 +3828,18 @@ async function handleToolCall(name: string, args: any): Promise<any> {
             stats.askContinueCalls++;
             result = await handleAskContinue(args);
             break;
-	        case 'check_plan':
-	            stats.checkPlanCalls++;
-	            result = await handleCheckPlan(args);
+		        case 'check_plan':
+		            stats.checkPlanCalls++;
+		            result = await handleCheckPlan(args);
+		            break;
+		        case 'ensure_release_gate':
+		            stats.ensureReleaseGateCalls++;
+		            result = await handleEnsureReleaseGate(args);
+		            break;
+	        case 'save_memory':
+	            stats.saveMemoryCalls++;
+	            result = await handleSaveMemory(args);
 	            break;
-        case 'save_memory':
-            stats.saveMemoryCalls++;
-            result = await handleSaveMemory(args);
-            break;
         case 'get_memory':
             stats.getMemoryCalls++;
             result = await handleGetMemory(args);
@@ -4423,18 +4579,54 @@ async function handleRagSearch(args: any): Promise<any> {
         throw new Error(msg);
     }
 
-    const exclude = '{**/.git/**,**/node_modules/**,**/.windsurf/**,**/.vscode/**,**/dist/**,**/out/**,**/build/**,**/target/**,**/.venv/**,**/venv/**,**/__pycache__/**}';
-
     const queryTokens = tokenizeForSearch(query);
     const expandedTokens = expandSemanticTokens(queryTokens);
     const searchTokens = expandedTokens.length ? expandedTokens : queryTokens;
 
-    const fastMatches = await rankWorkspaceFilesByPath(searchTokens, {
-        exclude,
-        maxFiles: 180,
-        maxTotalMatches: 0,
-        timeBudgetMs: 650
-    });
+    // Prefer indexed ranking for speed; fall back to path-only scan when no index exists yet.
+    const state = await ensureRagIndexRuntimeInitialized(rootPath);
+    if (state && !state.enumerated) {
+        // Ensure we at least have file metadata for ranking.
+        void enumerateWorkspaceIntoRagIndex();
+    }
+
+    const querySet = new Set<string>(searchTokens.map((t) => String(t || '').trim()).filter(Boolean));
+    const scoreTokenIntersection = (tokens: string[] | undefined): number => {
+        if (!tokens || tokens.length === 0 || querySet.size === 0) return 0;
+        let s = 0;
+        for (const t of tokens) {
+            if (querySet.has(t)) s += 1;
+        }
+        return s;
+    };
+
+    let fastMatches: FastWorkspaceMatch[] = [];
+    if (state && state.data && state.data.files && Object.keys(state.data.files).length > 0) {
+        const ranked: Array<{ uri: vscode.Uri; pathScore: number }> = [];
+        for (const entry of Object.values(state.data.files)) {
+            if (!entry || !entry.path) continue;
+            const absPath = path.resolve(rootPath, entry.path);
+            if (!isUnderRoot(rootPath, absPath)) continue;
+            if (isIgnoredRagFile(absPath)) continue;
+            const pathOverlap = scoreByTokenOverlap(searchTokens, entry.path);
+            const heuristic = scoreRagPathHeuristic(entry.path);
+            const tokenScore = scoreTokenIntersection(entry.tokens);
+            const score = pathOverlap * 4 + heuristic + tokenScore * 6;
+            if (score <= 0) continue;
+            ranked.push({ uri: vscode.Uri.file(absPath), pathScore: score });
+        }
+        ranked.sort((a, b) => (b.pathScore - a.pathScore) || a.uri.fsPath.localeCompare(b.uri.fsPath));
+        fastMatches = ranked.slice(0, 220);
+    }
+
+    if (fastMatches.length === 0) {
+        fastMatches = await rankWorkspaceFilesByPath(searchTokens, {
+            exclude: RAG_EXCLUDE_GLOB,
+            maxFiles: 180,
+            maxTotalMatches: 0,
+            timeBudgetMs: 650
+        });
+    }
 
     const candidates: Array<{ uri: vscode.Uri; path: string; score: number; snippet: string; startLine: number }> = [];
 
@@ -4453,6 +4645,24 @@ async function handleRagSearch(args: any): Promise<any> {
             if (score <= 0) continue;
             const { snippet, startLine } = pickBestSnippet(text, searchTokens, 7);
             candidates.push({ uri: match.uri, path: filePath, score, snippet, startLine });
+
+            // Lazily refresh index tokens for files we touched.
+            if (state && isUnderRoot(rootPath, filePath)) {
+                const rel = normalizeWorkspaceRelPath(rootPath, filePath);
+                const existing = state.data.files[rel];
+                const needsTokenUpdate = !existing || !existing.tokens || existing.mtimeMs !== stat.mtime || existing.size !== stat.size;
+                if (needsTokenUpdate) {
+                    state.data.files[rel] = {
+                        path: rel,
+                        mtimeMs: stat.mtime,
+                        size: stat.size,
+                        tokens: tokenizeForIndex(text, 180),
+                        updatedAt: nowIso()
+                    };
+                    markRagIndexDirty();
+                    flushRagIndexSoon();
+                }
+            }
         } catch {
             // ignore unreadable files
         }
@@ -6082,6 +6292,231 @@ function scoreByTokenOverlap(queryTokens: string[], text: string): number {
     return score;
 }
 
+const RAG_EXCLUDE_GLOB = '{**/.git/**,**/node_modules/**,**/.windsurf/**,**/.vscode/**,**/dist/**,**/out/**,**/build/**,**/target/**,**/.venv/**,**/venv/**,**/__pycache__/**}';
+
+type RagIndexRuntime = {
+    rootPath: string;
+    projectId: string;
+    data: RagIndexData;
+    dirty: boolean;
+    enumerated: boolean;
+    flushTimer: NodeJS.Timeout | null;
+};
+
+let ragIndexRuntime: RagIndexRuntime | null = null;
+let ragIndexWatcher: vscode.FileSystemWatcher | null = null;
+
+function tokenizeForIndex(text: string, maxTokens = 180): string[] {
+    const raw = String(text || '').toLowerCase();
+    const parts = raw.split(/[^a-z0-9_\u4e00-\u9fff]+/g).filter(Boolean);
+    const seen = new Set<string>();
+    const tokens: string[] = [];
+    for (const p of parts) {
+        if (p.length <= 1) continue;
+        if (/^[a-z]+$/.test(p) && STOP_WORDS.has(p)) continue;
+        if (seen.has(p)) continue;
+        seen.add(p);
+        tokens.push(p);
+        if (tokens.length >= maxTokens) break;
+    }
+    return tokens;
+}
+
+function isUnderRoot(rootPath: string, filePath: string): boolean {
+    const root = normalizePathForCompare(rootPath).replace(/\/+$/, '');
+    const file = normalizePathForCompare(filePath);
+    return !!root && (file === root || file.startsWith(`${root}/`));
+}
+
+function markRagIndexDirty() {
+    if (!ragIndexRuntime) return;
+    ragIndexRuntime.dirty = true;
+    ragIndexRuntime.data.updatedAt = nowIso();
+}
+
+function flushRagIndexSoon(delayMs = 1200) {
+    if (!ragIndexRuntime) return;
+    if (ragIndexRuntime.flushTimer) return;
+    ragIndexRuntime.flushTimer = setTimeout(() => {
+        try {
+            ragIndexRuntime && (ragIndexRuntime.flushTimer = null);
+            flushRagIndexNow();
+        } catch {
+            // ignore
+        }
+    }, delayMs);
+}
+
+function flushRagIndexNow() {
+    if (!ragIndexRuntime || !ragIndexRuntime.dirty) return;
+    ragIndexRuntime.dirty = false;
+    try {
+        saveRagIndexData(ragIndexRuntime.projectId, ragIndexRuntime.data);
+    } catch (e: any) {
+        outputChannel?.appendLine(`RAG index flush failed: ${e?.message ?? String(e)}`);
+    }
+}
+
+async function ensureRagIndexRuntimeInitialized(rootPathOverride?: string): Promise<RagIndexRuntime | null> {
+    const rootPath = rootPathOverride || getWorkspaceRootPath();
+    if (!rootPath) return null;
+
+    if (ragIndexRuntime && ragIndexRuntime.rootPath === rootPath) return ragIndexRuntime;
+
+    try {
+        const trackerInfo = resolveProjectTracker(rootPath);
+        if (!trackerInfo.project.projectId) {
+            trackerInfo.project.projectId = createProjectId();
+            trackerInfo.project.updatedAt = nowIso();
+            saveTrackerData(trackerInfo.data);
+        }
+        const projectId = trackerInfo.project.projectId;
+
+        const loaded = loadRagIndexData(rootPath, projectId) || createEmptyRagIndex(rootPath);
+        ragIndexRuntime = { rootPath, projectId, data: loaded, dirty: false, enumerated: false, flushTimer: null };
+    } catch (e: any) {
+        outputChannel?.appendLine(`RAG index init failed: ${e?.message ?? String(e)}`);
+        ragIndexRuntime = null;
+        return null;
+    }
+
+    return ragIndexRuntime;
+}
+
+async function enumerateWorkspaceIntoRagIndex(): Promise<void> {
+    const state = await ensureRagIndexRuntimeInitialized();
+    if (!state || state.enumerated) return;
+    state.enumerated = true;
+    try {
+        const files = await vscode.workspace.findFiles('**/*', RAG_EXCLUDE_GLOB, 6000);
+        let changed = 0;
+        for (const uri of files) {
+            if (uri.scheme !== 'file') continue;
+            const abs = uri.fsPath;
+            if (!isUnderRoot(state.rootPath, abs)) continue;
+            if (isIgnoredRagFile(abs)) continue;
+            let stat: vscode.FileStat;
+            try {
+                stat = await vscode.workspace.fs.stat(uri);
+            } catch {
+                continue;
+            }
+            const rel = normalizeWorkspaceRelPath(state.rootPath, abs);
+            const existing = state.data.files[rel];
+            if (!existing) {
+                state.data.files[rel] = { path: rel, mtimeMs: stat.mtime, size: stat.size, updatedAt: nowIso() };
+                changed += 1;
+            } else if (existing.mtimeMs !== stat.mtime || existing.size !== stat.size) {
+                existing.mtimeMs = stat.mtime;
+                existing.size = stat.size;
+                existing.updatedAt = nowIso();
+                // leave existing tokens; they may be updated lazily on search or file-change events
+                changed += 1;
+            }
+        }
+        if (changed > 0) {
+            markRagIndexDirty();
+            flushRagIndexSoon(800);
+        }
+    } catch (e: any) {
+        outputChannel?.appendLine(`RAG index enumerate failed: ${e?.message ?? String(e)}`);
+    }
+}
+
+async function upsertRagIndexForUri(uri: vscode.Uri) {
+    const state = await ensureRagIndexRuntimeInitialized();
+    if (!state) return;
+    if (uri.scheme !== 'file') return;
+    const abs = uri.fsPath;
+    if (!isUnderRoot(state.rootPath, abs)) return;
+    if (isIgnoredRagFile(abs)) return;
+
+    let stat: vscode.FileStat;
+    try {
+        stat = await vscode.workspace.fs.stat(uri);
+    } catch {
+        return;
+    }
+    const rel = normalizeWorkspaceRelPath(state.rootPath, abs);
+    const existing = state.data.files[rel];
+
+    // Always update metadata; tokens are updated for smaller text files (best-effort).
+    const entry: RagIndexEntry = existing || { path: rel, mtimeMs: stat.mtime, size: stat.size, updatedAt: nowIso() };
+    entry.mtimeMs = stat.mtime;
+    entry.size = stat.size;
+    entry.updatedAt = nowIso();
+
+    const shouldRead = stat.size > 0 && stat.size <= 180_000;
+    if (shouldRead) {
+        try {
+            const raw = await vscode.workspace.fs.readFile(uri);
+            if (raw.length > 0) {
+                const head = raw.subarray(0, Math.min(raw.length, 2048));
+                if (!head.includes(0)) {
+                    const text = decodeUtf8(raw.subarray(0, Math.min(raw.length, 120_000)));
+                    entry.tokens = tokenizeForIndex(text, 180);
+                }
+            }
+        } catch {
+            // ignore
+        }
+    }
+
+    state.data.files[rel] = entry;
+    markRagIndexDirty();
+    flushRagIndexSoon();
+}
+
+async function removeRagIndexForUri(uri: vscode.Uri) {
+    const state = await ensureRagIndexRuntimeInitialized();
+    if (!state) return;
+    if (uri.scheme !== 'file') return;
+    const abs = uri.fsPath;
+    if (!isUnderRoot(state.rootPath, abs)) return;
+    const rel = normalizeWorkspaceRelPath(state.rootPath, abs);
+    if (state.data.files[rel]) {
+        delete state.data.files[rel];
+        markRagIndexDirty();
+        flushRagIndexSoon(600);
+    }
+}
+
+function disposeRagIndexing() {
+    try {
+        if (ragIndexRuntime?.flushTimer) clearTimeout(ragIndexRuntime.flushTimer);
+    } catch {
+        // ignore
+    }
+    try {
+        flushRagIndexNow();
+    } catch {
+        // ignore
+    }
+    ragIndexRuntime = null;
+    try {
+        ragIndexWatcher?.dispose();
+    } catch {
+        // ignore
+    }
+    ragIndexWatcher = null;
+}
+
+async function initializeRagIndexing() {
+    await ensureRagIndexRuntimeInitialized();
+    // Enumerate once (metadata only) to enable fast ranking even before tokenization.
+    void enumerateWorkspaceIntoRagIndex();
+
+    try {
+        ragIndexWatcher?.dispose();
+    } catch {
+        // ignore
+    }
+    ragIndexWatcher = vscode.workspace.createFileSystemWatcher('**/*');
+    ragIndexWatcher.onDidCreate((uri) => { void upsertRagIndexForUri(uri); });
+    ragIndexWatcher.onDidChange((uri) => { void upsertRagIndexForUri(uri); });
+    ragIndexWatcher.onDidDelete((uri) => { void removeRagIndexForUri(uri); });
+}
+
 function pushTimelineEntry(
     timeline: Array<{ at: string; kind: 'short' | 'long' | 'lesson'; key: string; summary: string }>,
     entry: { kind: 'short' | 'long' | 'lesson'; key: string; content: string }
@@ -6577,6 +7012,77 @@ async function handleCheckPlan(args: any): Promise<any> {
     };
 }
 
+async function handleEnsureReleaseGate(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const rootPath = typeof args?.rootPath === 'string' ? args.rootPath : undefined;
+    const { data, project } = resolveProjectTracker(rootPath);
+    const now = nowIso();
+
+    const signals = detectProjectSignals(project.rootPath);
+    const hasNode = signals.includes('Node.js');
+    const hasPython = signals.includes('Python');
+    const hasGo = signals.includes('Go');
+    const hasRust = signals.includes('Rust');
+    const hasJava = signals.includes('Java/Kotlin');
+
+    const heading = lang === 'en' ? 'Release Gate (before shipping)' : '发布门禁（交付前）';
+    const items: string[] = [
+        heading,
+        lang === 'en' ? 'Run build / compile' : '运行 build / compile',
+        lang === 'en' ? 'Run tests (unit/integration) and verify locally' : '运行测试（单元/集成）并本地验证',
+        lang === 'en' ? 'Run lint/format and fix warnings' : '运行 lint/format 并修复警告',
+        lang === 'en' ? 'Dependency check: outdated/vulnerable packages (prefer official docs)' : '依赖检查：过时/漏洞包（以官方文档为准）',
+        lang === 'en' ? 'Security review: secrets, sensitive writes, permissions, injection risks' : '安全复审：密钥/敏感写入/权限/注入风险',
+        lang === 'en' ? 'Performance review: avoid leaks, large sync I/O, hotspots' : '性能复审：避免泄漏、过多同步 I/O、热点',
+        lang === 'en' ? 'Docs: README/update notes, usage, restart requirements (hooks)' : '文档：README/更新说明/用法/重启要求（hooks）',
+        lang === 'en' ? 'Final code review (gaps/edge-cases) and verify acceptance criteria' : '最终代码审查（缺口/边界情况）并验证验收标准',
+        lang === 'en' ? 'Update Plan progress and run check_plan' : '更新 Plan 进度并运行 check_plan',
+        lang === 'en' ? 'Record lessons (record_lesson) for any mistakes/rollbacks' : '记录经验（record_lesson），包含错误/回滚',
+        lang === 'en' ? 'Finish via ask_continue(reason)' : '用 ask_continue(reason) 收尾'
+    ];
+
+    const stackHints: string[] = [];
+    if (hasNode) stackHints.push(lang === 'en' ? 'Suggested commands: npm run build / npm test / npm run lint' : '建议命令：npm run build / npm test / npm run lint');
+    if (hasPython) stackHints.push(lang === 'en' ? 'Suggested commands: python -m pytest / ruff / black' : '建议命令：python -m pytest / ruff / black');
+    if (hasGo) stackHints.push(lang === 'en' ? 'Suggested commands: go test ./... / go vet ./...' : '建议命令：go test ./... / go vet ./...');
+    if (hasRust) stackHints.push(lang === 'en' ? 'Suggested commands: cargo test / cargo clippy' : '建议命令：cargo test / cargo clippy');
+    if (hasJava) stackHints.push(lang === 'en' ? 'Suggested commands: mvn test / gradle test' : '建议命令：mvn test / gradle test');
+
+    const existingTexts = new Set<string>((project.plan.items || []).map((i) => normalizePathForCompare(String(i?.text || '').trim())));
+    const added: TrackerItem[] = [];
+    for (const text of items) {
+        const normalized = normalizePathForCompare(String(text || '').trim());
+        if (!normalized || existingTexts.has(normalized)) continue;
+        const item: TrackerItem = {
+            id: `item_${Math.random().toString(36).slice(2, 10)}`,
+            text,
+            status: 'todo',
+            updatedAt: now
+        };
+        project.plan.items.push(item);
+        existingTexts.add(normalized);
+        added.push(item);
+    }
+
+    if (!project.plan.summary?.trim()) {
+        const hint = stackHints.length ? `\n\n${stackHints.map((h) => `- ${h}`).join('\n')}` : '';
+        project.plan.summary = (lang === 'en'
+            ? `This Plan is a single checklist. Use it to track progress and keep the release gate at the end.${hint}`
+            : `本 Plan 仅保留一份 Checklist，用于跟踪进度；发布门禁放在末尾。${hint}`).trim();
+    }
+
+    bumpProjectStat(project, 'planUpdates');
+    appendWalkthroughEntry(project, lang === 'en' ? 'Release gate ensured in Plan.' : '已在 Plan 中加入发布门禁。', lang);
+    project.updatedAt = nowIso();
+    saveTrackerAndNotify(data, project, 'ensure_release_gate', 'ai');
+
+    const text =
+        added.length > 0
+            ? (lang === 'en' ? `Release gate added to Plan (${added.length} items).` : `已将发布门禁加入 Plan（新增 ${added.length} 条）。`)
+            : (lang === 'en' ? 'Release gate already present in Plan.' : 'Plan 中已存在发布门禁。');
+    return { content: [{ type: 'text', text }, { type: 'text', text: `PLAN_JSON:\n${JSON.stringify(buildTrackerSnapshot(project), null, 2)}` }] };
+}
+
 // 处理来自webview的响应
 export function handleWebviewResponse(requestId: string, response: any) {
     const pending = pendingRequests.get(requestId);
@@ -6597,6 +7103,7 @@ let overviewPanel: vscode.WebviewPanel | null = null;
 let planPanel: vscode.WebviewPanel | null = null;
 let walkthroughPanel: vscode.WebviewPanel | null = null;
 let memoryPanel: vscode.WebviewPanel | null = null;
+let wamPanel: vscode.WebviewPanel | null = null;
 
 function resolveProjectForPanel(): ProjectTracker | null {
     try {
@@ -6622,6 +7129,13 @@ function refreshOpenPanels(project: ProjectTracker) {
             memoryPanel.webview.html = getMemoryPanelHtml(project, memoryStore, globalMemory, lang, memoryPanel.webview);
         } catch (e: any) {
             outputChannel?.appendLine(`Memory panel refresh failed: ${e?.message ?? String(e)}`);
+        }
+    }
+    if (wamPanel) {
+        try {
+            wamPanel.webview.html = getWamPanelHtml(project, lang, wamPanel.webview);
+        } catch (e: any) {
+            outputChannel?.appendLine(`WAM panel refresh failed: ${e?.message ?? String(e)}`);
         }
     }
 }
@@ -6701,6 +7215,21 @@ function showMemoryPanel() {
     );
     memoryPanel.webview.html = getMemoryPanelHtml(project, memoryStore, globalMemory, lang, memoryPanel.webview);
     memoryPanel.onDidDispose(() => { memoryPanel = null; });
+}
+
+function showWamPanel() {
+    const project = resolveProjectForPanel();
+    if (!project) return;
+    const lang = getUiLanguage();
+    if (wamPanel) wamPanel.dispose();
+    wamPanel = vscode.window.createWebviewPanel(
+        'mcpWam',
+        tr('panel.wamTitle', {}, lang),
+        vscode.ViewColumn.Two,
+        { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: [extensionContext.extensionUri] }
+    );
+    wamPanel.webview.html = getWamPanelHtml(project, lang, wamPanel.webview);
+    wamPanel.onDidDispose(() => { wamPanel = null; });
 }
 
 function getPanelShellHtml(
@@ -7336,6 +7865,123 @@ function getMemoryPanelHtml(
     `;
 
     return getPanelShellHtml(webview, tr('panel.memoryTitle', {}, lang), project.name, '', body, lang, { extraScript: script });
+}
+
+function getWamPanelHtml(project: ProjectTracker, lang: UiLanguage, webview: vscode.Webview): string {
+    const state = buildCurrentProjectWamState(project.rootPath);
+    const wamDir = state.wamDir;
+    const head = wamDir ? readWamHead(wamDir) : {};
+    const headHash = wamDir ? resolveWamHeadHash(wamDir).hash : '';
+    const clean = !!headHash && head?.digest === state.digest;
+    const branch =
+        head?.ref?.startsWith('refs/heads/')
+            ? head.ref.replace('refs/heads/', '')
+            : (head?.ref?.startsWith('refs/tags/') ? head.ref.replace('refs/tags/', '') : '');
+
+    const badge =
+        lang === 'en'
+            ? `${clean ? 'clean' : 'dirty'}${branch ? ` • ${branch}` : ''}`
+            : `${clean ? '干净' : '有改动'}${branch ? ` • ${branch}` : ''}`;
+
+    const titleStatus = lang === 'en' ? 'Status' : '状态';
+    const titleRecent = lang === 'en' ? 'Recent commits' : '最近提交';
+    const titleRefs = lang === 'en' ? 'Refs' : '引用';
+    const titleStash = lang === 'en' ? 'Stash' : '暂存';
+
+    if (!wamDir) {
+        const body = `
+            <section class="card">
+                <div class="card-title">${escapeHtml(titleStatus)}</div>
+                <div class="card-body">${escapeHtml(tr('panel.readOnlyEmpty', {}, lang))}</div>
+            </section>
+        `;
+        return getPanelShellHtml(webview, tr('panel.wamTitle', {}, lang), project.name, badge, body, lang);
+    }
+
+    ensureWamRepoLayout(wamDir);
+    const heads = listWamRefs(wamDir, 'heads');
+    const tags = listWamRefs(wamDir, 'tags');
+    const stashes = listWamStashes(wamDir);
+    const commits = headHash ? walkWamHistory(wamDir, headHash, 80) : listWamCommits(wamDir, 80);
+
+    const headLine = headHash ? headHash.slice(0, 12) : (lang === 'en' ? 'none' : '无');
+    const digestLine = state.digest ? state.digest.slice(0, 12) : '';
+    const dirtyHint = !clean
+        ? (lang === 'en'
+            ? `WAM is dirty. Fix: call <code>wam_commit(message)</code>.`
+            : `WAM 有改动。修复：调用 <code>wam_commit(message)</code>。`)
+        : '';
+
+    const commitsRows = commits.length
+        ? commits.map((c) => {
+            const parents = Array.isArray(c.parents) && c.parents.length ? c.parents.map((p) => p.slice(0, 10)).join(', ') : '';
+            const conflicts = Array.isArray(c.conflicts) && c.conflicts.length ? String(c.conflicts.length) : '';
+            return `<tr>
+                <td><code>${escapeHtml(c.hash.slice(0, 10))}</code></td>
+                <td>${escapeHtml(String(c.createdAt || ''))}</td>
+                <td>${escapeHtml(String(c.author || ''))}</td>
+                <td>${escapeHtml(String(c.message || ''))}</td>
+                <td>${escapeHtml(parents)}</td>
+                <td>${escapeHtml(conflicts)}</td>
+            </tr>`;
+        }).join('')
+        : `<tr><td colspan="6" class="empty">${escapeHtml(tr('panel.readOnlyEmpty', {}, lang))}</td></tr>`;
+
+    const renderRefList = (items: Array<{ name: string; hash: string }>) => {
+        if (!items.length) return `<div class="empty">${escapeHtml(tr('panel.readOnlyEmpty', {}, lang))}</div>`;
+        return `<ul>${items.slice(0, 40).map((r) => `<li><code>${escapeHtml(r.name)}</code> — <code>${escapeHtml(String(r.hash || '').slice(0, 10) || '')}</code></li>`).join('')}</ul>`;
+    };
+
+    const stashHtml = stashes.length
+        ? `<ul>${stashes.slice(0, 24).map((s) => `<li><code>${escapeHtml(String(s.id || '').slice(0, 10))}</code> — ${escapeHtml(String(s.createdAt || ''))} — ${escapeHtml(String(s.message || ''))}</li>`).join('')}</ul>`
+        : `<div class="empty">${escapeHtml(tr('panel.readOnlyEmpty', {}, lang))}</div>`;
+
+    const body = `
+        <section class="card">
+            <div class="card-title">${escapeHtml(titleStatus)}</div>
+            <div class="card-body markdown">
+                <p><strong>HEAD</strong>: <code>${escapeHtml(headLine)}</code></p>
+                <p><strong>Digest</strong>: <code>${escapeHtml(digestLine)}</code></p>
+                ${dirtyHint ? `<p style="color:rgba(249,115,22,0.9)">${dirtyHint}</p>` : ''}
+            </div>
+        </section>
+        <section class="card">
+            <div class="card-title">${escapeHtml(titleRecent)}</div>
+            <div class="card-body markdown">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>${escapeHtml(lang === 'en' ? 'Hash' : '哈希')}</th>
+                            <th>${escapeHtml(lang === 'en' ? 'Time' : '时间')}</th>
+                            <th>${escapeHtml(lang === 'en' ? 'Author' : '作者')}</th>
+                            <th>${escapeHtml(lang === 'en' ? 'Message' : '说明')}</th>
+                            <th>${escapeHtml(lang === 'en' ? 'Parents' : '父提交')}</th>
+                            <th>${escapeHtml(lang === 'en' ? 'Conflicts' : '冲突')}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${commitsRows}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+        <div class="grid">
+            <section class="card">
+                <div class="card-title">${escapeHtml(titleRefs)} • ${escapeHtml(lang === 'en' ? 'Branches' : '分支')}</div>
+                <div class="card-body markdown">${renderRefList(heads)}</div>
+            </section>
+            <section class="card">
+                <div class="card-title">${escapeHtml(titleRefs)} • ${escapeHtml(lang === 'en' ? 'Tags' : '标签')}</div>
+                <div class="card-body markdown">${renderRefList(tags)}</div>
+            </section>
+        </div>
+        <section class="card">
+            <div class="card-title">${escapeHtml(titleStash)}</div>
+            <div class="card-body markdown">${stashHtml}</div>
+        </section>
+    `;
+
+    return getPanelShellHtml(webview, tr('panel.wamTitle', {}, lang), project.name, badge, body, lang);
 }
 
 function getPrdDialogHtml(
@@ -8973,6 +9619,9 @@ class SidebarProvider implements vscode.WebviewViewProvider {
                 case 'openMemoryPanel':
                     showMemoryPanel();
                     break;
+                case 'openWamPanel':
+                    showWamPanel();
+                    break;
                 case 'clearPrd':
                     await clearProjectPrd();
                     break;
@@ -9331,14 +9980,18 @@ class SidebarProvider implements vscode.WebviewViewProvider {
 	                    <div class="panel-name">${tr('sidebar.panelPlan', {}, lang)}</div>
 	                    <button class="panel-open" data-action="openPlanPanel">${tr('sidebar.openPanel', {}, lang)}</button>
 	                </div>
-	                <div class="panel-row">
-	                    <div class="panel-name">${tr('sidebar.panelMemory', {}, lang)}</div>
-	                    <button class="panel-open" data-action="openMemoryPanel">${tr('sidebar.openPanel', {}, lang)}</button>
-	                </div>
-	                <div class="panel-row">
-	                    <div class="panel-name">${tr('sidebar.panelWalkthrough', {}, lang)}</div>
-	                    <button class="panel-open" data-action="openWalkthroughPanel">${tr('sidebar.openPanel', {}, lang)}</button>
-	                </div>
+		                <div class="panel-row">
+		                    <div class="panel-name">${tr('sidebar.panelMemory', {}, lang)}</div>
+		                    <button class="panel-open" data-action="openMemoryPanel">${tr('sidebar.openPanel', {}, lang)}</button>
+		                </div>
+		                <div class="panel-row">
+		                    <div class="panel-name">${tr('sidebar.panelWam', {}, lang)}</div>
+		                    <button class="panel-open" data-action="openWamPanel">${tr('sidebar.openPanel', {}, lang)}</button>
+		                </div>
+		                <div class="panel-row">
+		                    <div class="panel-name">${tr('sidebar.panelWalkthrough', {}, lang)}</div>
+		                    <button class="panel-open" data-action="openWalkthroughPanel">${tr('sidebar.openPanel', {}, lang)}</button>
+		                </div>
 	            </div>
 	        </div>
 
