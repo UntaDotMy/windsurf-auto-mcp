@@ -190,6 +190,8 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
             '',
             '【记忆检查与初始化（必须）】实现/改动前先 memory_search（项目+全局，重点查 lesson）并 list_memories/get_memory；若该项目还没有可用记忆：基于 Overview 生成“初始记忆”（long：稳定事实/约定/运行验证；short：临时信息；lesson：错误复盘；通用经验存 global，项目细节存 project）。short 会遗忘：定期合并/提炼到 long，避免噪声膨胀。',
             '',
+            '【WAM 历史（必须）】所有“项目跟踪/记忆”的变更必须形成可追溯历史（类 git）：优先依赖工具的自动提交；如 hooks 提示 WAM dirty/缺失：调用 wam_status 查看状态，必要时调用 wam_commit(message) 修复后再继续；需要回滚可用 wam_log + wam_checkout(hash)；需要合并可用 wam_merge(otherHash,message)。',
+            '',
             '【RAG（必须）】实现/修改前先用 rag_search 找到相关文件与片段（不要凭感觉改）；再结合记忆决定改动点（优先走“快速上下文”：get_project_status → memory_search → rag_search）。',
             '',
             '【决策与研究循环（必须做到；禁止泛泛而谈/凭空猜）】',
@@ -230,7 +232,7 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
             '- 发布/运维（Release/DevOps）：给出升级/回滚说明，避免破坏性变更。',
             '',
             '【统一工作流（必须遵循；严格按顺序）】',
-            '架构/记忆 → Read → Research → Ask Questions（循环）→（复杂则 PRD+审批）→ Plan（含 Checklist）→ Act（按 Plan 循环实现）→ Update Progress → Check Progress → Review Session → Learn/Record → Ask',
+            '架构/记忆 → Read → Research →（必要时 Ask Questions 循环澄清）→（复杂则 PRD+审批）→ Plan（含 TODO/Checklist）→ Act → Code Review → Act → Update Progress → Check Progress → Learn/Record → Ask',
             '1) 架构/记忆：先 get_project_status；若 Overview（架构记录）为空/过时则先生成/更新；先 memory_search（项目+全局）确认已有经验/坑；没有就先建立初始记忆（long/short/lesson；global vs project）。',
             '2) Read：读用户 story/目标/约束/现状；在改动前必须读相关代码/配置/日志；缺关键输入先 ask_question（可多轮）。',
             '3) Research：不要凭空猜；优先官方文档/官方 README/发布说明/源码；依赖先确认最新版用法与破坏性变更；可用则用 Context7；web search 把 2024 视为过旧，默认从 2025-10 起筛选（可加 after:2025-09-30）；结果泛泛就继续改检索词直到拿到可执行信息（API/配置/版本/路径/命令）。',
@@ -311,7 +313,8 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'sidebar.panelsTitle': '项目面板',
         'sidebar.panelOverview': '项目概览',
         'sidebar.panelPrd': 'PRD',
-        'sidebar.panelPlan': '实施计划',
+        'sidebar.panelPlan': 'Plan（计划）',
+        'sidebar.panelMemory': 'Memory（记忆）',
         'sidebar.panelWalkthrough': 'Walkthrough',
         'sidebar.panelStats': '统计',
         'sidebar.systemTitle': '系统控制',
@@ -398,7 +401,7 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'panel.prdApproveHint': '审批后才能进入计划/实现阶段',
         'panel.readOnlyEmpty': '暂无内容',
         'panel.sectionSummary': '摘要',
-        'panel.sectionItems': '任务/清单',
+        'panel.sectionItems': 'Checklist（清单）',
         'panel.sectionProgress': '进度',
         'panel.statsGlobal': '全局统计',
         'panel.statsProject': '项目统计',
@@ -411,7 +414,15 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'panel.prdStatusDraft': '草案',
         'panel.prdStatusApproved': '已审批',
         'panel.reviewNoteLabel': '审核备注',
-        'panel.planTitle': '实施计划',
+        'panel.planTitle': 'Plan（计划）',
+        'panel.memoryTitle': 'Memory（记忆）',
+        'panel.memoryProjectTitle': '项目记忆',
+        'panel.memoryGlobalTitle': '全局记忆',
+        'panel.memoryGraphTitle': '记忆关联图',
+        'panel.memoryGraphHintTitle': '提示',
+        'panel.memoryGraphHintBody': '点击右侧图中的节点查看详情（仅展示项目记忆）。',
+        'panel.memoryGraphEmpty': '暂无项目记忆，图谱为空。',
+        'panel.memoryGraphTooMany': '记忆过多，已跳过图谱渲染',
         'panel.walkthroughTitle': 'Walkthrough',
         'panel.walkthroughSubtitle': '实施记录',
         'artifact.memoryTitle': '项目记忆',
@@ -519,6 +530,8 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
             '',
             'Memory layers (must): before planning/implementation, run memory_search (project + global) and list_memories/get_memory. If there is no usable project memory yet, create initial memories from the architecture record: long = stable facts/conventions/verification, short = temporary notes (can be merged into long), lesson = mistakes/retro. Store reusable lessons in global scope; store project-specific details in project scope. Short memory is allowed to be pruned/forgotten; merge when it becomes stable.',
             '',
+            'WAM history (must): every change to project tracking/memory must be captured as a git-like history. Prefer the tools’ auto-commits; if hooks report WAM dirty/missing, run wam_status and then wam_commit(message) before proceeding. For rollback use wam_log + wam_checkout(hash). For merge use wam_merge(otherHash,message).',
+            '',
             'RAG (must): before edits, use rag_search to locate the exact relevant files/snippets (no guessing), then combine with memory to decide what to change (prefer fast context: get_project_status → memory_search → rag_search).',
             '',
             'Decision + research loop (must; no generic answers):',
@@ -559,13 +572,13 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
             '- Release/DevOps: provide upgrade/rollback notes; avoid breaking changes.',
             '',
             'Workflow (must follow; strict order; agile loops allowed):',
-            'Architecture/Memory → Read → Research → Ask Questions (loop) → (PRD+approval if complex) → Plan (with checklist) → Act (iterate) → Update Progress → Check Progress → Review Session → Learn/Record → Ask',
+            'Architecture/Memory → Read → Research → (Ask Questions loop when needed) → (PRD+approval if complex) → Plan (with TODO/checklist) → Act → Code Review → Act → Update Progress → Check Progress → Learn/Record → Ask',
             '1) Architecture/Memory: start with get_project_status; if Overview (architecture record) is missing/outdated, generate/update it; run memory_search (project+global) for lessons; if no usable memory, create initial long/short/lesson memories from the architecture record.',
             '2) Read: read the user story/goal/constraints/current state; before any edit, read the relevant code/config/logs.',
             '3) Research (no guessing): prefer official docs/README/release notes/source; confirm latest usage + breaking changes before upgrading/replacing; use Context7 if available; treat 2024 as outdated and default to sources updated from Oct 2025 onward (≥ 2025-10, add after:2025-09-30); if results are generic, refine and keep searching until you get exact API/config/version/path/commands.',
             '4) Ask Questions (loop): use ask_question to clarify planning/implementation blockers (single-choice; any number of options; optional extra text) until acceptance criteria are actionable.',
             '5) PRD (optional): only for complex work; draft PRD → user review/adjust → approval → then Plan/implementation. For simple work, keep PRD empty.',
-            '6) Plan: produce an executable plan with milestones/risks/acceptance + a checklist breakdown; if too heavy, keep breaking down until tasks are verifiable.',
+            '6) Plan: produce an executable plan with milestones/risks/acceptance + TODO/checklist breakdown; if too heavy, keep breaking down until tasks are verifiable.',
             '7) Act (iterate): implement following the Plan; keep changes minimal and modular; use rag_search before edits; update dependencies only when it improves correctness/security/performance.',
             '8) Update Progress: keep progress current via update_plan (status/progress) and update_walkthrough (key decisions/changes).',
             '9) Check Progress: run build/tests/lint when possible; otherwise provide concrete user-run verification steps + expected results.',
@@ -640,7 +653,8 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'sidebar.panelsTitle': 'Project Panels',
         'sidebar.panelOverview': 'Overview',
         'sidebar.panelPrd': 'PRD',
-        'sidebar.panelPlan': 'Implementation Plan',
+        'sidebar.panelPlan': 'Plan',
+        'sidebar.panelMemory': 'Memory',
         'sidebar.panelWalkthrough': 'Walkthrough',
         'sidebar.panelStats': 'Stats',
         'sidebar.systemTitle': 'System',
@@ -727,7 +741,7 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'panel.prdApproveHint': 'Approval is required before planning/implementation',
         'panel.readOnlyEmpty': 'No content yet',
         'panel.sectionSummary': 'Summary',
-        'panel.sectionItems': 'Tasks / Checklist',
+        'panel.sectionItems': 'Checklist',
         'panel.sectionProgress': 'Progress',
         'panel.statsGlobal': 'Global Stats',
         'panel.statsProject': 'Project Stats',
@@ -740,7 +754,15 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'panel.prdStatusDraft': 'Draft',
         'panel.prdStatusApproved': 'Approved',
         'panel.reviewNoteLabel': 'Review note',
-        'panel.planTitle': 'Implementation Plan',
+        'panel.planTitle': 'Plan',
+        'panel.memoryTitle': 'Memory',
+        'panel.memoryProjectTitle': 'Project Memory',
+        'panel.memoryGlobalTitle': 'Global Memory',
+        'panel.memoryGraphTitle': 'Memory Graph',
+        'panel.memoryGraphHintTitle': 'Hint',
+        'panel.memoryGraphHintBody': 'Click a node to view details (project memory only).',
+        'panel.memoryGraphEmpty': 'No project memories yet.',
+        'panel.memoryGraphTooMany': 'Too many memories to render graph',
         'panel.walkthroughTitle': 'Walkthrough',
         'panel.walkthroughSubtitle': 'Delivery log',
         'artifact.memoryTitle': 'Project Memory',
@@ -784,6 +806,152 @@ function escapeHtml(value: string): string {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+}
+
+function sanitizeMarkdownHref(raw: string): string | null {
+    const href = String(raw || '').trim();
+    if (!href) return null;
+    if (href.startsWith('#')) return href;
+    if (/^https?:\/\//i.test(href)) return href;
+    return null;
+}
+
+function renderInlineMarkdown(text: string): string {
+    // Start by escaping HTML, then apply minimal markdown replacements for readability.
+    let out = escapeHtml(String(text || ''));
+
+    // Inline code: `code`
+    out = out.replace(/`([^`]+)`/g, (_m, code) => `<code>${code}</code>`);
+
+    // Bold: **text**
+    out = out.replace(/\*\*([^*][\s\S]*?)\*\*/g, (_m, inner) => `<strong>${inner}</strong>`);
+
+    // Links: [text](https://...)
+    out = out.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_m, label, href) => {
+        const safe = sanitizeMarkdownHref(href);
+        if (!safe) return `${label} (${href})`;
+        return `<a href="${escapeHtml(safe)}" target="_blank" rel="noreferrer noopener">${label}</a>`;
+    });
+
+    return out;
+}
+
+function stripJsonComments(raw: string): string {
+    const input = String(raw || '');
+    let out = '';
+    let i = 0;
+    let inString = false;
+    let stringQuote = '"';
+    let escape = false;
+
+    while (i < input.length) {
+        const ch = input[i];
+        const next = i + 1 < input.length ? input[i + 1] : '';
+
+        if (inString) {
+            out += ch;
+            if (escape) {
+                escape = false;
+            } else if (ch === '\\') {
+                escape = true;
+            } else if (ch === stringQuote) {
+                inString = false;
+            }
+            i += 1;
+            continue;
+        }
+
+        if (ch === '"' || ch === "'") {
+            inString = true;
+            stringQuote = ch;
+            out += ch;
+            i += 1;
+            continue;
+        }
+
+        if (ch === '/' && next === '/') {
+            // Line comment
+            i += 2;
+            while (i < input.length && input[i] !== '\n') i += 1;
+            continue;
+        }
+        if (ch === '/' && next === '*') {
+            // Block comment
+            i += 2;
+            while (i + 1 < input.length && !(input[i] === '*' && input[i + 1] === '/')) i += 1;
+            i += 2;
+            continue;
+        }
+
+        out += ch;
+        i += 1;
+    }
+    return out;
+}
+
+function stripJsonTrailingCommas(raw: string): string {
+    const input = String(raw || '');
+    let out = '';
+    let i = 0;
+    let inString = false;
+    let stringQuote = '"';
+    let escape = false;
+
+    while (i < input.length) {
+        const ch = input[i];
+
+        if (inString) {
+            out += ch;
+            if (escape) {
+                escape = false;
+            } else if (ch === '\\') {
+                escape = true;
+            } else if (ch === stringQuote) {
+                inString = false;
+            }
+            i += 1;
+            continue;
+        }
+
+        if (ch === '"' || ch === "'") {
+            inString = true;
+            stringQuote = ch;
+            out += ch;
+            i += 1;
+            continue;
+        }
+
+        if (ch === ',') {
+            // If the next non-whitespace character is ] or }, drop the comma.
+            let j = i + 1;
+            while (j < input.length && /\s/.test(input[j])) j += 1;
+            const nextNonWs = j < input.length ? input[j] : '';
+            if (nextNonWs === ']' || nextNonWs === '}') {
+                i += 1;
+                continue;
+            }
+        }
+
+        out += ch;
+        i += 1;
+    }
+    return out;
+}
+
+function parseJsonLenient(raw: string): any {
+    let text = String(raw || '').replace(/^\uFEFF/, '');
+    // Try strict first.
+    try {
+        if (!text.trim()) return null;
+        return JSON.parse(text);
+    } catch {
+        // continue
+    }
+    // Try JSON-with-comments / trailing commas.
+    text = stripJsonComments(text);
+    text = stripJsonTrailingCommas(text);
+    if (!text.trim()) return null;
+    return JSON.parse(text);
 }
 
 function splitMarkdownTableRow(row: string): string[] {
@@ -830,7 +998,7 @@ function renderMarkdownToHtml(content: string): string {
         const headingMatch = line.match(/^(#{1,6})\s+(.*)$/);
         if (headingMatch) {
             const level = headingMatch[1].length;
-            const text = escapeHtml(headingMatch[2].trim());
+            const text = renderInlineMarkdown(headingMatch[2].trim());
             blocks.push(`<h${level}>${text}</h${level}>`);
             i += 1;
             continue;
@@ -855,7 +1023,7 @@ function renderMarkdownToHtml(content: string): string {
         if (/^\s*[-*]\s+/.test(line)) {
             const items: string[] = [];
             while (i < lines.length && /^\s*[-*]\s+/.test(lines[i])) {
-                items.push(escapeHtml(lines[i].replace(/^\s*[-*]\s+/, '').trim()));
+                items.push(renderInlineMarkdown(lines[i].replace(/^\s*[-*]\s+/, '').trim()));
                 i += 1;
             }
             blocks.push(`<ul>${items.map((item) => `<li>${item}</li>`).join('')}</ul>`);
@@ -867,7 +1035,7 @@ function renderMarkdownToHtml(content: string): string {
             paragraphLines.push(lines[i]);
             i += 1;
         }
-        const paragraphText = escapeHtml(paragraphLines.join(' '));
+        const paragraphText = renderInlineMarkdown(paragraphLines.join(' '));
         blocks.push(`<p>${paragraphText}</p>`);
     }
 
@@ -924,7 +1092,6 @@ function scoreHomeDir(dirPath: string): number {
     if (isDirectory(path.join(dirPath, '.codeium', 'windsurf-next'))) score += 4;
     if (isDirectory(path.join(dirPath, '.codeium', 'windsurf'))) score += 3;
     if (isDirectory(path.join(dirPath, '.codeium'))) score += 2;
-    if (isDirectory(path.join(dirPath, '.windsurf'))) score += 1;
     return score;
 }
 
@@ -971,9 +1138,38 @@ function getWindowsHomeCandidates(): string[] {
 
 function getCandidateHomeDirs(): string[] {
     const dirs: string[] = [];
-    if (isWslEnvironment()) {
+
+    // Optional override for the Windows user profile/home (useful for WSL/remote cases).
+    try {
+        const cfg = vscode.workspace.getConfiguration('mcpService');
+        const raw = String(cfg.get<string>('userHomeOverride', '') || '').trim();
+        if (raw) {
+            const expanded = raw.replace(/%USERPROFILE%/gi, process.env.USERPROFILE || '').trim();
+            const candidate = isWslEnvironment() ? toWslPath(expanded) : expanded;
+            if (candidate && isDirectory(candidate)) {
+                dirs.push(candidate);
+            }
+        }
+    } catch {
+        // ignore
+    }
+
+    // On Windows, Windsurf stores user-level config under %USERPROFILE%\\.codeium\\...
+    // Prefer USERPROFILE/HOMEDRIVE+HOMEPATH if they differ from os.homedir().
+    if (process.platform === 'win32') {
+        const envProfile = (process.env.USERPROFILE || '').trim();
+        if (envProfile && isDirectory(envProfile)) {
+            dirs.push(envProfile);
+        }
+        const driveHome = ((process.env.HOMEDRIVE && process.env.HOMEPATH) ? `${process.env.HOMEDRIVE}${process.env.HOMEPATH}` : '').trim();
+        if (driveHome && isDirectory(driveHome)) {
+            dirs.push(driveHome);
+        }
+    } else if (isWslEnvironment()) {
+        // WSL: prefer Windows user profiles mounted under /mnt/c/Users.
         dirs.push(...getWindowsHomeCandidates());
     }
+
     dirs.push(os.homedir());
 
     const unique: string[] = [];
@@ -984,6 +1180,7 @@ function getCandidateHomeDirs(): string[] {
         seen.add(key);
         unique.push(dir);
     }
+    unique.sort((a, b) => scoreHomeDir(b) - scoreHomeDir(a));
     return unique;
 }
 
@@ -993,7 +1190,8 @@ function getReadHomeDirs(): string[] {
 
 function getWriteHomeDirs(): string[] {
     const dirs = getCandidateHomeDirs();
-    return dirs.length > 0 ? [dirs[0]] : [os.homedir()];
+    // Write to the best-scored dir, but keep a small same-user fallback set for reliability.
+    return dirs.length > 0 ? dirs.slice(0, 2) : [os.homedir()];
 }
 
 function getWindsurfMcpConfigPaths(homeDirs: string[] = getWriteHomeDirs()): string[] {
@@ -1059,6 +1257,39 @@ const ARTIFACT_ROOT_DIR = 'windsurf-auto-mcp';
 const ARTIFACT_BRAIN_DIR = 'brain';
 const INDEX_DIR_NAME = 'index';
 const RAG_INDEX_FILE_NAME = 'rag-index.json';
+const WAM_DIR_NAME = '.wam';
+const WAM_COMMITS_DIR = 'commits';
+const WAM_SNAPSHOTS_DIR = 'snapshots';
+const WAM_REFS_DIR = 'refs';
+const WAM_REFS_HEADS_DIR = 'heads';
+const WAM_REFS_TAGS_DIR = 'tags';
+const WAM_HEAD_TEXT_FILE = 'HEAD';
+const WAM_HEAD_FILE = 'HEAD.json';
+const WAM_GLOBAL_ID = 'global';
+const WAM_STASH_DIR = 'stash';
+const WAM_DEFAULT_BRANCH = 'main';
+const WAM_DEFAULT_BRANCH_REF = `refs/heads/${WAM_DEFAULT_BRANCH}`;
+
+type WamHead = {
+    head?: string;
+    ref?: string; // e.g. refs/heads/main
+    digest?: string;
+    updatedAt?: string;
+};
+
+type WamCommit = {
+    hash: string;
+    parents: string[];
+    createdAt: string;
+    message: string;
+    author: 'auto' | 'ai' | 'user';
+    scope: 'project' | 'global';
+    projectId?: string;
+    rootPath?: string;
+    digest: string;
+    snapshots: Record<string, string>;
+    conflicts?: string[];
+};
 
 function nowIso(): string {
     return new Date().toISOString();
@@ -1074,6 +1305,212 @@ function createProjectId(): string {
         return crypto.randomUUID();
     } catch {
         return `project_${Math.random().toString(36).slice(2, 12)}`;
+    }
+}
+
+function sha256Hex(input: string): string {
+    return crypto.createHash('sha256').update(input).digest('hex');
+}
+
+function stableJsonStringify(value: any): string {
+    const normalize = (v: any): any => {
+        if (v === undefined) return undefined;
+        if (v === null) return null;
+        const t = typeof v;
+        if (t === 'string' || t === 'number' || t === 'boolean') return v;
+        if (Array.isArray(v)) {
+            // JSON.stringify turns undefined in arrays into null.
+            return v.map((item) => (item === undefined ? null : normalize(item)));
+        }
+        if (t === 'object') {
+            const out: any = {};
+            const keys = Object.keys(v).sort();
+            for (const k of keys) {
+                const nv = normalize(v[k]);
+                // JSON.stringify omits undefined object fields.
+                if (nv !== undefined) out[k] = nv;
+            }
+            return out;
+        }
+        // Functions/symbols/etc are treated as null/omitted by JSON.stringify; stringify them as strings for determinism.
+        return String(v);
+    };
+    return JSON.stringify(normalize(value));
+}
+
+function sha256HexParts(parts: Array<string | undefined | null>): string {
+    const hash = crypto.createHash('sha256');
+    for (const part of parts) {
+        hash.update(String(part ?? ''));
+        hash.update('\n');
+    }
+    return hash.digest('hex');
+}
+
+function normalizeWamItemStatus(status: any): TrackerItemStatus {
+    if (status === 'doing' || status === 'done') return status;
+    return 'todo';
+}
+
+function computeProjectWamDigest(project: ProjectTracker, memoryProject: ProjectMemoryStore): string {
+    const planItems = Array.isArray(project?.plan?.items) ? [...project.plan.items] : [];
+    planItems.sort((a, b) => String(a?.text || '').toLowerCase().localeCompare(String(b?.text || '').toLowerCase()));
+
+    const memories = memoryProject?.memories && typeof memoryProject.memories === 'object' ? memoryProject.memories : {};
+    const memoryKeys = Object.keys(memories).sort((a, b) => a.localeCompare(b));
+
+    const parts: Array<string | undefined | null> = [];
+    parts.push('wam-digest-v1');
+    parts.push(project.projectId);
+    parts.push(project.rootPath);
+    parts.push(project.name);
+
+    parts.push('overview');
+    parts.push(project.overview?.updatedAt || '');
+    parts.push(project.overview?.content || '');
+
+    parts.push('prd');
+    parts.push(project.prd?.status || '');
+    parts.push(project.prd?.updatedAt || '');
+    parts.push(project.prd?.approvedBy || '');
+    parts.push(project.prd?.approvedAt || '');
+    parts.push(project.prd?.reviewNote || '');
+    parts.push(project.prd?.reviewedAt || '');
+    parts.push(project.prd?.content || '');
+
+    parts.push('plan');
+    parts.push(project.plan?.summary || '');
+    for (const it of planItems) {
+        if (!it) continue;
+        parts.push('plan_item');
+        parts.push(String(it.text || '').trim());
+        parts.push(normalizeWamItemStatus(it.status));
+        parts.push(String(it.updatedAt || ''));
+    }
+
+    parts.push('walkthrough');
+    parts.push(project.walkthrough?.updatedAt || '');
+    parts.push(project.walkthrough?.content || '');
+
+    parts.push('stats');
+    parts.push(String(project.stats?.prdUpdates ?? 0));
+    parts.push(String(project.stats?.prdApprovals ?? 0));
+    parts.push(String(project.stats?.overviewUpdates ?? 0));
+    parts.push(String(project.stats?.planUpdates ?? 0));
+    parts.push(String(project.stats?.walkthroughUpdates ?? 0));
+    parts.push(project.stats?.updatedAt || '');
+
+    parts.push('memories');
+    for (const key of memoryKeys) {
+        const entry: any = (memories as any)[key];
+        if (!entry) continue;
+        parts.push('memory');
+        parts.push(key);
+        parts.push(entry.kind || '');
+        parts.push(entry.createdAt || '');
+        parts.push(entry.updatedAt || '');
+        parts.push(entry.content || '');
+        parts.push(Array.isArray(entry.tags) ? entry.tags.join(',') : '');
+        parts.push(Array.isArray(entry.links) ? entry.links.join(',') : '');
+    }
+    return sha256HexParts(parts);
+}
+
+function computeGlobalWamDigest(global: GlobalMemoryData): string {
+    const memories = global?.memories && typeof global.memories === 'object' ? global.memories : {};
+    const keys = Object.keys(memories).sort((a, b) => a.localeCompare(b));
+    const parts: Array<string | undefined | null> = [];
+    parts.push('wam-global-digest-v1');
+    for (const key of keys) {
+        const entry: any = (memories as any)[key];
+        if (!entry) continue;
+        parts.push('memory');
+        parts.push(key);
+        parts.push(entry.kind || '');
+        parts.push(entry.createdAt || '');
+        parts.push(entry.updatedAt || '');
+        parts.push(entry.content || '');
+        parts.push(Array.isArray(entry.tags) ? entry.tags.join(',') : '');
+        parts.push(Array.isArray(entry.links) ? entry.links.join(',') : '');
+    }
+    return sha256HexParts(parts);
+}
+
+function readTextFileSafe(filePath: string): string | null {
+    try {
+        if (!fs.existsSync(filePath)) return null;
+        const raw = fs.readFileSync(filePath, 'utf-8');
+        return raw;
+    } catch {
+        return null;
+    }
+}
+
+function writeTextFileSafe(filePath: string, text: string): void {
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(filePath, text, 'utf-8');
+}
+
+function isValidWamRefName(name: string): boolean {
+    if (!name) return false;
+    if (name.length > 80) return false;
+    if (!/^[a-zA-Z0-9._-]+$/.test(name)) return false;
+    if (name.includes('..')) return false;
+    if (name.startsWith('.') || name.endsWith('.')) return false;
+    return true;
+}
+
+function wamRefPath(dir: string, ref: string): string | null {
+    const r = String(ref || '').trim().replace(/\\/g, '/');
+    if (!r.startsWith('refs/')) return null;
+    const parts = r.split('/').filter(Boolean);
+    if (parts.length !== 3) return null;
+    const [, kind, name] = parts;
+    if (kind !== 'heads' && kind !== 'tags') return null;
+    if (!isValidWamRefName(name)) return null;
+    return path.join(dir, WAM_REFS_DIR, kind, name);
+}
+
+function readWamRef(dir: string, ref: string): string {
+    const p = wamRefPath(dir, ref);
+    if (!p) return '';
+    const raw = readTextFileSafe(p);
+    return String(raw || '').trim();
+}
+
+function writeWamRef(dir: string, ref: string, hash: string): void {
+    const p = wamRefPath(dir, ref);
+    if (!p) return;
+    writeTextFileSafe(p, `${String(hash || '').trim()}\n`);
+}
+
+function deleteWamRef(dir: string, ref: string): boolean {
+    const p = wamRefPath(dir, ref);
+    if (!p) return false;
+    try {
+        if (!fs.existsSync(p)) return false;
+        fs.unlinkSync(p);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+function ensureWamRepoLayout(dir: string): void {
+    const paths = [
+        path.join(dir, WAM_COMMITS_DIR),
+        path.join(dir, WAM_SNAPSHOTS_DIR),
+        path.join(dir, WAM_REFS_DIR, WAM_REFS_HEADS_DIR),
+        path.join(dir, WAM_REFS_DIR, WAM_REFS_TAGS_DIR),
+        path.join(dir, WAM_STASH_DIR)
+    ];
+    for (const p of paths) {
+        try {
+            if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
+        } catch {
+            // ignore
+        }
     }
 }
 
@@ -1106,6 +1543,43 @@ function getMemoryPaths(homeDirs: string[] = getWriteHomeDirs()): Array<{ varian
                 seen.add(key);
                 items.push({ variant, memoryPath });
             }
+        }
+    }
+    return items;
+}
+
+function getProjectWamDirs(homeDirs: string[] = getWriteHomeDirs(), projectId: string): Array<{ variant: string; dir: string }> {
+    const variants = ['windsurf', 'windsurf-next'];
+    const items: Array<{ variant: string; dir: string }> = [];
+    const seen = new Set<string>();
+    for (const homeDir of homeDirs) {
+        for (const variant of variants) {
+            const dir = path.join(homeDir, '.codeium', variant, ARTIFACT_ROOT_DIR, WAM_DIR_NAME, projectId);
+            const key = normalizePathForCompare(dir);
+            if (!seen.has(key)) {
+                seen.add(key);
+                items.push({ variant, dir });
+            }
+        }
+    }
+    return items;
+}
+
+function getProjectWamReadDirs(homeDirs: string[] = getReadHomeDirs(), projectId: string): Array<{ variant: string; dir: string }> {
+    return getProjectWamDirs(homeDirs, projectId);
+}
+
+function getGlobalWamDirs(homeDirs: string[] = getWriteHomeDirs()): Array<{ dir: string }> {
+    // Global WAM is shared (not variant-specific), matching the global memory file location:
+    // ~/.codeium/windsurf-auto-mcp/windsurf-auto-mcp-global-memories.json
+    const items: Array<{ dir: string }> = [];
+    const seen = new Set<string>();
+    for (const homeDir of homeDirs) {
+        const dir = path.join(homeDir, '.codeium', ARTIFACT_ROOT_DIR, WAM_DIR_NAME, WAM_GLOBAL_ID);
+        const key = normalizePathForCompare(dir);
+        if (!seen.has(key)) {
+            seen.add(key);
+            items.push({ dir });
         }
     }
     return items;
@@ -1243,6 +1717,390 @@ function writeArtifactFiles(dir: string, spec: ArtifactSpec): boolean {
     if (summary) metadata.summary = summary;
     fs.writeFileSync(metaPath, JSON.stringify(metadata, null, 2));
     return true;
+}
+
+function readJsonFileSafe<T>(filePath: string): T | null {
+    try {
+        if (!fs.existsSync(filePath)) return null;
+        let raw = fs.readFileSync(filePath, 'utf-8');
+        raw = raw.replace(/^\uFEFF/, '');
+        if (!raw.trim()) return null;
+        return JSON.parse(raw) as T;
+    } catch {
+        return null;
+    }
+}
+
+function writeJsonFileSafe(filePath: string, data: unknown): void {
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+}
+
+/**
+ * WAM (WindsurfAutoMcp) history: a lightweight, git-like snapshot log for project tracking + memory.
+ * Stored under ~/.codeium/<variant>/windsurf-auto-mcp/.wam/<projectId>/.
+ */
+function readWamHead(dir: string): WamHead {
+    const headPath = path.join(dir, WAM_HEAD_FILE);
+    return readJsonFileSafe<WamHead>(headPath) || {};
+}
+
+function writeWamHead(dir: string, head: WamHead): void {
+    ensureWamRepoLayout(dir);
+    writeJsonFileSafe(path.join(dir, WAM_HEAD_FILE), head);
+    try {
+        const headTextPath = path.join(dir, WAM_HEAD_TEXT_FILE);
+        const content = head.ref ? `ref: ${head.ref}\n` : (head.head ? `${head.head}\n` : '');
+        if (content) {
+            writeTextFileSafe(headTextPath, content);
+        } else if (fs.existsSync(headTextPath)) {
+            fs.unlinkSync(headTextPath);
+        }
+    } catch {
+        // ignore
+    }
+}
+
+function writeWamCommit(dir: string, commit: WamCommit, snapshots: Record<string, unknown>): void {
+    ensureWamRepoLayout(dir);
+    const commitsDir = path.join(dir, WAM_COMMITS_DIR);
+    const snapshotDir = path.join(dir, WAM_SNAPSHOTS_DIR, commit.hash);
+    if (!fs.existsSync(commitsDir)) fs.mkdirSync(commitsDir, { recursive: true });
+    if (!fs.existsSync(snapshotDir)) fs.mkdirSync(snapshotDir, { recursive: true });
+
+    for (const [name, data] of Object.entries(snapshots || {})) {
+        if (!name) continue;
+        writeJsonFileSafe(path.join(snapshotDir, `${name}.json`), data);
+    }
+    writeJsonFileSafe(path.join(commitsDir, `${commit.hash}.json`), commit);
+    const prev = readWamHead(dir);
+    const nextHead: WamHead = { head: commit.hash, digest: commit.digest, updatedAt: commit.createdAt, ref: prev.ref };
+    writeWamHead(dir, nextHead);
+    if (nextHead.ref) {
+        try {
+            writeWamRef(dir, nextHead.ref, commit.hash);
+        } catch {
+            // ignore
+        }
+    }
+}
+
+function readWamCommit(dir: string, hash: string): WamCommit | null {
+    if (!hash) return null;
+    return readJsonFileSafe<WamCommit>(path.join(dir, WAM_COMMITS_DIR, `${hash}.json`));
+}
+
+function readWamSnapshot(dir: string, hash: string, name: string): any | null {
+    if (!hash || !name) return null;
+    return readJsonFileSafe<any>(path.join(dir, WAM_SNAPSHOTS_DIR, hash, `${name}.json`));
+}
+
+function resolveWamHeadHash(dir: string): { head: WamHead; hash: string } {
+    const head = readWamHead(dir);
+    const hash = head.ref ? (readWamRef(dir, head.ref) || head.head || '') : (head.head || '');
+    return { head, hash };
+}
+
+function walkWamHistory(dir: string, startHash: string, limit = 50): WamCommit[] {
+    const out: WamCommit[] = [];
+    const seen = new Set<string>();
+    let current = String(startHash || '').trim();
+    while (current && out.length < limit) {
+        if (seen.has(current)) break;
+        seen.add(current);
+        const commit = readWamCommit(dir, current);
+        if (!commit) break;
+        out.push(commit);
+        current = Array.isArray(commit.parents) && commit.parents.length > 0 ? String(commit.parents[0] || '') : '';
+    }
+    return out;
+}
+
+function looksLikeCommitHash(value: string): boolean {
+    const v = String(value || '').trim();
+    if (v.length < 8 || v.length > 80) return false;
+    return /^[a-f0-9]+$/i.test(v);
+}
+
+function resolveWamHashFromSpecifier(dir: string, spec: string): string {
+    const raw = String(spec || '').trim();
+    if (!raw) return '';
+    if (raw === 'HEAD') {
+        return resolveWamHeadHash(dir).hash;
+    }
+    if (raw === 'WORKING') {
+        return '';
+    }
+    if (raw.startsWith('refs/')) {
+        return readWamRef(dir, raw);
+    }
+    if (isValidWamRefName(raw)) {
+        const headRef = `refs/heads/${raw}`;
+        const tagRef = `refs/tags/${raw}`;
+        const branchHash = readWamRef(dir, headRef);
+        if (branchHash) return branchHash;
+        const tagHash = readWamRef(dir, tagRef);
+        if (tagHash) return tagHash;
+    }
+    if (looksLikeCommitHash(raw)) return raw;
+    return '';
+}
+
+function currentWamBranchName(head: WamHead): string {
+    if (!head?.ref) return '';
+    if (head.ref.startsWith('refs/heads/')) return head.ref.slice('refs/heads/'.length);
+    return '';
+}
+
+function listWamRefs(dir: string, kind: 'heads' | 'tags'): Array<{ name: string; hash: string }> {
+    try {
+        const base = path.join(dir, WAM_REFS_DIR, kind);
+        if (!fs.existsSync(base)) return [];
+        const entries = fs.readdirSync(base).filter((n) => isValidWamRefName(n));
+        const out: Array<{ name: string; hash: string }> = [];
+        for (const name of entries) {
+            const ref = `refs/${kind}/${name}`;
+            out.push({ name, hash: readWamRef(dir, ref) });
+        }
+        return out.sort((a, b) => a.name.localeCompare(b.name));
+    } catch {
+        return [];
+    }
+}
+
+function listWamCommits(dir: string, limit = 50): WamCommit[] {
+    try {
+        const commitsDir = path.join(dir, WAM_COMMITS_DIR);
+        if (!fs.existsSync(commitsDir)) return [];
+        const entries = fs.readdirSync(commitsDir).filter((n) => n.endsWith('.json'));
+        const commits: WamCommit[] = [];
+        for (const entry of entries) {
+            const commit = readJsonFileSafe<WamCommit>(path.join(commitsDir, entry));
+            if (commit && commit.hash) commits.push(commit);
+        }
+        commits.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+        return commits.slice(0, Math.max(1, limit));
+    } catch {
+        return [];
+    }
+}
+
+function resolveExistingDir(candidates: string[]): string | null {
+    for (const c of candidates) {
+        if (!c) continue;
+        try {
+            if (fs.existsSync(c) && fs.statSync(c).isDirectory()) return c;
+        } catch {
+            // ignore
+        }
+    }
+    return candidates.find(Boolean) || null;
+}
+
+function resolveProjectWamDir(projectId: string): string | null {
+    if (!projectId) return null;
+    const readDirs = getProjectWamReadDirs(getReadHomeDirs(), projectId).map((d) => d.dir);
+    const writeDirs = getProjectWamDirs(getWriteHomeDirs(), projectId).map((d) => d.dir);
+    return resolveExistingDir([...readDirs, ...writeDirs]);
+}
+
+function resolveGlobalWamDir(): string | null {
+    const readDirs = getGlobalWamDirs(getReadHomeDirs()).map((d) => d.dir);
+    const writeDirs = getGlobalWamDirs(getWriteHomeDirs()).map((d) => d.dir);
+    return resolveExistingDir([...readDirs, ...writeDirs]);
+}
+
+function commitProjectWam(
+    message: string,
+    author: 'auto' | 'ai' | 'user' = 'auto',
+    rootPathOverride?: string,
+    parentsOverride?: string[],
+    options?: { conflicts?: string[] }
+): { committed: boolean; hash?: string } {
+    try {
+        const { data: trackerData, project, rootPath } = resolveProjectTracker(rootPathOverride);
+        const { data: memoryData, project: memoryProject } = resolveProjectMemory(rootPath);
+        if (!project.projectId) project.projectId = createProjectId();
+
+        const trackerSnapshot = {
+            schemaVersion: 1,
+            projectId: project.projectId,
+            rootPath,
+            tracker: project
+        };
+        const memorySnapshot = {
+            schemaVersion: 1,
+            projectId: project.projectId,
+            rootPath,
+            memory: memoryProject
+        };
+
+        const createdAt = nowIsoNano();
+        const digest = computeProjectWamDigest(project, memoryProject);
+
+        const dirs = getProjectWamDirs(getWriteHomeDirs(), project.projectId);
+        for (const { dir } of dirs) ensureWamRepoLayout(dir);
+
+        // Resolve current HEAD across variants (prefer branch ref if present).
+        let resolvedRef: string | undefined;
+        let resolvedHeadHash = '';
+        let resolvedHeadDigest = '';
+        for (const { dir } of dirs) {
+            const head = readWamHead(dir);
+            if (!resolvedRef && head?.ref) resolvedRef = head.ref;
+            if (!resolvedHeadDigest && head?.digest) resolvedHeadDigest = head.digest;
+            if (!resolvedHeadHash && head?.ref) {
+                const refHash = readWamRef(dir, head.ref);
+                if (refHash) resolvedHeadHash = refHash;
+            }
+            if (!resolvedHeadHash && head?.head) resolvedHeadHash = head.head;
+        }
+
+        // First commit: default to main branch unless the repo is explicitly detached.
+        if (!resolvedRef && !resolvedHeadHash && !resolvedHeadDigest) {
+            resolvedRef = WAM_DEFAULT_BRANCH_REF;
+        }
+
+        // Dedupe: if HEAD already matches current digest, skip.
+        if (resolvedHeadDigest && resolvedHeadDigest === digest) {
+            return { committed: false };
+        }
+
+        let parentList: string[] = Array.isArray(parentsOverride) ? parentsOverride.filter(Boolean) : [];
+        if (parentList.length === 0) {
+            parentList = resolvedHeadHash ? [resolvedHeadHash] : [];
+        }
+
+        const hash = sha256Hex(`${createdAt}\n${parentList.join(',')}\n${message}\n${digest}`);
+
+        const commit: WamCommit = {
+            hash,
+            parents: parentList,
+            createdAt,
+            message: message || 'update',
+            author,
+            scope: 'project',
+            projectId: project.projectId,
+            rootPath,
+            digest,
+            snapshots: {
+                tracker: `${WAM_SNAPSHOTS_DIR}/${hash}/tracker.json`,
+                memory: `${WAM_SNAPSHOTS_DIR}/${hash}/memory.json`
+            },
+            conflicts: Array.isArray(options?.conflicts) && options?.conflicts.length ? options?.conflicts : undefined
+        };
+
+        for (const { dir } of dirs) {
+            try {
+                // Ensure refs are consistent across variants.
+                const prev = readWamHead(dir);
+                if (!prev.ref && resolvedRef) {
+                    writeWamHead(dir, {
+                        head: prev.head || resolvedHeadHash || '',
+                        digest: prev.digest || resolvedHeadDigest || '',
+                        updatedAt: prev.updatedAt || '',
+                        ref: resolvedRef
+                    });
+                    if (resolvedHeadHash) {
+                        writeWamRef(dir, resolvedRef, resolvedHeadHash);
+                    }
+                }
+                writeWamCommit(dir, commit, { tracker: trackerSnapshot, memory: memorySnapshot });
+            } catch (e: any) {
+                outputChannel?.appendLine(`WAM commit write failed: ${dir} - ${e?.message ?? String(e)}`);
+            }
+        }
+
+        // Ensure latest state is persisted.
+        saveTrackerData(trackerData);
+        saveMemoryData(memoryData);
+        return { committed: true, hash };
+    } catch (e: any) {
+        outputChannel?.appendLine(`WAM commit failed: ${e?.message ?? String(e)}`);
+        return { committed: false };
+    }
+}
+
+function autoWamCommit(
+    message: string,
+    author: 'auto' | 'ai' | 'user' = 'auto',
+    rootPathOverride?: string
+): { committed: boolean; hash?: string } {
+    return commitProjectWam(message, author, rootPathOverride);
+}
+
+function autoWamCommitGlobal(
+    message: string,
+    author: 'auto' | 'ai' | 'user' = 'auto'
+): { committed: boolean; hash?: string } {
+    try {
+        const globalMemory = loadGlobalMemoryData();
+        const snapshot = {
+            schemaVersion: 1,
+            globalMemory
+        };
+        const createdAt = nowIsoNano();
+        const digest = computeGlobalWamDigest(globalMemory);
+
+        const dirs = getGlobalWamDirs(getWriteHomeDirs());
+        for (const { dir } of dirs) ensureWamRepoLayout(dir);
+
+        let resolvedRef: string | undefined;
+        let resolvedHeadHash = '';
+        let resolvedHeadDigest = '';
+        for (const { dir } of dirs) {
+            const head = readWamHead(dir);
+            if (!resolvedRef && head?.ref) resolvedRef = head.ref;
+            if (!resolvedHeadDigest && head?.digest) resolvedHeadDigest = head.digest;
+            if (!resolvedHeadHash && head?.ref) {
+                const refHash = readWamRef(dir, head.ref);
+                if (refHash) resolvedHeadHash = refHash;
+            }
+            if (!resolvedHeadHash && head?.head) resolvedHeadHash = head.head;
+        }
+
+        if (!resolvedRef && !resolvedHeadHash && !resolvedHeadDigest) {
+            resolvedRef = WAM_DEFAULT_BRANCH_REF;
+        }
+        if (resolvedHeadDigest && resolvedHeadDigest === digest) {
+            return { committed: false };
+        }
+
+        const parentList = resolvedHeadHash ? [resolvedHeadHash] : [];
+        const hash = sha256Hex(`${createdAt}\n${parentList.join(',')}\n${message}\n${digest}`);
+        const commit: WamCommit = {
+            hash,
+            parents: parentList,
+            createdAt,
+            message: message || 'update',
+            author,
+            scope: 'global',
+            digest,
+            snapshots: {
+                global_memory: `${WAM_SNAPSHOTS_DIR}/${hash}/global_memory.json`
+            }
+        };
+
+        for (const { dir } of dirs) {
+            try {
+                const prev = readWamHead(dir);
+                if (!prev.ref && resolvedRef) {
+                    writeWamHead(dir, { head: prev.head || resolvedHeadHash || '', digest: prev.digest || resolvedHeadDigest || '', updatedAt: prev.updatedAt || '', ref: resolvedRef });
+                    if (resolvedHeadHash) writeWamRef(dir, resolvedRef, resolvedHeadHash);
+                }
+                writeWamCommit(dir, commit, { global_memory: snapshot });
+            } catch (e: any) {
+                outputChannel?.appendLine(`WAM global commit write failed: ${dir} - ${e?.message ?? String(e)}`);
+            }
+        }
+
+        saveGlobalMemoryData(globalMemory);
+        return { committed: true, hash };
+    } catch (e: any) {
+        outputChannel?.appendLine(`WAM global commit failed: ${e?.message ?? String(e)}`);
+        return { committed: false };
+    }
 }
 
 function removeArtifactFiles(dir: string, fileName: string): void {
@@ -1790,12 +2648,19 @@ function filesAreEqual(a: string, b: string): boolean {
 }
 
 function installWindsurfHooks() {
-    const items = getWindsurfHooksConfigPaths(getWriteHomeDirs());
+    const homeDirs = getWriteHomeDirs();
+    const items = getWindsurfHooksConfigPaths(homeDirs);
     const installed: string[] = [];
     const skipped: string[] = [];
     const failed: Array<{ path: string; error: string }> = [];
 
     const guardPySource = path.join(extensionContext.extensionPath, 'resources', 'hooks', 'windsurf-auto-mcp-guard.py');
+    try {
+        outputChannel.appendLine(`Install hooks: candidate home dirs = ${JSON.stringify(homeDirs)}`);
+        outputChannel.appendLine(`Install hooks: target hooks.json paths = ${JSON.stringify(items.map((i) => i.hooksPath))}`);
+    } catch {
+        // ignore logging failures
+    }
 
     for (const { variant, hooksPath } of items) {
         try {
@@ -1806,15 +2671,15 @@ function installWindsurfHooks() {
 
             let config: any = {};
             if (fs.existsSync(hooksPath)) {
-                const raw = fs.readFileSync(hooksPath, 'utf-8');
-                if (raw.trim()) {
-                    try {
-                        config = JSON.parse(raw);
-                    } catch (e: any) {
-                        const lang = getUiLanguage();
-                        throw new Error(tr('ext.invalidHooksJson', { path: hooksPath, error: e?.message ?? String(e) }, lang));
-                    }
-                }
+	                const raw = fs.readFileSync(hooksPath, 'utf-8');
+	                if (raw.trim()) {
+	                    try {
+	                        config = parseJsonLenient(raw);
+	                    } catch (e: any) {
+	                        const lang = getUiLanguage();
+	                        throw new Error(tr('ext.invalidHooksJson', { path: hooksPath, error: e?.message ?? String(e) }, lang));
+	                    }
+	                }
             }
 
             const guardUpToDate = fs.existsSync(guardTarget) && filesAreEqual(guardPySource, guardTarget);
@@ -1902,13 +2767,13 @@ function uninstallWindsurfHooks() {
             if (fs.existsSync(hooksPath)) {
                 const raw = fs.readFileSync(hooksPath, 'utf-8');
                 if (raw.trim()) {
-                    let config: any;
-                    try {
-                        config = JSON.parse(raw);
-                    } catch (e: any) {
-                        const lang = getUiLanguage();
-                        throw new Error(tr('ext.invalidHooksJson', { path: hooksPath, error: e?.message ?? String(e) }, lang));
-                    }
+	                    let config: any;
+	                    try {
+	                        config = parseJsonLenient(raw);
+	                    } catch (e: any) {
+	                        const lang = getUiLanguage();
+	                        throw new Error(tr('ext.invalidHooksJson', { path: hooksPath, error: e?.message ?? String(e) }, lang));
+	                    }
                     if (config?.hooks && typeof config.hooks === 'object') {
                         for (const ev of WINDSURF_HOOK_EVENTS) {
                             if (!Array.isArray(config.hooks[ev])) continue;
@@ -1989,28 +2854,40 @@ let currentDialogRequestId: string | null = null;
 let lastDialogReason: string = '';
 let extensionContext: vscode.ExtensionContext;
 
-// 统计数据 - comprehensive tracking for all tools
-let stats = {
-    totalCalls: 0,
-    askUserCalls: 0,
-    askQuestionCalls: 0,
-    askContinueCalls: 0,
-    notifyCalls: 0,
-    setPrdCalls: 0,
-    updateOverviewCalls: 0,
-    generateOverviewCalls: 0,
-    updatePlanCalls: 0,
-    updateWalkthroughCalls: 0,
-    ragSearchCalls: 0,
-    memorySearchCalls: 0,
-    recordLessonCalls: 0,
-    getProjectStatusCalls: 0,
-    saveMemoryCalls: 0,
-    getMemoryCalls: 0,
-    listMemoryCalls: 0,
-    imageUploads: 0,
-    startTime: Date.now()
-};
+	// 统计数据 - comprehensive tracking for all tools
+	let stats = {
+	    totalCalls: 0,
+	    askUserCalls: 0,
+	    askQuestionCalls: 0,
+	    askContinueCalls: 0,
+	    notifyCalls: 0,
+	    setPrdCalls: 0,
+	    updateOverviewCalls: 0,
+	    generateOverviewCalls: 0,
+	    updatePlanCalls: 0,
+	    updateWalkthroughCalls: 0,
+	    ragSearchCalls: 0,
+	    memorySearchCalls: 0,
+	    recordLessonCalls: 0,
+	    getProjectStatusCalls: 0,
+	    checkPlanCalls: 0,
+	    wamStatusCalls: 0,
+	    wamCommitCalls: 0,
+	    wamLogCalls: 0,
+	    wamShowCalls: 0,
+	    wamCheckoutCalls: 0,
+	    wamMergeCalls: 0,
+	    wamBranchCalls: 0,
+	    wamTagCalls: 0,
+	    wamDiffCalls: 0,
+	    wamResetCalls: 0,
+	    wamStashCalls: 0,
+	    saveMemoryCalls: 0,
+	    getMemoryCalls: 0,
+	    listMemoryCalls: 0,
+	    imageUploads: 0,
+	    startTime: Date.now()
+	};
 
 // 待处理请求
 const pendingRequests = new Map<string, {
@@ -2235,10 +3112,162 @@ const TOOLS = [
             }
         }
     },
-    // ==================== Memory Tools ====================
+    // ==================== WAM (History) Tools ====================
     {
-        name: 'save_memory',
-        description: 'Save development context/learnings for this project (persists across sessions) / 保存开发上下文/经验（跨会话持久化）',
+        name: 'wam_status',
+        description: 'Get WAM (git-like) status: head + clean/dirty / 获取 WAM（类 git）状态：HEAD + 是否干净',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                scope: { type: 'string', enum: ['project', 'global'], description: 'Scope: project or global / 范围：项目或全局' },
+                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
+            }
+        }
+    },
+    {
+        name: 'wam_commit',
+        description: 'Create a WAM commit (snapshots tracker+memory) / 创建 WAM 提交（快照：跟踪+记忆）',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                scope: { type: 'string', enum: ['project', 'global'], description: 'Scope: project or global / 范围：项目或全局' },
+                message: { type: 'string', description: 'Commit message / 提交说明' },
+                author: { type: 'string', enum: ['auto', 'ai', 'user'], description: 'Author / 作者' },
+                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
+            },
+            required: ['message']
+        }
+    },
+    {
+        name: 'wam_log',
+        description: 'List WAM commit history / 列出 WAM 提交历史',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                scope: { type: 'string', enum: ['project', 'global'], description: 'Scope: project or global / 范围：项目或全局' },
+                limit: { type: 'number', description: 'Max commits / 最多条数' },
+                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
+            }
+        }
+    },
+    {
+        name: 'wam_show',
+        description: 'Show a WAM commit by hash / 查看指定 hash 的 WAM 提交',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                scope: { type: 'string', enum: ['project', 'global'], description: 'Scope: project or global / 范围：项目或全局' },
+                hash: { type: 'string', description: 'Commit hash / 提交 hash' },
+                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
+            },
+            required: ['hash']
+        }
+    },
+	    {
+	        name: 'wam_checkout',
+	        description: 'Restore tracker/memory from a WAM commit (rollback) / 从 WAM 提交恢复跟踪/记忆（回滚）',
+	        inputSchema: {
+	            type: 'object',
+	            properties: {
+	                scope: { type: 'string', enum: ['project', 'global'], description: 'Scope: project or global / 范围：项目或全局' },
+	                target: { type: 'string', description: 'Commit/ref specifier (hash, HEAD, branch, refs/...) / 目标（hash/HEAD/分支/refs/...）' },
+	                hash: { type: 'string', description: 'Legacy: commit hash / 兼容：提交 hash' },
+	                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
+	            }
+	        }
+	    },
+	    {
+	        name: 'wam_merge',
+	        description: 'Merge another WAM commit into current state (3-way merge with conflicts) / 合并另一条 WAM 提交到当前状态（三方合并 + 冲突记录）',
+	        inputSchema: {
+	            type: 'object',
+	            properties: {
+	                otherHash: { type: 'string', description: 'Other commit specifier (hash/branch/tag/refs/...) / 另一提交（hash/分支/tag/refs/...）' },
+	                message: { type: 'string', description: 'Merge commit message / 合并提交说明' },
+	                author: { type: 'string', enum: ['auto', 'ai', 'user'], description: 'Author / 作者' },
+	                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
+	            },
+	            required: ['otherHash', 'message']
+	        }
+	    },
+	    {
+	        name: 'wam_branch',
+	        description: 'Manage WAM branches (refs/heads) / 管理 WAM 分支（refs/heads）',
+	        inputSchema: {
+	            type: 'object',
+	            properties: {
+	                scope: { type: 'string', enum: ['project', 'global'], description: 'Scope: project or global / 范围：项目或全局' },
+	                action: { type: 'string', enum: ['list', 'create', 'delete'], description: 'Action / 操作' },
+	                name: { type: 'string', description: 'Branch name / 分支名' },
+	                startPoint: { type: 'string', description: 'Optional start point (hash/HEAD/tag/branch) / 可选起点（hash/HEAD/tag/分支）' },
+	                force: { type: 'boolean', description: 'Force overwrite (create) / 强制覆盖（创建）' },
+	                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
+	            },
+	            required: ['action']
+	        }
+	    },
+	    {
+	        name: 'wam_tag',
+	        description: 'Manage WAM tags (refs/tags) / 管理 WAM 标签（refs/tags）',
+	        inputSchema: {
+	            type: 'object',
+	            properties: {
+	                scope: { type: 'string', enum: ['project', 'global'], description: 'Scope: project or global / 范围：项目或全局' },
+	                action: { type: 'string', enum: ['list', 'create', 'delete'], description: 'Action / 操作' },
+	                name: { type: 'string', description: 'Tag name / 标签名' },
+	                target: { type: 'string', description: 'Target (hash/HEAD/branch) / 目标（hash/HEAD/分支）' },
+	                force: { type: 'boolean', description: 'Force overwrite (create) / 强制覆盖（创建）' },
+	                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
+	            },
+	            required: ['action']
+	        }
+	    },
+	    {
+	        name: 'wam_diff',
+	        description: 'Diff WAM snapshots (tracker+memory) / 对比 WAM 快照（跟踪+记忆）',
+	        inputSchema: {
+	            type: 'object',
+	            properties: {
+	                scope: { type: 'string', enum: ['project', 'global'], description: 'Scope: project or global / 范围：项目或全局' },
+	                a: { type: 'string', description: 'Left spec (default: HEAD) / 左侧（默认 HEAD）' },
+	                b: { type: 'string', description: 'Right spec (default: WORKING) / 右侧（默认 WORKING）' },
+	                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
+	            }
+	        }
+	    },
+	    {
+	        name: 'wam_reset',
+	        description: 'Reset current branch/HEAD to a commit and restore snapshots (hard) / 重置当前分支/HEAD 到某提交并恢复快照（hard）',
+	        inputSchema: {
+	            type: 'object',
+	            properties: {
+	                scope: { type: 'string', enum: ['project', 'global'], description: 'Scope: project or global / 范围：项目或全局' },
+	                target: { type: 'string', description: 'Target spec (hash/HEAD/branch/tag/refs/...) / 目标（hash/HEAD/分支/tag/refs/...）' },
+	                mode: { type: 'string', enum: ['hard'], description: 'Reset mode (only hard supported) / 重置模式（仅支持 hard）' },
+	                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
+	            },
+	            required: ['target']
+	        }
+	    },
+	    {
+	        name: 'wam_stash',
+	        description: 'Stash/apply WAM working state (tracker+memory) / 暂存/应用 WAM 工作状态（跟踪+记忆）',
+	        inputSchema: {
+	            type: 'object',
+	            properties: {
+	                scope: { type: 'string', enum: ['project', 'global'], description: 'Scope: project or global / 范围：项目或全局' },
+	                action: { type: 'string', enum: ['push', 'list', 'apply', 'pop', 'drop'], description: 'Action / 操作' },
+	                message: { type: 'string', description: 'Stash message (push) / 暂存说明（push）' },
+	                id: { type: 'string', description: 'Stash id (apply/pop/drop); default latest / 暂存 id（apply/pop/drop，默认最新）' },
+	                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
+	            },
+	            required: ['action']
+	        }
+	    },
+	    // ==================== Memory Tools ====================
+	    {
+	        name: 'save_memory',
+	        description: 'Save development context/learnings for this project (persists across sessions) / 保存开发上下文/经验（跨会话持久化）',
         inputSchema: {
             type: 'object',
             properties: {
@@ -2506,7 +3535,7 @@ async function handleJSONRPC(body: string, res: http.ServerResponse) {
             case 'initialize':
                 result = {
                     protocolVersion: '2024-11-05',
-                    serverInfo: { name: 'windsurf_auto_mcp', version: '1.0.0' },
+                    serverInfo: { name: 'windsurf_auto_mcp', version: '1.0.6' },
                     capabilities: { tools: {} }
                 };
                 break;
@@ -2595,6 +3624,50 @@ async function handleToolCall(name: string, args: any): Promise<any> {
             stats.getProjectStatusCalls++;
             result = await handleGetProjectStatus(args);
             break;
+        case 'wam_status':
+            stats.wamStatusCalls++;
+            result = await handleWamStatus(args);
+            break;
+        case 'wam_commit':
+            stats.wamCommitCalls++;
+            result = await handleWamCommit(args);
+            break;
+        case 'wam_log':
+            stats.wamLogCalls++;
+            result = await handleWamLog(args);
+            break;
+        case 'wam_show':
+            stats.wamShowCalls++;
+            result = await handleWamShow(args);
+            break;
+        case 'wam_checkout':
+            stats.wamCheckoutCalls++;
+            result = await handleWamCheckout(args);
+            break;
+	        case 'wam_merge':
+	            stats.wamMergeCalls++;
+	            result = await handleWamMerge(args);
+	            break;
+	        case 'wam_branch':
+	            stats.wamBranchCalls++;
+	            result = await handleWamBranch(args);
+	            break;
+	        case 'wam_tag':
+	            stats.wamTagCalls++;
+	            result = await handleWamTag(args);
+	            break;
+	        case 'wam_diff':
+	            stats.wamDiffCalls++;
+	            result = await handleWamDiff(args);
+	            break;
+	        case 'wam_reset':
+	            stats.wamResetCalls++;
+	            result = await handleWamReset(args);
+	            break;
+	        case 'wam_stash':
+	            stats.wamStashCalls++;
+	            result = await handleWamStash(args);
+	            break;
         case 'notify':
             stats.notifyCalls++;
             result = await handleNotify(args);
@@ -2603,9 +3676,10 @@ async function handleToolCall(name: string, args: any): Promise<any> {
             stats.askContinueCalls++;
             result = await handleAskContinue(args);
             break;
-        case 'check_plan':
-            result = await handleCheckPlan(args);
-            break;
+	        case 'check_plan':
+	            stats.checkPlanCalls++;
+	            result = await handleCheckPlan(args);
+	            break;
         case 'save_memory':
             stats.saveMemoryCalls++;
             result = await handleSaveMemory(args);
@@ -2794,7 +3868,12 @@ function resolveProjectMemory(rootPathOverride?: string): { data: MemoryData; pr
     return { data, project: data.projects[rootPath], rootPath };
 }
 
-function saveTrackerAndNotify(data: TrackerData, project: ProjectTracker) {
+function saveTrackerAndNotify(
+    data: TrackerData,
+    project: ProjectTracker,
+    wamMessage?: string,
+    wamAuthor: 'auto' | 'ai' | 'user' = 'auto'
+) {
     saveTrackerData(data);
     try {
         syncProjectArtifacts(project);
@@ -2804,6 +3883,14 @@ function saveTrackerAndNotify(data: TrackerData, project: ProjectTracker) {
     const snapshot = buildTrackerSnapshot(project);
     sidebarProvider?.postMessage({ type: 'tracker', data: snapshot });
     refreshOpenPanels(project);
+
+    if (wamMessage) {
+        try {
+            commitProjectWam(wamMessage, wamAuthor, project.rootPath);
+        } catch (e: any) {
+            outputChannel?.appendLine(`WAM auto-commit failed: ${e?.message ?? String(e)}`);
+        }
+    }
 }
 
 function saveMemoryAndNotify(data: MemoryData): void {
@@ -2821,7 +3908,7 @@ function removeProjectArtifacts(project: ProjectTracker, fileNames: string[]): v
 }
 
 function cleanupLegacyArtifacts(project: ProjectTracker): void {
-    removeProjectArtifacts(project, ['task.md']);
+    removeProjectArtifacts(project, ['task.md', 'implementation_plan.md']);
 }
 
 function syncProjectArtifacts(project: ProjectTracker): void {
@@ -2856,8 +3943,8 @@ function syncProjectArtifacts(project: ProjectTracker): void {
     if (hasPlan) {
         const content = buildPlanArtifactContent(project, lang);
         specs.push({
-            fileName: 'implementation_plan.md',
-            artifactType: 'ARTIFACT_TYPE_IMPLEMENTATION_PLAN',
+            fileName: 'plan.md',
+            artifactType: 'ARTIFACT_TYPE_PLAN',
             content,
             summary: createArtifactSummary(content)
         });
@@ -2931,7 +4018,7 @@ async function clearProjectPrd() {
     appendWalkthroughEntry(project, lang === 'en' ? 'PRD cleared by user.' : 'PRD 已被清空。', lang);
     project.updatedAt = nowIso();
     removeProjectArtifacts(project, ['prd.md']);
-    saveTrackerAndNotify(data, project);
+    saveTrackerAndNotify(data, project, 'clear_prd', 'user');
 }
 
 async function clearProjectOverview() {
@@ -2944,7 +4031,7 @@ async function clearProjectOverview() {
     appendWalkthroughEntry(project, lang === 'en' ? 'Overview cleared by user.' : '项目概览已被清空。', lang);
     project.updatedAt = nowIso();
     removeProjectArtifacts(project, ['overview.md']);
-    saveTrackerAndNotify(data, project);
+    saveTrackerAndNotify(data, project, 'clear_overview', 'user');
 }
 
 async function clearProjectPlan() {
@@ -2957,8 +4044,8 @@ async function clearProjectPlan() {
     bumpProjectStat(project, 'planUpdates');
     appendWalkthroughEntry(project, lang === 'en' ? 'Plan cleared by user.' : '计划已被清空。', lang);
     project.updatedAt = nowIso();
-    removeProjectArtifacts(project, ['implementation_plan.md']);
-    saveTrackerAndNotify(data, project);
+    removeProjectArtifacts(project, ['plan.md']);
+    saveTrackerAndNotify(data, project, 'clear_plan', 'user');
 }
 
 async function clearProjectWalkthrough() {
@@ -2970,7 +4057,7 @@ async function clearProjectWalkthrough() {
     bumpProjectStat(project, 'walkthroughUpdates');
     project.updatedAt = nowIso();
     removeProjectArtifacts(project, ['walkthrough.md']);
-    saveTrackerAndNotify(data, project);
+    saveTrackerAndNotify(data, project, 'clear_walkthrough', 'user');
 }
 
 async function clearProjectTracking() {
@@ -2985,8 +4072,8 @@ async function clearProjectTracking() {
     project.walkthrough = { content: '', updatedAt: nowIso() };
     project.stats = createDefaultTrackerStats();
     project.updatedAt = nowIso();
-    removeProjectArtifacts(project, ['overview.md', 'prd.md', 'implementation_plan.md', 'walkthrough.md']);
-    saveTrackerAndNotify(data, project);
+    removeProjectArtifacts(project, ['overview.md', 'prd.md', 'plan.md', 'walkthrough.md']);
+    saveTrackerAndNotify(data, project, 'clear_tracking', 'user');
 }
 
 function syncMemoryArtifacts(project: ProjectTracker, memoryStore: ProjectMemoryStore): void {
@@ -3074,7 +4161,7 @@ async function handleSetPrd(args: any): Promise<any> {
     bumpProjectStat(project, 'prdUpdates');
     appendWalkthroughEntry(project, lang === 'en' ? 'PRD draft updated.' : 'PRD 草案已更新。', lang);
     project.updatedAt = nowIso();
-    saveTrackerAndNotify(data, project);
+    saveTrackerAndNotify(data, project, 'set_prd:draft', 'ai');
 
     const approval = await requestPrdApproval(content, project.name);
     if (approval.approved) {
@@ -3091,7 +4178,7 @@ async function handleSetPrd(args: any): Promise<any> {
     }
     project.prd.reviewedAt = nowIso();
     project.updatedAt = nowIso();
-    saveTrackerAndNotify(data, project);
+    saveTrackerAndNotify(data, project, approval.approved ? 'set_prd:approved' : 'set_prd:changes_requested', 'user');
 
     const text = approval.approved
         ? (lang === 'en' ? 'PRD approved by user.' : 'PRD 已由用户审批。')
@@ -3398,7 +4485,7 @@ async function handleUpdateOverview(args: any): Promise<any> {
     bumpProjectStat(project, 'overviewUpdates');
     appendWalkthroughEntry(project, lang === 'en' ? 'Overview updated.' : '项目概览已更新。', lang);
     project.updatedAt = nowIso();
-    saveTrackerAndNotify(data, project);
+    saveTrackerAndNotify(data, project, 'update_overview', 'ai');
     const text = lang === 'en' ? 'Overview updated.' : '项目概览已更新。';
     return { content: [{ type: 'text', text }, { type: 'text', text: `OVERVIEW_JSON:\n${JSON.stringify(buildTrackerSnapshot(project), null, 2)}` }] };
 }
@@ -3411,7 +4498,7 @@ async function handleGenerateOverview(_args: any): Promise<any> {
     bumpProjectStat(project, 'overviewUpdates');
     appendWalkthroughEntry(project, lang === 'en' ? 'Overview generated.' : '项目概览已生成。', lang);
     project.updatedAt = nowIso();
-    saveTrackerAndNotify(data, project);
+    saveTrackerAndNotify(data, project, 'generate_overview', 'auto');
     const text = lang === 'en' ? 'Overview generated.' : '项目概览已生成。';
     return { content: [{ type: 'text', text }, { type: 'text', text: `OVERVIEW_JSON:\n${JSON.stringify(buildTrackerSnapshot(project), null, 2)}` }] };
 }
@@ -3455,7 +4542,7 @@ async function handleUpdatePlan(args: any): Promise<any> {
     }
     appendWalkthroughEntry(project, lang === 'en' ? 'Plan updated.' : '计划已更新。', lang);
     project.updatedAt = nowIso();
-    saveTrackerAndNotify(data, project);
+    saveTrackerAndNotify(data, project, 'update_plan', 'ai');
     const text = lang === 'en' ? 'Plan updated.' : '计划已更新。';
     return { content: [{ type: 'text', text }, { type: 'text', text: `PLAN_JSON:\n${JSON.stringify(buildTrackerSnapshot(project), null, 2)}` }] };
 }
@@ -3474,6 +4561,1408 @@ async function handleGetProjectStatus(args: any): Promise<any> {
     const snapshot = buildTrackerSnapshot(project);
     const text = lang === 'en' ? 'Project status:' : '项目状态：';
     return { content: [{ type: 'text', text }, { type: 'text', text: `STATUS_JSON:\n${JSON.stringify(snapshot, null, 2)}` }] };
+}
+
+function parseWamScope(args: any): 'project' | 'global' {
+    return args?.scope === 'global' ? 'global' : 'project';
+}
+
+function clampNumber(raw: any, min: number, max: number, fallback: number): number {
+    const n = Number(raw);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.max(min, Math.min(max, Math.floor(n)));
+}
+
+function buildCurrentProjectWamState(rootPathOverride?: string): {
+    trackerData: TrackerData;
+    memoryData: MemoryData;
+    project: ProjectTracker;
+    memoryProject: ProjectMemoryStore;
+    rootPath: string;
+    projectId: string;
+    trackerSnapshot: any;
+    memorySnapshot: any;
+    digest: string;
+    wamDir: string | null;
+} {
+    const { data: trackerData, project, rootPath } = resolveProjectTracker(rootPathOverride);
+    const { data: memoryData, project: memoryProject } = resolveProjectMemory(rootPath);
+    if (!project.projectId) {
+        project.projectId = createProjectId();
+        trackerData.projects[rootPath] = project;
+        saveTrackerData(trackerData);
+    }
+    const projectId = project.projectId;
+    const trackerSnapshot = { schemaVersion: 1, projectId, rootPath, tracker: project };
+    const memorySnapshot = { schemaVersion: 1, projectId, rootPath, memory: memoryProject };
+    const digest = computeProjectWamDigest(project, memoryProject);
+    const wamDir = resolveProjectWamDir(projectId);
+    return { trackerData, memoryData, project, memoryProject, rootPath, projectId, trackerSnapshot, memorySnapshot, digest, wamDir };
+}
+
+function buildCurrentGlobalWamState(): { snapshot: any; digest: string; wamDir: string | null } {
+    const globalMemory = loadGlobalMemoryData();
+    const snapshot = { schemaVersion: 1, globalMemory };
+    const digest = computeGlobalWamDigest(globalMemory);
+    const wamDir = resolveGlobalWamDir();
+    return { snapshot, digest, wamDir };
+}
+
+async function handleWamStatus(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const scope = parseWamScope(args);
+    if (scope === 'global') {
+        const { digest, wamDir } = buildCurrentGlobalWamState();
+        const head = wamDir ? readWamHead(wamDir) : {};
+        const headHash = wamDir ? (resolveWamHeadHash(wamDir).hash) : '';
+        const clean = !!headHash && head?.digest === digest;
+        const branch =
+            head?.ref?.startsWith('refs/heads/')
+                ? head.ref.replace('refs/heads/', '')
+                : (head?.ref?.startsWith('refs/tags/') ? head.ref.replace('refs/tags/', '') : '');
+        const text =
+            lang === 'en'
+                ? `WAM(global): ${clean ? 'clean' : 'dirty'} (HEAD=${headHash || 'none'}${branch ? `, ${branch}` : ''})`
+                : `WAM（全局）：${clean ? '干净' : '有改动'}（HEAD=${headHash || '无'}${branch ? `，${branch}` : ''}）`;
+        return { content: [{ type: 'text', text }, { type: 'text', text: `WAM_STATUS_JSON:\n${JSON.stringify({ scope, clean, head: { ...head, head: headHash }, digest }, null, 2)}` }] };
+    }
+    const rootPath = typeof args?.rootPath === 'string' ? args.rootPath : undefined;
+    const state = buildCurrentProjectWamState(rootPath);
+    const head = state.wamDir ? readWamHead(state.wamDir) : {};
+    const headHash = state.wamDir ? resolveWamHeadHash(state.wamDir).hash : '';
+    const clean = !!headHash && head?.digest === state.digest;
+    const branch =
+        head?.ref?.startsWith('refs/heads/')
+            ? head.ref.replace('refs/heads/', '')
+            : (head?.ref?.startsWith('refs/tags/') ? head.ref.replace('refs/tags/', '') : '');
+    const text =
+        lang === 'en'
+            ? `WAM(project): ${clean ? 'clean' : 'dirty'} (HEAD=${headHash || 'none'}${branch ? `, ${branch}` : ''})`
+            : `WAM（项目）：${clean ? '干净' : '有改动'}（HEAD=${headHash || '无'}${branch ? `，${branch}` : ''}）`;
+    return { content: [{ type: 'text', text }, { type: 'text', text: `WAM_STATUS_JSON:\n${JSON.stringify({ scope, clean, head: { ...head, head: headHash }, digest: state.digest, projectId: state.projectId, rootPath: state.rootPath }, null, 2)}` }] };
+}
+
+async function handleWamCommit(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const scope = parseWamScope(args);
+    const message = typeof args?.message === 'string' ? args.message.trim() : '';
+    if (!message) {
+        throw new Error(lang === 'en' ? 'wam_commit requires message.' : 'wam_commit 需要 message。');
+    }
+    const author: 'auto' | 'ai' | 'user' = args?.author === 'ai' || args?.author === 'user' ? args.author : 'auto';
+    if (scope === 'global') {
+        const result = autoWamCommitGlobal(message, author);
+        const text =
+            lang === 'en'
+                ? (result.committed ? `WAM(global) committed: ${result.hash}` : 'WAM(global) no changes; skipped.')
+                : (result.committed ? `WAM（全局）已提交：${result.hash}` : 'WAM（全局）无变化，跳过。');
+        return { content: [{ type: 'text', text }] };
+    }
+    const rootPath = typeof args?.rootPath === 'string' ? args.rootPath : undefined;
+    const result = commitProjectWam(message, author, rootPath);
+    const text =
+        lang === 'en'
+            ? (result.committed ? `WAM(project) committed: ${result.hash}` : 'WAM(project) no changes; skipped.')
+            : (result.committed ? `WAM（项目）已提交：${result.hash}` : 'WAM（项目）无变化，跳过。');
+    return { content: [{ type: 'text', text }] };
+}
+
+async function handleWamLog(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const scope = parseWamScope(args);
+    const limit = clampNumber(args?.limit, 1, 200, 20);
+
+    let dir: string | null = null;
+    let headInfo: { head: WamHead; hash: string } | null = null;
+    if (scope === 'global') {
+        dir = resolveGlobalWamDir();
+    } else {
+        const rootPath = typeof args?.rootPath === 'string' ? args.rootPath : undefined;
+        const state = buildCurrentProjectWamState(rootPath);
+        dir = state.wamDir;
+    }
+
+    if (!dir) {
+        const text = lang === 'en' ? 'WAM: no history directory found yet.' : 'WAM：尚未找到历史目录。';
+        return { content: [{ type: 'text', text }] };
+    }
+    ensureWamRepoLayout(dir);
+    headInfo = resolveWamHeadHash(dir);
+    const commits = headInfo.hash ? walkWamHistory(dir, headInfo.hash, limit) : listWamCommits(dir, limit);
+    const lines = commits.map((c) => {
+        const parents = Array.isArray(c.parents) && c.parents.length ? ` (${c.parents.length}p)` : '';
+        const conflicts = Array.isArray(c.conflicts) && c.conflicts.length ? ` ⚠${c.conflicts.length}` : '';
+        return `${c.hash.slice(0, 10)}${parents}${conflicts}  ${c.createdAt}  ${c.author}  ${c.message}`;
+    });
+    const branchLabel =
+        headInfo?.head?.ref?.startsWith('refs/heads/')
+            ? headInfo.head.ref.replace('refs/heads/', '')
+            : (headInfo?.head?.ref?.startsWith('refs/tags/') ? headInfo.head.ref.replace('refs/tags/', '') : '');
+    const headLabel = headInfo?.hash ? headInfo.hash.slice(0, 10) : 'none';
+    const header =
+        lang === 'en'
+            ? `WAM log (${scope}) — HEAD=${headLabel}${branchLabel ? ` (${branchLabel})` : ''}`
+            : `WAM 日志（${scope === 'global' ? '全局' : '项目'}）— HEAD=${headLabel}${branchLabel ? `（${branchLabel}）` : ''}`;
+    return { content: [{ type: 'text', text: header }, { type: 'text', text: lines.join('\n') || (lang === 'en' ? '(empty)' : '（空）') }, { type: 'text', text: `WAM_LOG_JSON:\n${JSON.stringify({ scope, dir, commits }, null, 2)}` }] };
+}
+
+async function handleWamShow(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const scope = parseWamScope(args);
+    const hash = typeof args?.hash === 'string' ? args.hash.trim() : '';
+    if (!hash) {
+        throw new Error(lang === 'en' ? 'wam_show requires hash.' : 'wam_show 需要 hash。');
+    }
+    let dir: string | null = null;
+    if (scope === 'global') {
+        dir = resolveGlobalWamDir();
+    } else {
+        const rootPath = typeof args?.rootPath === 'string' ? args.rootPath : undefined;
+        dir = buildCurrentProjectWamState(rootPath).wamDir;
+    }
+    if (!dir) {
+        const text = lang === 'en' ? 'WAM: no history directory found yet.' : 'WAM：尚未找到历史目录。';
+        return { content: [{ type: 'text', text }] };
+    }
+    const commit = readWamCommit(dir, hash);
+    if (!commit) {
+        const text = lang === 'en' ? `WAM commit not found: ${hash}` : `未找到 WAM 提交：${hash}`;
+        return { content: [{ type: 'text', text }] };
+    }
+    const text = lang === 'en' ? `WAM commit: ${hash}` : `WAM 提交：${hash}`;
+    return { content: [{ type: 'text', text }, { type: 'text', text: `WAM_COMMIT_JSON:\n${JSON.stringify(commit, null, 2)}` }] };
+}
+
+async function handleWamCheckout(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const scope = parseWamScope(args);
+    const targetSpec = typeof args?.target === 'string' ? args.target.trim() : (typeof args?.hash === 'string' ? args.hash.trim() : '');
+    if (!targetSpec) {
+        throw new Error(lang === 'en' ? 'wam_checkout requires target/hash.' : 'wam_checkout 需要 target/hash。');
+    }
+
+    if (scope === 'global') {
+        const dir = resolveGlobalWamDir();
+        if (!dir) {
+            const text = lang === 'en' ? 'WAM(global): no history directory found yet.' : 'WAM（全局）：尚未找到历史目录。';
+            return { content: [{ type: 'text', text }] };
+        }
+        ensureWamRepoLayout(dir);
+        const resolvedHash = resolveWamHashFromSpecifier(dir, targetSpec);
+        const commit = readWamCommit(dir, resolvedHash);
+        const snapshot = readWamSnapshot(dir, resolvedHash, 'global_memory');
+        if (!resolvedHash || !commit || !snapshot?.globalMemory) {
+            const text = lang === 'en' ? `WAM(global) commit not found or missing snapshot: ${targetSpec}` : `WAM（全局）未找到提交或快照缺失：${targetSpec}`;
+            return { content: [{ type: 'text', text }] };
+        }
+        saveGlobalMemoryData(snapshot.globalMemory);
+        const globalDigest = computeGlobalWamDigest(snapshot.globalMemory);
+        const raw = targetSpec.replace(/\\/g, '/');
+        let nextRef: string | undefined;
+        if (raw.startsWith('refs/heads/')) nextRef = raw;
+        else if (isValidWamRefName(raw) && readWamRef(dir, `refs/heads/${raw}`)) nextRef = `refs/heads/${raw}`;
+        // tags / hashes => detached
+        writeWamHead(dir, { head: resolvedHash, digest: globalDigest, updatedAt: nowIsoNano(), ref: nextRef });
+        if (nextRef) writeWamRef(dir, nextRef, resolvedHash);
+        const text = lang === 'en' ? `WAM(global) restored: ${resolvedHash}` : `WAM（全局）已恢复：${resolvedHash}`;
+        return { content: [{ type: 'text', text }] };
+    }
+
+    const rootPath = typeof args?.rootPath === 'string' ? args.rootPath : undefined;
+    const state = buildCurrentProjectWamState(rootPath);
+    if (!state.wamDir) {
+        const text = lang === 'en' ? 'WAM(project): no history directory found yet.' : 'WAM（项目）：尚未找到历史目录。';
+        return { content: [{ type: 'text', text }] };
+    }
+    ensureWamRepoLayout(state.wamDir);
+    const resolvedHash = resolveWamHashFromSpecifier(state.wamDir, targetSpec);
+    const commit = readWamCommit(state.wamDir, resolvedHash);
+    const trackerSnap = readWamSnapshot(state.wamDir, resolvedHash, 'tracker');
+    const memorySnap = readWamSnapshot(state.wamDir, resolvedHash, 'memory');
+    const restoredProject = trackerSnap?.tracker;
+    const restoredMemory = memorySnap?.memory;
+    const snapRoot = String(trackerSnap?.rootPath || '');
+    if (!resolvedHash || !commit || !restoredProject || !restoredMemory) {
+        const text = lang === 'en' ? `WAM(project) commit not found or missing snapshot: ${targetSpec}` : `WAM（项目）未找到提交或快照缺失：${targetSpec}`;
+        return { content: [{ type: 'text', text }] };
+    }
+    if (snapRoot && normalizePathForCompare(snapRoot) !== normalizePathForCompare(state.rootPath)) {
+        const text =
+            lang === 'en'
+                ? `Refusing to checkout: commit rootPath differs (commit=${snapRoot}, current=${state.rootPath})`
+                : `拒绝恢复：提交 rootPath 不匹配（commit=${snapRoot}，current=${state.rootPath}）`;
+        return { content: [{ type: 'text', text }] };
+    }
+
+    const trackerData = loadTrackerData();
+    trackerData.projects[state.rootPath] = restoredProject;
+    trackerData.activeProject = state.rootPath;
+    saveTrackerData(trackerData);
+
+    const memoryData = loadMemoryData();
+    memoryData.projects[state.rootPath] = restoredMemory;
+    if (!Array.isArray(memoryData.projects[state.rootPath].timeline)) {
+        memoryData.projects[state.rootPath].timeline = [];
+    }
+    saveMemoryData(memoryData);
+
+    try {
+        syncProjectArtifacts(restoredProject);
+        syncMemoryArtifacts(restoredProject, restoredMemory);
+    } catch (e: any) {
+        outputChannel?.appendLine(`WAM checkout artifact sync failed: ${e?.message ?? String(e)}`);
+    }
+    sidebarProvider?.postMessage({ type: 'tracker', data: buildTrackerSnapshot(restoredProject) });
+    refreshOpenPanels(restoredProject);
+
+    // Update HEAD to reflect the restored working state (clean).
+    const nextDigest = computeProjectWamDigest(restoredProject, restoredMemory);
+    let nextRef: string | undefined;
+    const raw = targetSpec.replace(/\\/g, '/');
+    if (raw.startsWith('refs/heads/')) nextRef = raw;
+    else if (isValidWamRefName(raw) && readWamRef(state.wamDir, `refs/heads/${raw}`)) nextRef = `refs/heads/${raw}`;
+    else nextRef = undefined; // detached for tags/hashes
+    writeWamHead(state.wamDir, { head: resolvedHash, digest: nextDigest, updatedAt: nowIsoNano(), ref: nextRef });
+    if (nextRef) writeWamRef(state.wamDir, nextRef, resolvedHash);
+
+    const text = lang === 'en' ? `WAM(project) restored: ${resolvedHash}` : `WAM（项目）已恢复：${resolvedHash}`;
+    return { content: [{ type: 'text', text }] };
+}
+
+function statusRank(status: TrackerItemStatus): number {
+    if (status === 'done') return 3;
+    if (status === 'doing') return 2;
+    return 1;
+}
+
+function prdStatusRank(status: any): number {
+    if (status === 'approved') return 2;
+    return 1;
+}
+
+function mergePrdStatusThreeWay(
+    base: any,
+    ours: any,
+    theirs: any,
+    oursUpdatedAt: string | undefined,
+    theirsUpdatedAt: string | undefined,
+    conflicts: string[]
+): 'draft' | 'approved' {
+    const b = base === 'approved' ? 'approved' : 'draft';
+    const o = ours === 'approved' ? 'approved' : 'draft';
+    const t = theirs === 'approved' ? 'approved' : 'draft';
+    if (o === t) return o;
+    if (o === b) return t;
+    if (t === b) return o;
+    conflicts.push('prd.status');
+    if (prdStatusRank(o) !== prdStatusRank(t)) return prdStatusRank(o) > prdStatusRank(t) ? o : t;
+    return chooseNewerIso(o, oursUpdatedAt, t, theirsUpdatedAt);
+}
+
+function normalizeTrackerForMerge(project: any, rootPath: string, projectId?: string): ProjectTracker {
+    const lang = getUiLanguage();
+    const data: TrackerData = { schemaVersion: 1, projects: {} as any };
+    data.projects[rootPath] = (project && typeof project === 'object') ? project : ({} as any);
+    const normalized = ensureProjectTracker(data, rootPath, lang);
+    if (projectId) normalized.projectId = projectId;
+    return JSON.parse(JSON.stringify(normalized));
+}
+
+function normalizeMemoryForMerge(store: any): ProjectMemoryStore {
+    const base: ProjectMemoryStore = { memories: {}, timeline: [] };
+    if (!store || typeof store !== 'object') return base;
+    const memories = store.memories && typeof store.memories === 'object' ? store.memories : {};
+    base.memories = JSON.parse(JSON.stringify(memories));
+    if (Array.isArray(store.timeline)) base.timeline = JSON.parse(JSON.stringify(store.timeline));
+    return base;
+}
+
+function mergeProjectTrackerThreeWay(
+    base: ProjectTracker,
+    ours: ProjectTracker,
+    theirs: ProjectTracker,
+    rootPath: string,
+    conflicts: string[]
+): ProjectTracker {
+    const merged: ProjectTracker = JSON.parse(JSON.stringify(ours));
+    merged.rootPath = rootPath;
+    merged.projectId = ours.projectId;
+    merged.name = ours.name || theirs.name || getProjectNameFromPath(rootPath);
+
+    merged.overview = merged.overview || { content: '', updatedAt: nowIso() };
+    merged.overview.content = threeWayMergeString(
+        'overview.content',
+        String(base.overview?.content || ''),
+        String(ours.overview?.content || ''),
+        String(theirs.overview?.content || ''),
+        ours.overview?.updatedAt,
+        theirs.overview?.updatedAt,
+        conflicts
+    );
+    merged.overview.updatedAt = nowIso();
+
+    const basePrd = base.prd || ({} as any);
+    const ourPrd = ours.prd || ({} as any);
+    const theirPrd = theirs.prd || ({} as any);
+    merged.prd = merged.prd || { content: '', status: 'draft' };
+    merged.prd.status = mergePrdStatusThreeWay(basePrd.status, ourPrd.status, theirPrd.status, ourPrd.updatedAt, theirPrd.updatedAt, conflicts);
+    merged.prd.content = threeWayMergeString(
+        'prd.content',
+        String(basePrd.content || ''),
+        String(ourPrd.content || ''),
+        String(theirPrd.content || ''),
+        ourPrd.updatedAt,
+        theirPrd.updatedAt,
+        conflicts
+    );
+    merged.prd.reviewNote = threeWayMergeString(
+        'prd.reviewNote',
+        String(basePrd.reviewNote || ''),
+        String(ourPrd.reviewNote || ''),
+        String(theirPrd.reviewNote || ''),
+        ourPrd.reviewedAt,
+        theirPrd.reviewedAt,
+        conflicts
+    );
+    merged.prd.approvedBy = threeWayMergeString(
+        'prd.approvedBy',
+        String(basePrd.approvedBy || ''),
+        String(ourPrd.approvedBy || ''),
+        String(theirPrd.approvedBy || ''),
+        ourPrd.approvedAt,
+        theirPrd.approvedAt,
+        conflicts
+    );
+    merged.prd.approvedAt = threeWayMergeString(
+        'prd.approvedAt',
+        String(basePrd.approvedAt || ''),
+        String(ourPrd.approvedAt || ''),
+        String(theirPrd.approvedAt || ''),
+        ourPrd.approvedAt,
+        theirPrd.approvedAt,
+        conflicts
+    );
+    merged.prd.updatedAt = nowIso();
+    merged.prd.reviewedAt = threeWayMergeString(
+        'prd.reviewedAt',
+        String(basePrd.reviewedAt || ''),
+        String(ourPrd.reviewedAt || ''),
+        String(theirPrd.reviewedAt || ''),
+        ourPrd.reviewedAt,
+        theirPrd.reviewedAt,
+        conflicts
+    );
+    merged.prd.generatedBy = ourPrd.generatedBy || theirPrd.generatedBy;
+
+    merged.plan = merged.plan || { summary: '', items: [] };
+    merged.plan.summary = threeWayMergeString(
+        'plan.summary',
+        String(base.plan?.summary || ''),
+        String(ours.plan?.summary || ''),
+        String(theirs.plan?.summary || ''),
+        ours.updatedAt,
+        theirs.updatedAt,
+        conflicts
+    );
+    merged.plan.items = threeWayMergePlanItems(base.plan?.items || [], ours.plan?.items || [], theirs.plan?.items || [], conflicts);
+
+    merged.walkthrough = merged.walkthrough || { content: '' };
+    merged.walkthrough.content = threeWayMergeString(
+        'walkthrough.content',
+        String(base.walkthrough?.content || ''),
+        String(ours.walkthrough?.content || ''),
+        String(theirs.walkthrough?.content || ''),
+        ours.walkthrough?.updatedAt,
+        theirs.walkthrough?.updatedAt,
+        conflicts
+    );
+    merged.walkthrough.updatedAt = nowIso();
+
+    merged.stats = normalizeTrackerStats({
+        prdUpdates: Math.max(base.stats?.prdUpdates || 0, ours.stats?.prdUpdates || 0, theirs.stats?.prdUpdates || 0),
+        prdApprovals: Math.max(base.stats?.prdApprovals || 0, ours.stats?.prdApprovals || 0, theirs.stats?.prdApprovals || 0),
+        overviewUpdates: Math.max(base.stats?.overviewUpdates || 0, ours.stats?.overviewUpdates || 0, theirs.stats?.overviewUpdates || 0),
+        planUpdates: Math.max(base.stats?.planUpdates || 0, ours.stats?.planUpdates || 0, theirs.stats?.planUpdates || 0),
+        walkthroughUpdates: Math.max(base.stats?.walkthroughUpdates || 0, ours.stats?.walkthroughUpdates || 0, theirs.stats?.walkthroughUpdates || 0),
+        updatedAt: nowIso()
+    });
+
+    merged.updatedAt = nowIso();
+    return merged;
+}
+
+function chooseNewerIso<T>(a: T, aIso: string | undefined, b: T, bIso: string | undefined): T {
+    const aTs = Date.parse(aIso || '');
+    const bTs = Date.parse(bIso || '');
+    if (Number.isFinite(aTs) && Number.isFinite(bTs)) {
+        return bTs > aTs ? b : a;
+    }
+    // Fall back to "a wins" if timestamps are missing/unparseable.
+    return a;
+}
+
+function getWamCommit(dir: string, hash: string): WamCommit | null {
+    return readWamCommit(dir, hash);
+}
+
+function listCommitParents(dir: string, hash: string): string[] {
+    const commit = getWamCommit(dir, hash);
+    const parents = Array.isArray(commit?.parents) ? commit!.parents : [];
+    return parents.filter(Boolean);
+}
+
+function collectAncestorDepths(dir: string, start: string, maxNodes = 5000): Map<string, number> {
+    const depths = new Map<string, number>();
+    const queue: Array<{ hash: string; depth: number }> = [];
+    const root = String(start || '').trim();
+    if (!root) return depths;
+    queue.push({ hash: root, depth: 0 });
+    while (queue.length > 0 && depths.size < maxNodes) {
+        const { hash, depth } = queue.shift()!;
+        if (!hash || depths.has(hash)) continue;
+        depths.set(hash, depth);
+        for (const parent of listCommitParents(dir, hash)) {
+            if (!depths.has(parent)) queue.push({ hash: parent, depth: depth + 1 });
+        }
+    }
+    return depths;
+}
+
+function findMergeBase(dir: string, a: string, b: string): string {
+    const aMap = collectAncestorDepths(dir, a);
+    const bMap = collectAncestorDepths(dir, b);
+    let best = '';
+    let bestScore = Number.POSITIVE_INFINITY;
+    let bestTime = '';
+    for (const [hash, da] of aMap.entries()) {
+        const db = bMap.get(hash);
+        if (db === undefined) continue;
+        const score = da + db;
+        const createdAt = getWamCommit(dir, hash)?.createdAt || '';
+        if (score < bestScore) {
+            best = hash;
+            bestScore = score;
+            bestTime = createdAt;
+            continue;
+        }
+        if (score === bestScore && createdAt && createdAt > bestTime) {
+            best = hash;
+            bestTime = createdAt;
+        }
+    }
+    return best;
+}
+
+function threeWayMergeString(
+    field: string,
+    base: string,
+    ours: string,
+    theirs: string,
+    oursUpdatedAt: string | undefined,
+    theirsUpdatedAt: string | undefined,
+    conflicts: string[]
+): string {
+    if (ours === theirs) return ours;
+    if (ours === base) return theirs;
+    if (theirs === base) return ours;
+    conflicts.push(field);
+    const chosen = chooseNewerIso(ours, oursUpdatedAt, theirs, theirsUpdatedAt);
+    return chosen;
+}
+
+function normalizeItemForCompare(it: any): { text: string; status: TrackerItemStatus; updatedAt: string } | null {
+    if (!it) return null;
+    const text = String(it.text || '').trim();
+    if (!text) return null;
+    const status: TrackerItemStatus = it.status === 'doing' || it.status === 'done' ? it.status : 'todo';
+    const updatedAt = typeof it.updatedAt === 'string' ? it.updatedAt : '';
+    return { text, status, updatedAt };
+}
+
+function threeWayMergePlanItems(
+    baseItems: TrackerItem[],
+    ourItems: TrackerItem[],
+    theirItems: TrackerItem[],
+    conflicts: string[]
+): TrackerItem[] {
+    const toMap = (items: TrackerItem[]) => {
+        const map = new Map<string, { text: string; status: TrackerItemStatus; updatedAt: string; raw: TrackerItem }>();
+        for (const raw of items || []) {
+            const normalized = normalizeItemForCompare(raw);
+            if (!normalized) continue;
+            const key = normalized.text.toLowerCase();
+            map.set(key, { ...normalized, raw });
+        }
+        return map;
+    };
+    const base = toMap(baseItems);
+    const ours = toMap(ourItems);
+    const theirs = toMap(theirItems);
+    const keys = new Set<string>([...base.keys(), ...ours.keys(), ...theirs.keys()]);
+    const out: TrackerItem[] = [];
+    for (const key of Array.from(keys).sort()) {
+        const b = base.get(key);
+        const o = ours.get(key);
+        const t = theirs.get(key);
+        if (!o && !t) continue;
+        if (!b) {
+            if (o && !t) {
+                out.push(o.raw);
+                continue;
+            }
+            if (!o && t) {
+                out.push(t.raw);
+                continue;
+            }
+            if (o && t) {
+                if (o.status === t.status) {
+                    out.push(chooseNewerIso(o.raw, o.updatedAt, t.raw, t.updatedAt));
+                } else {
+                    conflicts.push(`plan.item:${o.text}`);
+                    const better = statusRank(o.status) >= statusRank(t.status) ? o : t;
+                    const newer = chooseNewerIso(o, o.updatedAt, t, t.updatedAt);
+                    out.push({ ...newer.raw, status: better.status, updatedAt: newer.updatedAt || nowIso(), id: newer.raw.id || createProjectId() });
+                }
+                continue;
+            }
+        } else {
+            const baseStatus = b.status;
+            const baseText = b.text;
+            const oEq = !!o && o.status === baseStatus && o.text === baseText;
+            const tEq = !!t && t.status === baseStatus && t.text === baseText;
+            if (oEq && t) {
+                out.push(t.raw);
+                continue;
+            }
+            if (tEq && o) {
+                out.push(o.raw);
+                continue;
+            }
+            if (o && t) {
+                if (o.status === t.status) {
+                    out.push(chooseNewerIso(o.raw, o.updatedAt, t.raw, t.updatedAt));
+                } else {
+                    conflicts.push(`plan.item:${o.text}`);
+                    const better = statusRank(o.status) >= statusRank(t.status) ? o : t;
+                    const newer = chooseNewerIso(o, o.updatedAt, t, t.updatedAt);
+                    out.push({ ...newer.raw, status: better.status, updatedAt: newer.updatedAt || nowIso(), id: newer.raw.id || createProjectId() });
+                }
+                continue;
+            }
+            if (o && !t) {
+                out.push(o.raw);
+                continue;
+            }
+            if (!o && t) {
+                out.push(t.raw);
+                continue;
+            }
+        }
+    }
+    // Keep order: done -> doing -> todo, then text.
+    out.sort((a, b) => {
+        const ra = statusRank(a.status);
+        const rb = statusRank(b.status);
+        if (ra !== rb) return rb - ra;
+        return String(a.text || '').localeCompare(String(b.text || ''));
+    });
+    return out;
+}
+
+function threeWayMergeMemory(
+    base: ProjectMemoryStore,
+    ours: ProjectMemoryStore,
+    theirs: ProjectMemoryStore,
+    conflicts: string[]
+): ProjectMemoryStore {
+    const out: ProjectMemoryStore = { memories: {}, timeline: [] };
+    const bMem = base?.memories || {};
+    const oMem = ours?.memories || {};
+    const tMem = theirs?.memories || {};
+    const keys = new Set<string>([...Object.keys(bMem), ...Object.keys(oMem), ...Object.keys(tMem)]);
+    for (const key of Array.from(keys).sort()) {
+        const b = (bMem as any)[key];
+        const o = (oMem as any)[key];
+        const t = (tMem as any)[key];
+        if (!o && !t) continue;
+        if (!b) {
+            if (o && !t) out.memories[key] = o;
+            else if (!o && t) out.memories[key] = t;
+            else if (o && t) {
+                if (o.content === t.content && o.kind === t.kind) out.memories[key] = chooseNewerIso(o, o.updatedAt, t, t.updatedAt);
+                else {
+                    conflicts.push(`memory:${key}`);
+                    out.memories[key] = chooseNewerIso(o, o.updatedAt, t, t.updatedAt);
+                }
+            }
+            continue;
+        }
+        const bSig = `${b.kind || ''}|${b.content || ''}`;
+        const oSig = o ? `${o.kind || ''}|${o.content || ''}` : '';
+        const tSig = t ? `${t.kind || ''}|${t.content || ''}` : '';
+        if (o && t) {
+            if (oSig == tSig) out.memories[key] = chooseNewerIso(o, o.updatedAt, t, t.updatedAt);
+            else if (oSig == bSig) out.memories[key] = t;
+            else if (tSig == bSig) out.memories[key] = o;
+            else {
+                conflicts.push(`memory:${key}`);
+                out.memories[key] = chooseNewerIso(o, o.updatedAt, t, t.updatedAt);
+            }
+        } else if (o && !t) {
+            out.memories[key] = o;
+        } else if (!o && t) {
+            out.memories[key] = t;
+        }
+    }
+    out.timeline = Array.isArray(ours.timeline) ? [...ours.timeline] : [];
+    if (Array.isArray(theirs.timeline)) out.timeline.push(...theirs.timeline);
+    out.timeline = out.timeline
+        .filter((e) => e && typeof e === 'object')
+        .sort((a: any, b: any) => String(b.at || '').localeCompare(String(a.at || '')))
+        .slice(0, 800);
+    return out;
+}
+
+function mergeProjectTrackerState(current: ProjectTracker, other: ProjectTracker, rootPath: string): ProjectTracker {
+    const merged: ProjectTracker = JSON.parse(JSON.stringify(current));
+    merged.rootPath = rootPath;
+    merged.name = current.name || other.name || getProjectNameFromPath(rootPath);
+
+    merged.overview = chooseNewerIso(current.overview, current.overview?.updatedAt, other.overview, other.overview?.updatedAt);
+    merged.prd = chooseNewerIso(current.prd, current.prd?.updatedAt, other.prd, other.prd?.updatedAt);
+    merged.walkthrough = chooseNewerIso(current.walkthrough, current.walkthrough?.updatedAt, other.walkthrough, other.walkthrough?.updatedAt);
+
+    // Plan: merge summary by newest; items merged by normalized text + best status/newest.
+    merged.plan.summary = chooseNewerIso(current.plan.summary, current.updatedAt, other.plan.summary, other.updatedAt);
+    const byKey = new Map<string, TrackerItem>();
+    const add = (it: any) => {
+        if (!it || typeof it !== 'object') return;
+        const text = String(it.text || '').trim();
+        if (!text) return;
+        const key = text.toLowerCase();
+        const existing = byKey.get(key);
+        const normalized: TrackerItem = {
+            id: typeof it.id === 'string' ? it.id : createProjectId(),
+            text,
+            status: it.status === 'doing' || it.status === 'done' ? it.status : 'todo',
+            updatedAt: typeof it.updatedAt === 'string' ? it.updatedAt : nowIso()
+        };
+        if (!existing) {
+            byKey.set(key, normalized);
+            return;
+        }
+        const betterStatus = statusRank(normalized.status) > statusRank(existing.status) ? normalized.status : existing.status;
+        const newer = chooseNewerIso(existing, existing.updatedAt, normalized, normalized.updatedAt);
+        byKey.set(key, { ...newer, status: betterStatus });
+    };
+    for (const it of current.plan.items || []) add(it);
+    for (const it of other.plan.items || []) add(it);
+    merged.plan.items = Array.from(byKey.values()).sort((a, b) => statusRank(b.status) - statusRank(a.status));
+
+    // Stats: take max to keep monotonic.
+    merged.stats = normalizeTrackerStats({
+        prdUpdates: Math.max(current.stats?.prdUpdates || 0, other.stats?.prdUpdates || 0),
+        prdApprovals: Math.max(current.stats?.prdApprovals || 0, other.stats?.prdApprovals || 0),
+        overviewUpdates: Math.max(current.stats?.overviewUpdates || 0, other.stats?.overviewUpdates || 0),
+        planUpdates: Math.max(current.stats?.planUpdates || 0, other.stats?.planUpdates || 0),
+        walkthroughUpdates: Math.max(current.stats?.walkthroughUpdates || 0, other.stats?.walkthroughUpdates || 0),
+        updatedAt: nowIso()
+    });
+    merged.updatedAt = nowIso();
+    return merged;
+}
+
+function mergeProjectMemoryState(current: ProjectMemoryStore, other: ProjectMemoryStore): ProjectMemoryStore {
+    const merged: ProjectMemoryStore = { memories: {}, timeline: [] };
+    const allKeys = new Set<string>([...Object.keys(current.memories || {}), ...Object.keys(other.memories || {})]);
+    for (const key of allKeys) {
+        const a = current.memories?.[key];
+        const b = other.memories?.[key];
+        if (!a && b) merged.memories[key] = b;
+        else if (a && !b) merged.memories[key] = a;
+        else if (a && b) {
+            const chosen = chooseNewerIso(a, a.updatedAt, b, b.updatedAt);
+            const tags = Array.from(new Set([...(a.tags || []), ...(b.tags || [])]));
+            const links = Array.from(new Set([...(a.links || []), ...(b.links || [])]));
+            merged.memories[key] = { ...chosen, tags, links };
+        }
+    }
+    merged.timeline = Array.isArray(current.timeline) ? [...current.timeline] : [];
+    if (Array.isArray(other.timeline)) {
+        merged.timeline.push(...other.timeline);
+    }
+    merged.timeline = merged.timeline
+        .filter((e) => e && typeof e === 'object')
+        .sort((a: any, b: any) => String(b.at || '').localeCompare(String(a.at || '')))
+        .slice(0, 800);
+    return merged;
+}
+
+async function handleWamMerge(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const otherSpec = typeof args?.otherHash === 'string' ? args.otherHash.trim() : '';
+    const message = typeof args?.message === 'string' ? args.message.trim() : '';
+    if (!otherSpec || !message) {
+        throw new Error(lang === 'en' ? 'wam_merge requires otherHash and message.' : 'wam_merge 需要 otherHash 和 message。');
+    }
+    const author: 'auto' | 'ai' | 'user' = args?.author === 'ai' || args?.author === 'user' ? args.author : 'auto';
+    const rootPath = typeof args?.rootPath === 'string' ? args.rootPath : undefined;
+    const state = buildCurrentProjectWamState(rootPath);
+    if (!state.wamDir) {
+        const text = lang === 'en' ? 'WAM(project): no history directory found yet.' : 'WAM（项目）：尚未找到历史目录。';
+        return { content: [{ type: 'text', text }] };
+    }
+
+    ensureWamRepoLayout(state.wamDir);
+    const oursHeadInfo = resolveWamHeadHash(state.wamDir);
+    const oursHash = oursHeadInfo.hash;
+    if (!oursHash) {
+        const text =
+            lang === 'en'
+                ? 'WAM(project): no HEAD commit yet. Call wam_commit(message) first.'
+                : 'WAM（项目）：尚无 HEAD 提交，请先调用 wam_commit(message)。';
+        return { content: [{ type: 'text', text }] };
+    }
+
+    const theirsHash = resolveWamHashFromSpecifier(state.wamDir, otherSpec);
+    const otherCommit = readWamCommit(state.wamDir, theirsHash);
+    const otherTrackerSnap = readWamSnapshot(state.wamDir, theirsHash, 'tracker');
+    const otherMemorySnap = readWamSnapshot(state.wamDir, theirsHash, 'memory');
+    if (!theirsHash || !otherCommit || !otherTrackerSnap?.tracker || !otherMemorySnap?.memory) {
+        const text =
+            lang === 'en'
+                ? `WAM(project): other commit not found or missing snapshot: ${otherSpec}`
+                : `WAM（项目）：未找到另一提交或快照缺失：${otherSpec}`;
+        return { content: [{ type: 'text', text }] };
+    }
+
+    const snapRoot = String(otherTrackerSnap.rootPath || '');
+    if (snapRoot && normalizePathForCompare(snapRoot) !== normalizePathForCompare(state.rootPath)) {
+        const text =
+            lang === 'en'
+                ? `Refusing to merge: other commit rootPath differs (other=${snapRoot}, current=${state.rootPath})`
+                : `拒绝合并：另一提交 rootPath 不匹配（other=${snapRoot}，current=${state.rootPath}）`;
+        return { content: [{ type: 'text', text }] };
+    }
+
+    const baseHash = findMergeBase(state.wamDir, oursHash, theirsHash);
+    const baseTrackerSnap = baseHash ? readWamSnapshot(state.wamDir, baseHash, 'tracker') : null;
+    const baseMemorySnap = baseHash ? readWamSnapshot(state.wamDir, baseHash, 'memory') : null;
+
+    const conflicts: string[] = [];
+    const baseTracker = normalizeTrackerForMerge(baseTrackerSnap?.tracker || {}, state.rootPath, state.projectId);
+    const oursTracker = normalizeTrackerForMerge(state.project, state.rootPath, state.projectId);
+    const theirsTracker = normalizeTrackerForMerge(otherTrackerSnap.tracker, state.rootPath, state.projectId);
+    const mergedProject = mergeProjectTrackerThreeWay(baseTracker, oursTracker, theirsTracker, state.rootPath, conflicts);
+
+    const baseMemory = normalizeMemoryForMerge(baseMemorySnap?.memory);
+    const oursMemory = normalizeMemoryForMerge(state.memoryProject);
+    const theirsMemory = normalizeMemoryForMerge(otherMemorySnap.memory);
+    const mergedMemory = threeWayMergeMemory(baseMemory, oursMemory, theirsMemory, conflicts);
+
+    const trackerData = loadTrackerData();
+    trackerData.projects[state.rootPath] = mergedProject;
+    trackerData.activeProject = state.rootPath;
+    saveTrackerData(trackerData);
+    const memoryData = loadMemoryData();
+    memoryData.projects[state.rootPath] = mergedMemory;
+    saveMemoryData(memoryData);
+
+    try {
+        syncProjectArtifacts(mergedProject);
+        syncMemoryArtifacts(mergedProject, mergedMemory);
+    } catch (e: any) {
+        outputChannel?.appendLine(`WAM merge artifact sync failed: ${e?.message ?? String(e)}`);
+    }
+    sidebarProvider?.postMessage({ type: 'tracker', data: buildTrackerSnapshot(mergedProject) });
+    refreshOpenPanels(mergedProject);
+
+    try {
+        appendWalkthroughEntry(
+            mergedProject,
+            lang === 'en'
+                ? `Merged WAM commit ${theirsHash.slice(0, 10)} (base=${baseHash ? baseHash.slice(0, 10) : 'none'})${conflicts.length ? ` with conflicts: ${conflicts.join(', ')}` : '.'}`
+                : `已合并 WAM 提交 ${theirsHash.slice(0, 10)}（base=${baseHash ? baseHash.slice(0, 10) : '无'}）${conflicts.length ? `，存在冲突：${conflicts.join('，')}` : '。'}`,
+            lang
+        );
+    } catch {
+        // ignore
+    }
+
+    const commitResult = commitProjectWam(message, author, state.rootPath, [oursHash, theirsHash], { conflicts });
+
+    const text =
+        lang === 'en'
+            ? `WAM(project) merged ${theirsHash} (base=${baseHash || 'none'}) → new commit ${commitResult.hash || '(none)'}${conflicts.length ? ` (conflicts: ${conflicts.length})` : ''}`
+            : `WAM（项目）已合并 ${theirsHash}（base=${baseHash || '无'}）→ 新提交 ${commitResult.hash || '（无）'}${conflicts.length ? `（冲突：${conflicts.length}）` : ''}`;
+    return { content: [{ type: 'text', text }] };
+}
+
+type WamStashEntry = {
+    id: string;
+    createdAt: string;
+    message: string;
+    scope: 'project' | 'global';
+    projectId?: string;
+    rootPath?: string;
+    baseHead?: string;
+    baseRef?: string;
+    digest: string;
+    snapshots: Record<string, any>;
+};
+
+function normalizeWamSpec(value: any, fallback: string): string {
+    const raw = typeof value === 'string' ? value.trim() : '';
+    return raw || fallback;
+}
+
+function isWorkingSpec(spec: string): boolean {
+    const s = String(spec || '').trim().toLowerCase();
+    return s === 'working' || s === 'worktree' || s === 'work' || s === 'current';
+}
+
+function resolveWamDirForScope(
+    scope: 'project' | 'global',
+    rootPathOverride?: string
+): { dir: string; rootPath?: string; projectId?: string } | null {
+    if (scope === 'global') {
+        const dir = resolveGlobalWamDir();
+        if (!dir) return null;
+        ensureWamRepoLayout(dir);
+        return { dir };
+    }
+    const state = buildCurrentProjectWamState(rootPathOverride);
+    if (!state.wamDir) return null;
+    ensureWamRepoLayout(state.wamDir);
+    return { dir: state.wamDir, rootPath: state.rootPath, projectId: state.projectId };
+}
+
+function readWamStash(dir: string, id: string): WamStashEntry | null {
+    if (!id) return null;
+    return readJsonFileSafe<WamStashEntry>(path.join(dir, WAM_STASH_DIR, `${id}.json`));
+}
+
+function listWamStashes(dir: string): WamStashEntry[] {
+    try {
+        const stashDir = path.join(dir, WAM_STASH_DIR);
+        if (!fs.existsSync(stashDir)) return [];
+        const entries = fs.readdirSync(stashDir).filter((n) => n.endsWith('.json'));
+        const stashes: WamStashEntry[] = [];
+        for (const entry of entries) {
+            const stash = readJsonFileSafe<WamStashEntry>(path.join(stashDir, entry));
+            if (stash?.id) stashes.push(stash);
+        }
+        stashes.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+        return stashes;
+    } catch {
+        return [];
+    }
+}
+
+async function handleWamBranch(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const scope = parseWamScope(args);
+    const action = args?.action === 'create' || args?.action === 'delete' ? args.action : 'list';
+    const name = typeof args?.name === 'string' ? args.name.trim() : '';
+    const startPoint = typeof args?.startPoint === 'string' ? args.startPoint.trim() : '';
+    const force = args?.force === true;
+    const rootPath = typeof args?.rootPath === 'string' ? args.rootPath : undefined;
+
+    const resolved = resolveWamDirForScope(scope, rootPath);
+    if (!resolved) {
+        const text = lang === 'en' ? 'WAM: no history directory found yet.' : 'WAM：尚未找到历史目录。';
+        return { content: [{ type: 'text', text }] };
+    }
+    const dir = resolved.dir;
+    const head = readWamHead(dir);
+    const currentBranch = currentWamBranchName(head);
+
+    if (action === 'list') {
+        const branches = listWamRefs(dir, 'heads');
+        const lines = branches.map((b) => `${b.name === currentBranch ? '*' : ' '} ${b.name}  ${String(b.hash || '').slice(0, 10) || '(none)'}`);
+        const text =
+            lang === 'en'
+                ? `WAM branches (${scope}):\n${lines.join('\n') || '(empty)'}`
+                : `WAM 分支（${scope === 'global' ? '全局' : '项目'}）：\n${lines.join('\n') || '（空）'}`;
+        return { content: [{ type: 'text', text }] };
+    }
+
+    if (!name || !isValidWamRefName(name)) {
+        throw new Error(lang === 'en' ? 'wam_branch requires a valid name.' : 'wam_branch 需要有效的 name。');
+    }
+    const ref = `refs/heads/${name}`;
+
+    if (action === 'create') {
+        const existing = readWamRef(dir, ref);
+        if (existing && !force) {
+            throw new Error(lang === 'en' ? `Branch already exists: ${name}` : `分支已存在：${name}`);
+        }
+        const target = startPoint ? resolveWamHashFromSpecifier(dir, startPoint) : resolveWamHeadHash(dir).hash;
+        if (!target || !readWamCommit(dir, target)) {
+            throw new Error(lang === 'en' ? `Invalid startPoint: ${startPoint || 'HEAD'}` : `无效起点：${startPoint || 'HEAD'}`);
+        }
+        writeWamRef(dir, ref, target);
+        const text = lang === 'en' ? `WAM branch created: ${name} -> ${target}` : `已创建分支：${name} -> ${target}`;
+        return { content: [{ type: 'text', text }] };
+    }
+
+    if (action === 'delete') {
+        if (name === currentBranch) {
+            throw new Error(lang === 'en' ? 'Refusing to delete the current branch.' : '拒绝删除当前分支。');
+        }
+        const ok = deleteWamRef(dir, ref);
+        const text = ok
+            ? (lang === 'en' ? `WAM branch deleted: ${name}` : `已删除分支：${name}`)
+            : (lang === 'en' ? `WAM branch not found: ${name}` : `未找到分支：${name}`);
+        return { content: [{ type: 'text', text }] };
+    }
+
+    return { content: [{ type: 'text', text: lang === 'en' ? 'Unknown branch action.' : '未知分支操作。' }] };
+}
+
+async function handleWamTag(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const scope = parseWamScope(args);
+    const action = args?.action === 'create' || args?.action === 'delete' ? args.action : 'list';
+    const name = typeof args?.name === 'string' ? args.name.trim() : '';
+    const targetSpec = typeof args?.target === 'string' ? args.target.trim() : '';
+    const force = args?.force === true;
+    const rootPath = typeof args?.rootPath === 'string' ? args.rootPath : undefined;
+
+    const resolved = resolveWamDirForScope(scope, rootPath);
+    if (!resolved) {
+        const text = lang === 'en' ? 'WAM: no history directory found yet.' : 'WAM：尚未找到历史目录。';
+        return { content: [{ type: 'text', text }] };
+    }
+    const dir = resolved.dir;
+
+    if (action === 'list') {
+        const tags = listWamRefs(dir, 'tags');
+        const lines = tags.map((t) => `${t.name}  ${String(t.hash || '').slice(0, 10) || '(none)'}`);
+        const text =
+            lang === 'en'
+                ? `WAM tags (${scope}):\n${lines.join('\n') || '(empty)'}`
+                : `WAM 标签（${scope === 'global' ? '全局' : '项目'}）：\n${lines.join('\n') || '（空）'}`;
+        return { content: [{ type: 'text', text }] };
+    }
+
+    if (!name || !isValidWamRefName(name)) {
+        throw new Error(lang === 'en' ? 'wam_tag requires a valid name.' : 'wam_tag 需要有效的 name。');
+    }
+    const ref = `refs/tags/${name}`;
+
+    if (action === 'create') {
+        const existing = readWamRef(dir, ref);
+        if (existing && !force) {
+            throw new Error(lang === 'en' ? `Tag already exists: ${name}` : `标签已存在：${name}`);
+        }
+        const target = resolveWamHashFromSpecifier(dir, targetSpec || 'HEAD');
+        if (!target || !readWamCommit(dir, target)) {
+            throw new Error(lang === 'en' ? `Invalid target: ${targetSpec || 'HEAD'}` : `无效目标：${targetSpec || 'HEAD'}`);
+        }
+        writeWamRef(dir, ref, target);
+        const text = lang === 'en' ? `WAM tag created: ${name} -> ${target}` : `已创建标签：${name} -> ${target}`;
+        return { content: [{ type: 'text', text }] };
+    }
+
+    if (action === 'delete') {
+        const ok = deleteWamRef(dir, ref);
+        const text = ok
+            ? (lang === 'en' ? `WAM tag deleted: ${name}` : `已删除标签：${name}`)
+            : (lang === 'en' ? `WAM tag not found: ${name}` : `未找到标签：${name}`);
+        return { content: [{ type: 'text', text }] };
+    }
+
+    return { content: [{ type: 'text', text: lang === 'en' ? 'Unknown tag action.' : '未知标签操作。' }] };
+}
+
+function diffPlanItems(a: TrackerItem[], b: TrackerItem[]) {
+    const toMap = (items: TrackerItem[]) => {
+        const m = new Map<string, TrackerItem>();
+        for (const it of items || []) {
+            if (!it) continue;
+            const text = String(it.text || '').trim();
+            if (!text) continue;
+            m.set(text.toLowerCase(), it);
+        }
+        return m;
+    };
+    const am = toMap(a);
+    const bm = toMap(b);
+    const keys = new Set<string>([...am.keys(), ...bm.keys()]);
+    const added: string[] = [];
+    const removed: string[] = [];
+    const changed: Array<{ text: string; from: string; to: string }> = [];
+    for (const key of Array.from(keys).sort()) {
+        const ai = am.get(key);
+        const bi = bm.get(key);
+        if (!ai && bi) added.push(bi.text);
+        else if (ai && !bi) removed.push(ai.text);
+        else if (ai && bi) {
+            const as = ai.status || 'todo';
+            const bs = bi.status || 'todo';
+            if (as !== bs) changed.push({ text: bi.text, from: as, to: bs });
+        }
+    }
+    return { added, removed, changed };
+}
+
+function diffMemoryKeys(a: ProjectMemoryStore, b: ProjectMemoryStore) {
+    const aMem = a?.memories || {};
+    const bMem = b?.memories || {};
+    const keys = new Set<string>([...Object.keys(aMem), ...Object.keys(bMem)]);
+    const added: string[] = [];
+    const removed: string[] = [];
+    const changed: string[] = [];
+    for (const key of Array.from(keys).sort()) {
+        const av: any = (aMem as any)[key];
+        const bv: any = (bMem as any)[key];
+        if (!av && bv) added.push(key);
+        else if (av && !bv) removed.push(key);
+        else if (av && bv) {
+            const aSig = `${av.kind || ''}|${av.content || ''}|${av.updatedAt || ''}`;
+            const bSig = `${bv.kind || ''}|${bv.content || ''}|${bv.updatedAt || ''}`;
+            if (aSig !== bSig) changed.push(key);
+        }
+    }
+    return { added, removed, changed };
+}
+
+async function handleWamDiff(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const scope = parseWamScope(args);
+    const rootPath = typeof args?.rootPath === 'string' ? args.rootPath : undefined;
+    const aSpec = normalizeWamSpec(args?.a, 'HEAD');
+    const bSpec = normalizeWamSpec(args?.b, 'WORKING');
+
+    if (scope === 'global') {
+        const dir = resolveGlobalWamDir();
+        if (!dir) {
+            const text = lang === 'en' ? 'WAM(global): no history directory found yet.' : 'WAM（全局）：尚未找到历史目录。';
+            return { content: [{ type: 'text', text }] };
+        }
+        ensureWamRepoLayout(dir);
+        const current = loadGlobalMemoryData();
+        const resolveGlobal = (spec: string) => {
+            if (isWorkingSpec(spec)) return { label: 'WORKING', globalMemory: current };
+            const hash = resolveWamHashFromSpecifier(dir, spec);
+            const snap = readWamSnapshot(dir, hash, 'global_memory');
+            return { label: hash || spec, globalMemory: snap?.globalMemory || { schemaVersion: 1, memories: {}, timeline: [] } };
+        };
+        const left = resolveGlobal(aSpec);
+        const right = resolveGlobal(bSpec);
+        const diff = diffMemoryKeys(normalizeMemoryForMerge({ memories: left.globalMemory.memories, timeline: left.globalMemory.timeline }), normalizeMemoryForMerge({ memories: right.globalMemory.memories, timeline: right.globalMemory.timeline }));
+        const text = lang === 'en' ? `WAM diff (global): ${left.label} -> ${right.label}` : `WAM 对比（全局）：${left.label} -> ${right.label}`;
+        return { content: [{ type: 'text', text }, { type: 'text', text: `WAM_DIFF_JSON:\n${JSON.stringify({ scope, a: left.label, b: right.label, memory: diff }, null, 2)}` }] };
+    }
+
+    const state = buildCurrentProjectWamState(rootPath);
+    if (!state.wamDir) {
+        const text = lang === 'en' ? 'WAM(project): no history directory found yet.' : 'WAM（项目）：尚未找到历史目录。';
+        return { content: [{ type: 'text', text }] };
+    }
+    ensureWamRepoLayout(state.wamDir);
+
+    const resolveProject = (spec: string) => {
+        if (isWorkingSpec(spec)) return { label: 'WORKING', tracker: state.project, memory: state.memoryProject };
+        const hash = resolveWamHashFromSpecifier(state.wamDir!, spec);
+        const t = readWamSnapshot(state.wamDir!, hash, 'tracker');
+        const m = readWamSnapshot(state.wamDir!, hash, 'memory');
+        return { label: hash || spec, tracker: t?.tracker || {}, memory: m?.memory || { memories: {}, timeline: [] } };
+    };
+    const left = resolveProject(aSpec);
+    const right = resolveProject(bSpec);
+
+    const trackerDiff = {
+        overviewChanged: String(left.tracker?.overview?.content || '') !== String(right.tracker?.overview?.content || ''),
+        prdChanged: String(left.tracker?.prd?.content || '') !== String(right.tracker?.prd?.content || '') || String(left.tracker?.prd?.status || '') !== String(right.tracker?.prd?.status || ''),
+        planSummaryChanged: String(left.tracker?.plan?.summary || '') !== String(right.tracker?.plan?.summary || ''),
+        planItems: diffPlanItems(left.tracker?.plan?.items || [], right.tracker?.plan?.items || []),
+        walkthroughChanged: String(left.tracker?.walkthrough?.content || '') !== String(right.tracker?.walkthrough?.content || '')
+    };
+    const memoryDiff = diffMemoryKeys(normalizeMemoryForMerge(left.memory), normalizeMemoryForMerge(right.memory));
+
+    const text = lang === 'en' ? `WAM diff (project): ${left.label} -> ${right.label}` : `WAM 对比（项目）：${left.label} -> ${right.label}`;
+    return { content: [{ type: 'text', text }, { type: 'text', text: `WAM_DIFF_JSON:\n${JSON.stringify({ scope, a: left.label, b: right.label, tracker: trackerDiff, memory: memoryDiff }, null, 2)}` }] };
+}
+
+async function handleWamReset(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const scope = parseWamScope(args);
+    const mode = args?.mode === 'hard' ? 'hard' : 'hard';
+    const targetSpec = typeof args?.target === 'string' ? args.target.trim() : '';
+    if (!targetSpec) {
+        throw new Error(lang === 'en' ? 'wam_reset requires target.' : 'wam_reset 需要 target。');
+    }
+    if (mode !== 'hard') {
+        throw new Error(lang === 'en' ? 'Only hard reset is supported.' : '仅支持 hard 重置。');
+    }
+
+    if (scope === 'global') {
+        const dir = resolveGlobalWamDir();
+        if (!dir) {
+            const text = lang === 'en' ? 'WAM(global): no history directory found yet.' : 'WAM（全局）：尚未找到历史目录。';
+            return { content: [{ type: 'text', text }] };
+        }
+        ensureWamRepoLayout(dir);
+        const head = readWamHead(dir);
+        const currentRef = head?.ref?.startsWith('refs/heads/') ? head.ref : undefined;
+        const resolvedHash = resolveWamHashFromSpecifier(dir, targetSpec);
+        const commit = readWamCommit(dir, resolvedHash);
+        const snap = readWamSnapshot(dir, resolvedHash, 'global_memory');
+        if (!resolvedHash || !commit || !snap?.globalMemory) {
+            const text = lang === 'en' ? `WAM(global): commit not found: ${targetSpec}` : `WAM（全局）：未找到提交：${targetSpec}`;
+            return { content: [{ type: 'text', text }] };
+        }
+        saveGlobalMemoryData(snap.globalMemory);
+        const digest = computeGlobalWamDigest(snap.globalMemory);
+        writeWamHead(dir, { head: resolvedHash, digest, updatedAt: nowIsoNano(), ref: currentRef });
+        if (currentRef) writeWamRef(dir, currentRef, resolvedHash);
+        const text = lang === 'en' ? `WAM(global) reset --hard to ${resolvedHash}` : `WAM（全局）已 hard 重置到 ${resolvedHash}`;
+        return { content: [{ type: 'text', text }] };
+    }
+
+    const rootPath = typeof args?.rootPath === 'string' ? args.rootPath : undefined;
+    const state = buildCurrentProjectWamState(rootPath);
+    if (!state.wamDir) {
+        const text = lang === 'en' ? 'WAM(project): no history directory found yet.' : 'WAM（项目）：尚未找到历史目录。';
+        return { content: [{ type: 'text', text }] };
+    }
+    ensureWamRepoLayout(state.wamDir);
+    const head = readWamHead(state.wamDir);
+    const currentRef = head?.ref?.startsWith('refs/heads/') ? head.ref : undefined;
+    const resolvedHash = resolveWamHashFromSpecifier(state.wamDir, targetSpec);
+    const commit = readWamCommit(state.wamDir, resolvedHash);
+    const trackerSnap = readWamSnapshot(state.wamDir, resolvedHash, 'tracker');
+    const memorySnap = readWamSnapshot(state.wamDir, resolvedHash, 'memory');
+    if (!resolvedHash || !commit || !trackerSnap?.tracker || !memorySnap?.memory) {
+        const text = lang === 'en' ? `WAM(project): commit not found: ${targetSpec}` : `WAM（项目）：未找到提交：${targetSpec}`;
+        return { content: [{ type: 'text', text }] };
+    }
+    const snapRoot = String(trackerSnap.rootPath || '');
+    if (snapRoot && normalizePathForCompare(snapRoot) !== normalizePathForCompare(state.rootPath)) {
+        const text =
+            lang === 'en'
+                ? `Refusing to reset: commit rootPath differs (commit=${snapRoot}, current=${state.rootPath})`
+                : `拒绝重置：提交 rootPath 不匹配（commit=${snapRoot}，current=${state.rootPath}）`;
+        return { content: [{ type: 'text', text }] };
+    }
+
+    const trackerData = loadTrackerData();
+    trackerData.projects[state.rootPath] = trackerSnap.tracker;
+    trackerData.activeProject = state.rootPath;
+    saveTrackerData(trackerData);
+    const memoryData = loadMemoryData();
+    memoryData.projects[state.rootPath] = memorySnap.memory;
+    saveMemoryData(memoryData);
+
+    try {
+        appendWalkthroughEntry(trackerSnap.tracker, lang === 'en' ? `WAM reset --hard to ${resolvedHash.slice(0, 10)}.` : `WAM 已 hard 重置到 ${resolvedHash.slice(0, 10)}。`, lang);
+    } catch {
+        // ignore
+    }
+    try {
+        syncProjectArtifacts(trackerSnap.tracker);
+        syncMemoryArtifacts(trackerSnap.tracker, memorySnap.memory);
+    } catch (e: any) {
+        outputChannel?.appendLine(`WAM reset artifact sync failed: ${e?.message ?? String(e)}`);
+    }
+    sidebarProvider?.postMessage({ type: 'tracker', data: buildTrackerSnapshot(trackerSnap.tracker) });
+    refreshOpenPanels(trackerSnap.tracker);
+
+    const digest = computeProjectWamDigest(trackerSnap.tracker, memorySnap.memory);
+    writeWamHead(state.wamDir, { head: resolvedHash, digest, updatedAt: nowIsoNano(), ref: currentRef });
+    if (currentRef) writeWamRef(state.wamDir, currentRef, resolvedHash);
+
+    const text = lang === 'en' ? `WAM(project) reset --hard to ${resolvedHash}` : `WAM（项目）已 hard 重置到 ${resolvedHash}`;
+    return { content: [{ type: 'text', text }] };
+}
+
+async function handleWamStash(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const scope = parseWamScope(args);
+    const action = args?.action === 'push' || args?.action === 'apply' || args?.action === 'pop' || args?.action === 'drop' ? args.action : 'list';
+    const rootPath = typeof args?.rootPath === 'string' ? args.rootPath : undefined;
+    const resolved = resolveWamDirForScope(scope, rootPath);
+    if (!resolved) {
+        const text = lang === 'en' ? 'WAM: no history directory found yet.' : 'WAM：尚未找到历史目录。';
+        return { content: [{ type: 'text', text }] };
+    }
+    const dir = resolved.dir;
+    ensureWamRepoLayout(dir);
+
+    const headInfo = resolveWamHeadHash(dir);
+    const head = headInfo.head;
+    const headHash = headInfo.hash;
+    const currentRef = head?.ref?.startsWith('refs/heads/') ? head.ref : undefined;
+
+    const stashes = listWamStashes(dir);
+
+    const resolveLatestId = () => {
+        const provided = typeof args?.id === 'string' ? args.id.trim() : '';
+        if (provided) return provided;
+        return stashes[0]?.id || '';
+    };
+
+    if (action === 'list') {
+        const lines = stashes.map((s) => `${s.id.slice(0, 10)}  ${s.createdAt}  ${s.message || ''}`);
+        const text =
+            lang === 'en'
+                ? `WAM stash (${scope}):\n${lines.join('\n') || '(empty)'}`
+                : `WAM 暂存（${scope === 'global' ? '全局' : '项目'}）：\n${lines.join('\n') || '（空）'}`;
+        return { content: [{ type: 'text', text }] };
+    }
+
+    if (action === 'push') {
+        if (!headHash) {
+            const text = lang === 'en' ? 'WAM stash: no HEAD commit yet. Call wam_commit(message) first.' : 'WAM 暂存：尚无 HEAD 提交，请先调用 wam_commit(message)。';
+            return { content: [{ type: 'text', text }] };
+        }
+        const msg = typeof args?.message === 'string' ? args.message.trim() : '';
+        if (scope === 'global') {
+            const current = loadGlobalMemoryData();
+            const digest = computeGlobalWamDigest(current);
+            const createdAt = nowIsoNano();
+            const id = sha256Hex(`${createdAt}\n${msg}\n${digest}`);
+            const entry: WamStashEntry = {
+                id,
+                createdAt,
+                message: msg || 'stash',
+                scope,
+                baseHead: headHash,
+                baseRef: currentRef,
+                digest,
+                snapshots: { global_memory: { schemaVersion: 1, globalMemory: current } }
+            };
+            writeJsonFileSafe(path.join(dir, WAM_STASH_DIR, `${id}.json`), entry);
+            // Reset working to HEAD snapshot (clean).
+            const headSnap = readWamSnapshot(dir, headHash, 'global_memory');
+            if (headSnap?.globalMemory) {
+                saveGlobalMemoryData(headSnap.globalMemory);
+            }
+            const text = lang === 'en' ? `WAM stash pushed: ${id}` : `WAM 暂存已保存：${id}`;
+            return { content: [{ type: 'text', text }] };
+        }
+
+        const state = buildCurrentProjectWamState(rootPath);
+        if (!state.wamDir) {
+            const text = lang === 'en' ? 'WAM(project): no history directory found yet.' : 'WAM（项目）：尚未找到历史目录。';
+            return { content: [{ type: 'text', text }] };
+        }
+        const digest = computeProjectWamDigest(state.project, state.memoryProject);
+        const createdAt = nowIsoNano();
+        const id = sha256Hex(`${createdAt}\n${msg}\n${digest}`);
+        const entry: WamStashEntry = {
+            id,
+            createdAt,
+            message: msg || 'stash',
+            scope,
+            projectId: state.projectId,
+            rootPath: state.rootPath,
+            baseHead: headHash,
+            baseRef: currentRef,
+            digest,
+            snapshots: {
+                tracker: { schemaVersion: 1, projectId: state.projectId, rootPath: state.rootPath, tracker: state.project },
+                memory: { schemaVersion: 1, projectId: state.projectId, rootPath: state.rootPath, memory: state.memoryProject }
+            }
+        };
+        writeJsonFileSafe(path.join(dir, WAM_STASH_DIR, `${id}.json`), entry);
+
+        // Reset working to HEAD snapshot (clean).
+        const headTrackerSnap = readWamSnapshot(state.wamDir, headHash, 'tracker');
+        const headMemorySnap = readWamSnapshot(state.wamDir, headHash, 'memory');
+        if (headTrackerSnap?.tracker && headMemorySnap?.memory) {
+            const trackerData = loadTrackerData();
+            trackerData.projects[state.rootPath] = headTrackerSnap.tracker;
+            trackerData.activeProject = state.rootPath;
+            saveTrackerData(trackerData);
+            const memoryData = loadMemoryData();
+            memoryData.projects[state.rootPath] = headMemorySnap.memory;
+            saveMemoryData(memoryData);
+            try {
+                syncProjectArtifacts(headTrackerSnap.tracker);
+                syncMemoryArtifacts(headTrackerSnap.tracker, headMemorySnap.memory);
+            } catch {
+                // ignore
+            }
+            sidebarProvider?.postMessage({ type: 'tracker', data: buildTrackerSnapshot(headTrackerSnap.tracker) });
+            refreshOpenPanels(headTrackerSnap.tracker);
+        }
+
+        const text = lang === 'en' ? `WAM stash pushed: ${id}` : `WAM 暂存已保存：${id}`;
+        return { content: [{ type: 'text', text }] };
+    }
+
+    const id = resolveLatestId();
+    if (!id) {
+        const text = lang === 'en' ? 'WAM stash is empty.' : 'WAM 暂存为空。';
+        return { content: [{ type: 'text', text }] };
+    }
+    const entry = readWamStash(dir, id);
+    if (!entry) {
+        const text = lang === 'en' ? `WAM stash not found: ${id}` : `未找到 WAM 暂存：${id}`;
+        return { content: [{ type: 'text', text }] };
+    }
+
+	    const applyEntry = () => {
+	        if (scope === 'global') {
+	            const snap = entry.snapshots?.global_memory;
+	            const globalMemory = snap?.globalMemory || snap?.global_memory || snap;
+	            if (globalMemory && typeof globalMemory === 'object' && globalMemory.memories) {
+	                saveGlobalMemoryData(globalMemory as any);
+	            }
+	            return;
+	        }
+        const tracker = entry.snapshots?.tracker?.tracker || entry.snapshots?.tracker;
+        const memory = entry.snapshots?.memory?.memory || entry.snapshots?.memory;
+        if (!tracker || !memory) return;
+        const root = entry.rootPath || tracker.rootPath || '';
+        if (!root) return;
+        const trackerData = loadTrackerData();
+        trackerData.projects[root] = tracker;
+        trackerData.activeProject = root;
+        saveTrackerData(trackerData);
+        const memoryData = loadMemoryData();
+        memoryData.projects[root] = memory;
+        saveMemoryData(memoryData);
+        try {
+            syncProjectArtifacts(tracker);
+            syncMemoryArtifacts(tracker, memory);
+        } catch {
+            // ignore
+        }
+        sidebarProvider?.postMessage({ type: 'tracker', data: buildTrackerSnapshot(tracker) });
+        refreshOpenPanels(tracker);
+    };
+
+    if (action === 'apply' || action === 'pop') {
+        applyEntry();
+        if (action === 'pop') {
+            try {
+                fs.unlinkSync(path.join(dir, WAM_STASH_DIR, `${id}.json`));
+            } catch {
+                // ignore
+            }
+        }
+        const text =
+            lang === 'en'
+                ? `WAM stash ${action}ed: ${id}`
+                : `WAM 暂存已${action === 'apply' ? '应用' : '弹出'}：${id}`;
+        return { content: [{ type: 'text', text }] };
+    }
+
+	    if (action === 'drop') {
+	        try {
+	            fs.unlinkSync(path.join(dir, WAM_STASH_DIR, `${id}.json`));
+	        } catch {
+	            // ignore
+        }
+        const text = lang === 'en' ? `WAM stash dropped: ${id}` : `WAM 暂存已删除：${id}`;
+        return { content: [{ type: 'text', text }] };
+    }
+
+    return { content: [{ type: 'text', text: lang === 'en' ? 'Unknown stash action.' : '未知暂存操作。' }] };
 }
 
 // ==================== Memory Handlers ====================
@@ -3679,6 +6168,11 @@ async function handleSaveMemory(args: any): Promise<any> {
         } catch (e: any) {
             outputChannel?.appendLine(`Memory artifact sync failed: ${e?.message ?? String(e)}`);
         }
+        try {
+            commitProjectWam(`save_memory(project): ${key}`, 'ai', rootPath);
+        } catch (e: any) {
+            outputChannel?.appendLine(`WAM auto-commit (project memory) failed: ${e?.message ?? String(e)}`);
+        }
     }
 
     if (writeGlobal) {
@@ -3697,6 +6191,11 @@ async function handleSaveMemory(args: any): Promise<any> {
         pushTimelineEntry(global.timeline, { kind, key, content: value });
         pruneShortMemories(global);
         saveGlobalMemoryData(global);
+        try {
+            autoWamCommitGlobal(`save_memory(global): ${key}`, 'ai');
+        } catch (e: any) {
+            outputChannel?.appendLine(`WAM auto-commit (global memory) failed: ${e?.message ?? String(e)}`);
+        }
     }
 
     const where =
@@ -3855,7 +6354,7 @@ async function handleUpdateWalkthrough(args: any): Promise<any> {
     };
     bumpProjectStat(project, 'walkthroughUpdates');
     project.updatedAt = nowIso();
-    saveTrackerAndNotify(data, project);
+    saveTrackerAndNotify(data, project, 'update_walkthrough', 'ai');
 
     const text = lang === 'en' ? 'Walkthrough updated.' : 'Walkthrough 已更新。';
     return { content: [{ type: 'text', text }] };
@@ -4097,6 +6596,7 @@ let prdPanel: vscode.WebviewPanel | null = null;
 let overviewPanel: vscode.WebviewPanel | null = null;
 let planPanel: vscode.WebviewPanel | null = null;
 let walkthroughPanel: vscode.WebviewPanel | null = null;
+let memoryPanel: vscode.WebviewPanel | null = null;
 
 function resolveProjectForPanel(): ProjectTracker | null {
     try {
@@ -4115,6 +6615,15 @@ function refreshOpenPanels(project: ProjectTracker) {
     if (prdPanel) prdPanel.webview.html = getPrdPanelHtml(project, lang, prdPanel.webview);
     if (planPanel) planPanel.webview.html = getPlanPanelHtml(project, lang, planPanel.webview);
     if (walkthroughPanel) walkthroughPanel.webview.html = getWalkthroughPanelHtml(project, lang, walkthroughPanel.webview);
+    if (memoryPanel) {
+        try {
+            const { project: memoryStore } = resolveProjectMemory(project.rootPath);
+            const globalMemory = loadGlobalMemoryData();
+            memoryPanel.webview.html = getMemoryPanelHtml(project, memoryStore, globalMemory, lang, memoryPanel.webview);
+        } catch (e: any) {
+            outputChannel?.appendLine(`Memory panel refresh failed: ${e?.message ?? String(e)}`);
+        }
+    }
 }
 
 function showOverviewPanel() {
@@ -4176,6 +6685,24 @@ function showWalkthroughPanel() {
     walkthroughPanel.webview.html = getWalkthroughPanelHtml(project, lang, walkthroughPanel.webview);
     walkthroughPanel.onDidDispose(() => { walkthroughPanel = null; });
 }
+
+function showMemoryPanel() {
+    const project = resolveProjectForPanel();
+    if (!project) return;
+    const lang = getUiLanguage();
+    const { project: memoryStore } = resolveProjectMemory(project.rootPath);
+    const globalMemory = loadGlobalMemoryData();
+    if (memoryPanel) memoryPanel.dispose();
+    memoryPanel = vscode.window.createWebviewPanel(
+        'mcpMemory',
+        tr('panel.memoryTitle', {}, lang),
+        vscode.ViewColumn.Two,
+        { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: [extensionContext.extensionUri] }
+    );
+    memoryPanel.webview.html = getMemoryPanelHtml(project, memoryStore, globalMemory, lang, memoryPanel.webview);
+    memoryPanel.onDidDispose(() => { memoryPanel = null; });
+}
+
 function getPanelShellHtml(
     webview: vscode.Webview,
     title: string,
@@ -4183,7 +6710,7 @@ function getPanelShellHtml(
     badge: string,
     body: string,
     lang: UiLanguage,
-    options?: { mermaid?: boolean }
+    options?: { mermaid?: boolean; extraScript?: string }
 ): string {
     const nonce = getNonce();
     const csp = [
@@ -4201,13 +6728,14 @@ function getPanelShellHtml(
     const badgeHtml = safeBadge ? `<div class="badge">${safeBadge}</div>` : '';
 
     const useMermaid = options?.mermaid === true;
+    const extraScript = typeof options?.extraScript === 'string' ? options.extraScript : '';
     const mermaidUri = useMermaid
         ? webview.asWebviewUri(vscode.Uri.joinPath(extensionContext.extensionUri, 'resources', 'vendor', 'mermaid.min.js')).toString()
         : '';
-    const mermaidScripts = useMermaid
-        ? `
-    <script nonce="${nonce}" src="${mermaidUri}"></script>
-    <script nonce="${nonce}">
+	    const mermaidScripts = useMermaid
+	        ? `
+	    <script nonce="${nonce}" src="${mermaidUri}"></script>
+	    <script nonce="${nonce}">
         (function () {
             try {
                 if (!window.mermaid) return;
@@ -4224,11 +6752,12 @@ function getPanelShellHtml(
                 // best-effort; keep panel usable even if rendering fails
             }
         })();
-    </script>`
-        : '';
+	    </script>`
+	        : '';
+	    const extraScriptHtml = extraScript ? `<script nonce="${nonce}">${extraScript}</script>` : '';
 
-    return `<!DOCTYPE html>
-<html lang="${lang === 'en' ? 'en' : 'zh-CN'}">
+	    return `<!DOCTYPE html>
+	<html lang="${lang === 'en' ? 'en' : 'zh-CN'}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -4452,17 +6981,18 @@ function getPanelShellHtml(
 </head>
 <body>
     <div class="stage">
-        <div class="hero">
-            <h1>${safeTitle}</h1>
-            ${subtitleHtml}
-            ${badgeHtml}
-        </div>
-        ${body}
-    </div>
-    ${mermaidScripts}
-</body>
-</html>`;
-}
+	        <div class="hero">
+	            <h1>${safeTitle}</h1>
+	            ${subtitleHtml}
+	            ${badgeHtml}
+	        </div>
+	        ${body}
+	    </div>
+	    ${mermaidScripts}
+	    ${extraScriptHtml}
+	</body>
+	</html>`;
+	}
 
 function renderTrackerItems(items: TrackerItem[], lang: UiLanguage): string {
     if (!items.length) {
@@ -4570,6 +7100,242 @@ function getWalkthroughPanelHtml(project: ProjectTracker, lang: UiLanguage, webv
         </section>
     `;
     return getPanelShellHtml(webview, tr('panel.walkthroughTitle', {}, lang), project.name, '', body, lang, { mermaid: needsMermaid });
+}
+
+function renderMemoryDetailsList(entries: MemoryEntry[], lang: UiLanguage): string {
+    if (!entries.length) {
+        return `<p class="empty">${escapeHtml(tr('panel.readOnlyEmpty', {}, lang))}</p>`;
+    }
+    return entries
+        .map((entry) => {
+            const key = escapeHtml(entry.key);
+            const kindValue = entry.kind === 'long' || entry.kind === 'lesson' ? entry.kind : 'short';
+            const kind = escapeHtml(kindValue);
+            const updatedAt = escapeHtml(entry.updatedAt || '');
+            const tags = Array.isArray(entry.tags) ? entry.tags.filter(Boolean).map((t) => `<span class="chip">${escapeHtml(String(t))}</span>`).join('') : '';
+            const links = Array.isArray(entry.links) ? entry.links.filter(Boolean).map((l) => `<span class="chip chip-link">${escapeHtml(String(l))}</span>`).join('') : '';
+            const content = entry.content ? renderMarkdownToHtml(entry.content) : `<p class="empty">${escapeHtml(tr('panel.readOnlyEmpty', {}, lang))}</p>`;
+            return `
+                <details class="mem-item">
+                    <summary>
+                        <span class="mem-key">${key}</span>
+                        <span class="pill kind-${kindValue}">${kind}</span>
+                        <span class="meta">${updatedAt}</span>
+                    </summary>
+                    <div class="mem-meta-row">${tags}${links}</div>
+                    <div class="mem-body markdown">${content}</div>
+                </details>
+            `;
+        })
+        .join('');
+}
+
+function getMemoryPanelHtml(
+    project: ProjectTracker,
+    memoryStore: ProjectMemoryStore,
+    globalMemory: GlobalMemoryData,
+    lang: UiLanguage,
+    webview: vscode.Webview
+): string {
+    const projectEntries = Object.values(memoryStore?.memories || {}).filter(Boolean) as MemoryEntry[];
+    projectEntries.sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
+    const globalEntries = Object.values(globalMemory?.memories || {}).filter(Boolean) as MemoryEntry[];
+    globalEntries.sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
+
+    const body = `
+        <style>
+            .mem-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 16px; }
+            .mem-section-title { display:flex; align-items:center; justify-content:space-between; gap: 10px; }
+            .mem-count { color: var(--muted); font-size: 12px; }
+            .mem-item { border: 1px solid var(--border); border-radius: 14px; background: rgba(15,18,20,0.7); margin-bottom: 10px; overflow: hidden; }
+            .mem-item summary { list-style: none; cursor: pointer; padding: 12px 14px; display:flex; align-items:center; gap:10px; }
+            .mem-item summary::-webkit-details-marker { display:none; }
+            .mem-key { font-weight: 700; }
+            .pill { padding: 2px 10px; border-radius: 999px; font-size: 11px; border: 1px solid var(--border); color: var(--muted); }
+            .pill.kind-long { color: var(--accent); border-color: rgba(32,201,151,0.25); background: rgba(32,201,151,0.08); }
+            .pill.kind-short { color: #60a5fa; border-color: rgba(96,165,250,0.25); background: rgba(96,165,250,0.08); }
+            .pill.kind-lesson { color: var(--warn); border-color: rgba(249,115,22,0.25); background: rgba(249,115,22,0.08); }
+            .meta { margin-left: auto; color: var(--muted); font-size: 11px; }
+            .mem-meta-row { padding: 0 14px 10px; display:flex; flex-wrap: wrap; gap: 8px; }
+            .chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08); color: var(--text); }
+            .chip-link { color: var(--muted); }
+            .mem-body { padding: 0 14px 14px; }
+            .graph-wrap { width: 100%; height: 420px; border-radius: 16px; border: 1px solid var(--border); background: rgba(10,12,14,0.7); overflow: hidden; position: relative; }
+            .graph-svg { width: 100%; height: 100%; }
+            .graph-empty { color: var(--muted); font-size: 12px; padding: 14px; }
+            .graph-detail { margin-top: 12px; border-radius: 16px; border: 1px solid var(--border); background: rgba(15,18,20,0.8); padding: 12px; }
+            .graph-detail h3 { font-size: 14px; margin-bottom: 6px; }
+            .graph-detail pre { white-space: pre-wrap; font-size: 12px; line-height: 1.6; }
+        </style>
+
+        <div class="mem-grid">
+            <section class="card">
+                <div class="card-title">${escapeHtml(tr('panel.memoryProjectTitle', {}, lang))}</div>
+                <div class="card-body">
+                    <div class="mem-count">${projectEntries.length}</div>
+                    ${renderMemoryDetailsList(projectEntries, lang)}
+                </div>
+            </section>
+
+            <section class="card">
+                <div class="card-title">${escapeHtml(tr('panel.memoryGraphTitle', {}, lang))}</div>
+                <div class="card-body">
+                    <div class="graph-wrap" id="graphWrap">
+                        <svg class="graph-svg" id="memGraph" viewBox="0 0 900 420" preserveAspectRatio="xMidYMid meet"></svg>
+                        <div class="graph-empty" id="graphEmpty" style="display:none;"></div>
+                    </div>
+                    <div class="graph-detail" id="memDetail">
+                        <h3>${escapeHtml(tr('panel.memoryGraphHintTitle', {}, lang))}</h3>
+                        <div class="empty">${escapeHtml(tr('panel.memoryGraphHintBody', {}, lang))}</div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <section class="card">
+            <div class="card-title">${escapeHtml(tr('panel.memoryGlobalTitle', {}, lang))}</div>
+            <div class="card-body">
+                <div class="mem-count">${globalEntries.length}</div>
+                ${renderMemoryDetailsList(globalEntries, lang)}
+            </div>
+        </section>
+    `;
+
+    const script = `
+        (function () {
+            const msgs = ${safeJson({
+                empty: tr('panel.memoryGraphEmpty', {}, lang),
+                tooMany: tr('panel.memoryGraphTooMany', {}, lang)
+            })};
+            const data = ${safeJson({ nodes: projectEntries.map((e) => ({
+                key: e.key,
+                kind: e.kind || 'short',
+                updatedAt: e.updatedAt || '',
+                content: e.content || '',
+                tags: Array.isArray(e.tags) ? e.tags : [],
+                links: Array.isArray(e.links) ? e.links : []
+            })) })};
+
+            const svg = document.getElementById('memGraph');
+            const emptyEl = document.getElementById('graphEmpty');
+            const detail = document.getElementById('memDetail');
+            const maxNodes = 120;
+            const nodes = Array.isArray(data.nodes) ? data.nodes : [];
+            if (!svg || !detail || !emptyEl) return;
+            if (nodes.length === 0) {
+                emptyEl.style.display = 'block';
+                emptyEl.textContent = msgs.empty;
+                return;
+            }
+            if (nodes.length > maxNodes) {
+                emptyEl.style.display = 'block';
+                emptyEl.textContent = msgs.tooMany + ' (' + nodes.length + ').';
+                return;
+            }
+
+            function esc(s) {
+                return String(s || '')
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#39;');
+            }
+
+            const width = 900;
+            const height = 420;
+            const padX = 90;
+            const padY = 40;
+            const colX = {
+                long: padX,
+                short: Math.floor(width / 2),
+                lesson: width - padX
+            };
+            const byKind = { long: [], short: [], lesson: [] };
+            for (const n of nodes) {
+                const k = (n.kind === 'long' || n.kind === 'lesson') ? n.kind : 'short';
+                byKind[k].push(n);
+            }
+            for (const k of Object.keys(byKind)) {
+                byKind[k].sort((a, b) => String(a.key).localeCompare(String(b.key)));
+            }
+
+            const positions = new Map();
+            for (const kind of ['long', 'short', 'lesson']) {
+                const list = byKind[kind];
+                const step = list.length > 1 ? (height - padY * 2) / (list.length - 1) : 0;
+                list.forEach((n, idx) => {
+                    positions.set(n.key, { x: colX[kind], y: padY + (step * idx) });
+                });
+            }
+
+            const keySet = new Set(nodes.map((n) => n.key));
+            const edges = [];
+            for (const n of nodes) {
+                const from = positions.get(n.key);
+                if (!from) continue;
+                const links = Array.isArray(n.links) ? n.links : [];
+                for (const lk of links) {
+                    const toKey = String(lk || '').trim();
+                    if (!toKey || !keySet.has(toKey)) continue;
+                    const to = positions.get(toKey);
+                    if (!to) continue;
+                    edges.push({ from: n.key, to: toKey, x1: from.x, y1: from.y, x2: to.x, y2: to.y });
+                }
+            }
+
+            function setDetail(node) {
+                detail.innerHTML =
+                    '<h3>' + esc(node.key) + ' <span style="color:#9aa4a9;font-size:12px;">(' + esc(node.kind) + ')</span></h3>' +
+                    '<div style="color:#9aa4a9;font-size:11px;margin-bottom:8px;">' + esc(node.updatedAt) + '</div>' +
+                    '<pre>' + esc(node.content) + '</pre>';
+            }
+
+            svg.innerHTML = '';
+            const edgeGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            edgeGroup.setAttribute('stroke', 'rgba(255,255,255,0.16)');
+            edgeGroup.setAttribute('stroke-width', '1');
+            edgeGroup.setAttribute('fill', 'none');
+            for (const e of edges) {
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                const midX = (e.x1 + e.x2) / 2;
+                const d = 'M ' + e.x1 + ' ' + e.y1 + ' C ' + midX + ' ' + e.y1 + ', ' + midX + ' ' + e.y2 + ', ' + e.x2 + ' ' + e.y2;
+                path.setAttribute('d', d);
+                edgeGroup.appendChild(path);
+            }
+            svg.appendChild(edgeGroup);
+
+            const nodeGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            for (const n of nodes) {
+                const pos = positions.get(n.key);
+                if (!pos) continue;
+                const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                g.setAttribute('cursor', 'pointer');
+                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('cx', String(pos.x));
+                circle.setAttribute('cy', String(pos.y));
+                circle.setAttribute('r', '9');
+                const fill = n.kind === 'long' ? 'rgba(32,201,151,0.9)' : (n.kind === 'lesson' ? 'rgba(249,115,22,0.9)' : 'rgba(96,165,250,0.9)');
+                circle.setAttribute('fill', fill);
+                circle.setAttribute('stroke', 'rgba(0,0,0,0.4)');
+                circle.setAttribute('stroke-width', '1');
+                const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                label.setAttribute('x', String(pos.x + 14));
+                label.setAttribute('y', String(pos.y + 4));
+                label.setAttribute('fill', 'rgba(245,242,233,0.92)');
+                label.setAttribute('font-size', '11');
+                label.textContent = String(n.key);
+                g.appendChild(circle);
+                g.appendChild(label);
+                g.addEventListener('click', () => setDetail(n));
+                nodeGroup.appendChild(g);
+            }
+            svg.appendChild(nodeGroup);
+            setDetail(nodes[0]);
+        })();
+    `;
+
+    return getPanelShellHtml(webview, tr('panel.memoryTitle', {}, lang), project.name, '', body, lang, { extraScript: script });
 }
 
 function getPrdDialogHtml(
@@ -5918,9 +8684,17 @@ function getDialogHtml(
 // ==================== Windsurf配置 ====================
 
 function configureWindsurf() {
-    const configPaths = getWindsurfMcpConfigPaths(getWriteHomeDirs());
+    const homeDirs = getWriteHomeDirs();
+    const configPaths = getWindsurfMcpConfigPaths(homeDirs);
     const written: string[] = [];
     const failed: Array<{ path: string; error: string }> = [];
+
+    try {
+        outputChannel.appendLine(`Configure Windsurf: candidate home dirs = ${JSON.stringify(homeDirs)}`);
+        outputChannel.appendLine(`Configure Windsurf: target mcp_config.json paths = ${JSON.stringify(configPaths)}`);
+    } catch {
+        // ignore logging failures
+    }
 
     for (const configPath of configPaths) {
         try {
@@ -5933,13 +8707,13 @@ function configureWindsurf() {
             if (fs.existsSync(configPath)) {
                 let raw = fs.readFileSync(configPath, 'utf-8');
                 raw = raw.replace(/^\uFEFF/, ''); // strip BOM if present
-                if (raw.trim()) {
-                    try {
-                        config = JSON.parse(raw);
-                    } catch (e: any) {
-                        const lang = getUiLanguage();
-                        throw new Error(
-                            tr(
+	                if (raw.trim()) {
+	                    try {
+	                        config = parseJsonLenient(raw);
+	                    } catch (e: any) {
+	                        const lang = getUiLanguage();
+	                        throw new Error(
+	                            tr(
                                 'ext.invalidConfigJson',
                                 { path: configPath, error: e?.message ?? String(e) },
                                 lang
@@ -5956,12 +8730,12 @@ function configureWindsurf() {
                 disabled: false
             };
 
-            fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-            // Verify write
-            const verify = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-            if (!verify?.mcpServers?.windsurf_auto_mcp) {
-                throw new Error('Config write verification failed (missing mcpServers.windsurf_auto_mcp)');
-            }
+	            fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+	            // Verify write
+	            const verify = parseJsonLenient(fs.readFileSync(configPath, 'utf-8'));
+	            if (!verify?.mcpServers?.windsurf_auto_mcp) {
+	                throw new Error('Config write verification failed (missing mcpServers.windsurf_auto_mcp)');
+	            }
             written.push(configPath);
             outputChannel.appendLine(`Configured Windsurf: ${configPath}`);
 
@@ -6196,6 +8970,9 @@ class SidebarProvider implements vscode.WebviewViewProvider {
                 case 'openWalkthroughPanel':
                     showWalkthroughPanel();
                     break;
+                case 'openMemoryPanel':
+                    showMemoryPanel();
+                    break;
                 case 'clearPrd':
                     await clearProjectPrd();
                     break;
@@ -6289,15 +9066,15 @@ class SidebarProvider implements vscode.WebviewViewProvider {
         const configPaths = getWindsurfMcpConfigPaths(getReadHomeDirs());
 
         let isConfigured = false;
-        try {
-            for (const configPath of configPaths) {
-                if (!fs.existsSync(configPath)) continue;
-                const configContent = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-                if (configContent?.mcpServers?.windsurf_auto_mcp) {
-                    isConfigured = true;
-                    break;
-                }
-            }
+	        try {
+	            for (const configPath of configPaths) {
+	                if (!fs.existsSync(configPath)) continue;
+	                const configContent = parseJsonLenient(fs.readFileSync(configPath, 'utf-8'));
+	                if (configContent?.mcpServers?.windsurf_auto_mcp) {
+	                    isConfigured = true;
+	                    break;
+	                }
+	            }
         } catch (e) {
             isConfigured = false;
         }
@@ -6541,25 +9318,29 @@ class SidebarProvider implements vscode.WebviewViewProvider {
 
         <div class="card">
             <div class="card-title">${tr('sidebar.panelsTitle', {}, lang)}</div>
-            <div class="panel-list">
-                <div class="panel-row">
-                    <div class="panel-name">${tr('sidebar.panelOverview', {}, lang)}</div>
-                    <button class="panel-open" data-action="openOverviewPanel">${tr('sidebar.openPanel', {}, lang)}</button>
-                </div>
-                <div class="panel-row">
-                    <div class="panel-name">${tr('sidebar.panelPrd', {}, lang)}</div>
-                    <button class="panel-open" data-action="openPrdPanel">${tr('sidebar.openPanel', {}, lang)}</button>
-                </div>
-                <div class="panel-row">
-                    <div class="panel-name">${tr('sidebar.panelPlan', {}, lang)}</div>
-                    <button class="panel-open" data-action="openPlanPanel">${tr('sidebar.openPanel', {}, lang)}</button>
-                </div>
-                <div class="panel-row">
-                    <div class="panel-name">${tr('sidebar.panelWalkthrough', {}, lang)}</div>
-                    <button class="panel-open" data-action="openWalkthroughPanel">${tr('sidebar.openPanel', {}, lang)}</button>
-                </div>
-            </div>
-        </div>
+	            <div class="panel-list">
+	                <div class="panel-row">
+	                    <div class="panel-name">${tr('sidebar.panelOverview', {}, lang)}</div>
+	                    <button class="panel-open" data-action="openOverviewPanel">${tr('sidebar.openPanel', {}, lang)}</button>
+	                </div>
+	                <div class="panel-row">
+	                    <div class="panel-name">${tr('sidebar.panelPrd', {}, lang)}</div>
+	                    <button class="panel-open" data-action="openPrdPanel">${tr('sidebar.openPanel', {}, lang)}</button>
+	                </div>
+	                <div class="panel-row">
+	                    <div class="panel-name">${tr('sidebar.panelPlan', {}, lang)}</div>
+	                    <button class="panel-open" data-action="openPlanPanel">${tr('sidebar.openPanel', {}, lang)}</button>
+	                </div>
+	                <div class="panel-row">
+	                    <div class="panel-name">${tr('sidebar.panelMemory', {}, lang)}</div>
+	                    <button class="panel-open" data-action="openMemoryPanel">${tr('sidebar.openPanel', {}, lang)}</button>
+	                </div>
+	                <div class="panel-row">
+	                    <div class="panel-name">${tr('sidebar.panelWalkthrough', {}, lang)}</div>
+	                    <button class="panel-open" data-action="openWalkthroughPanel">${tr('sidebar.openPanel', {}, lang)}</button>
+	                </div>
+	            </div>
+	        </div>
 
         <div class="card">
             <div class="card-title">${tr('sidebar.statsTitle', {}, lang)}</div>

@@ -4,6 +4,7 @@ import json
 import os
 import sys
 import time
+import hashlib
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
@@ -246,6 +247,168 @@ def _project_has_memories(memory_data, project_root_path):
     return isinstance(memories, dict) and len(memories) > 0
 
 
+def _stable_json(obj):
+    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+
+
+def _sha256_hex(text):
+    return hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest()
+
+
+def _sha256_hex_parts(parts):
+    h = hashlib.sha256()
+    for part in parts:
+        h.update(str("" if part is None else part).encode("utf-8", errors="replace"))
+        h.update(b"\n")
+    return h.hexdigest()
+
+
+def _normalize_item_status(status):
+    return status if status in ("doing", "done") else "todo"
+
+
+def _compute_project_wam_digest(project, memory_store):
+    project = project or {}
+    memory_store = memory_store or {}
+
+    plan = project.get("plan") or {}
+    plan_items = plan.get("items") or []
+    if not isinstance(plan_items, list):
+        plan_items = []
+    plan_items_sorted = []
+    for it in plan_items:
+        if not isinstance(it, dict):
+            continue
+        text = str(it.get("text") or "").strip()
+        if not text:
+            continue
+        plan_items_sorted.append(it)
+    plan_items_sorted.sort(key=lambda it: str(it.get("text") or "").strip().lower())
+
+    memories = memory_store.get("memories") or {}
+    if not isinstance(memories, dict):
+        memories = {}
+    memory_keys = sorted(memories.keys(), key=lambda k: str(k))
+
+    overview = project.get("overview") or {}
+    prd = project.get("prd") or {}
+    walkthrough = project.get("walkthrough") or {}
+    stats = project.get("stats") or {}
+
+    parts = []
+    parts.append("wam-digest-v1")
+    parts.append(project.get("projectId") or "")
+    parts.append(project.get("rootPath") or "")
+    parts.append(project.get("name") or "")
+
+    parts.append("overview")
+    parts.append(overview.get("updatedAt") or "")
+    parts.append(overview.get("content") or "")
+
+    parts.append("prd")
+    parts.append(prd.get("status") or "")
+    parts.append(prd.get("updatedAt") or "")
+    parts.append(prd.get("approvedBy") or "")
+    parts.append(prd.get("approvedAt") or "")
+    parts.append(prd.get("reviewNote") or "")
+    parts.append(prd.get("reviewedAt") or "")
+    parts.append(prd.get("content") or "")
+
+    parts.append("plan")
+    parts.append(plan.get("summary") or "")
+    for it in plan_items_sorted:
+        parts.append("plan_item")
+        parts.append(str(it.get("text") or "").strip())
+        parts.append(_normalize_item_status(it.get("status")))
+        parts.append(str(it.get("updatedAt") or ""))
+
+    parts.append("walkthrough")
+    parts.append(walkthrough.get("updatedAt") or "")
+    parts.append(walkthrough.get("content") or "")
+
+    parts.append("stats")
+    parts.append(int(stats.get("prdUpdates") or 0))
+    parts.append(int(stats.get("prdApprovals") or 0))
+    parts.append(int(stats.get("overviewUpdates") or 0))
+    parts.append(int(stats.get("planUpdates") or 0))
+    parts.append(int(stats.get("walkthroughUpdates") or 0))
+    parts.append(stats.get("updatedAt") or "")
+
+    parts.append("memories")
+    for key in memory_keys:
+        entry = memories.get(key) or {}
+        if not isinstance(entry, dict):
+            continue
+        parts.append("memory")
+        parts.append(key)
+        parts.append(entry.get("kind") or "")
+        parts.append(entry.get("createdAt") or "")
+        parts.append(entry.get("updatedAt") or "")
+        parts.append(entry.get("content") or "")
+        tags = entry.get("tags") or []
+        links = entry.get("links") or []
+        parts.append(",".join([str(t) for t in tags]) if isinstance(tags, list) else "")
+        parts.append(",".join([str(l) for l in links]) if isinstance(links, list) else "")
+
+    return _sha256_hex_parts(parts)
+
+
+def _find_wam_head_path(project):
+    project_id = str(project.get("projectId") or "").strip()
+    if not project_id:
+        return None
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        variant_root = os.path.dirname(os.path.dirname(script_dir))
+        # ~/.codeium/<variant>/windsurf-auto-mcp/.wam/<projectId>/HEAD.json
+        return os.path.join(variant_root, "windsurf-auto-mcp", ".wam", project_id, "HEAD.json")
+    except Exception:
+        return None
+
+
+def _check_wam_clean(project, memory_data):
+    head_path = _find_wam_head_path(project)
+    if not head_path or not os.path.exists(head_path):
+        return (
+            "Blocked: WAM history is missing (no .wam/HEAD.json).\n"
+            "Required: keep a git-like history for tracker+memory.\n"
+            "Fix: call wam_commit(message) (or any tracking/memory update tool that auto-commits), then retry."
+        )
+    try:
+        with open(head_path, "r", encoding="utf-8") as f:
+            head = json.load(f)
+    except Exception:
+        head = None
+    if not isinstance(head, dict) or not head.get("head") or not head.get("digest"):
+        return (
+            "Blocked: WAM history is invalid (HEAD.json missing head/digest).\n"
+            "Fix: call wam_commit(message) to initialize history, then retry."
+        )
+
+    root_path = str(project.get("rootPath") or "").strip()
+    project_id = str(project.get("projectId") or "").strip()
+    memory_store = {}
+    if memory_data and root_path:
+        projects = memory_data.get("projects") or {}
+        if isinstance(projects, dict):
+            memory_store = projects.get(root_path) or {}
+            if not memory_store:
+                root_norm = normalize_path(root_path)
+                for k, v in projects.items():
+                    if normalize_path(k) == root_norm:
+                        memory_store = v or {}
+                        break
+
+    digest = _compute_project_wam_digest(project, memory_store)
+    if str(head.get("digest")) != digest:
+        return (
+            "Blocked: WAM history is out-of-date (dirty state).\n"
+            "Required: before writing code, tracker+memory must be committed so history stays consistent.\n"
+            "Fix: call wam_commit(message) (or update_plan/set_prd/save_memory which auto-commit), then retry."
+        )
+    return None
+
+
 def check_project_gates(project, memory_data=None):
     overview = _get_overview_content(project)
     if not overview:
@@ -276,6 +439,10 @@ def check_project_gates(project, memory_data=None):
     plan_summary = plan.get("summary") or ""
     if not plan_items and not str(plan_summary).strip():
         return "Blocked: Plan is missing. Create a Plan checklist (with breakdown) before implementation."
+
+    wam_gate = _check_wam_clean(project, memory_data)
+    if wam_gate:
+        return wam_gate
     return None
 
 

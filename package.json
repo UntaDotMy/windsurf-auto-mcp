@@ -2,7 +2,7 @@
   "name": "windsurf-auto-mcp",
   "displayName": "WindsurfAutoMcp",
   "description": "Windsurf MCP automation - task completion confirmation, user interaction, one-click setup / Windsurf MCP 自动化工具 - 任务完成确认、用户交互、一键配置",
-  "version": "1.0.4",
+  "version": "1.0.6",
   "publisher": "windsurf-auto-mcp",
   "repository": {
     "type": "git",
@@ -126,6 +126,11 @@
           "type": "boolean",
           "default": true,
           "description": "Auto-install Windsurf Hooks (user-level hooks.json) / 自动安装 Windsurf Hooks（用户级 hooks.json）"
+        },
+        "mcpService.userHomeOverride": {
+          "type": "string",
+          "default": "",
+          "description": "Override the user home directory used to write Windsurf configs/hooks (e.g. C:\\\\Users\\\\HP). Leave empty for auto-detect. / 覆盖用于写入 Windsurf 配置/Hook 的用户目录（例如 C:\\\\Users\\\\HP）。留空则自动检测。"
         }
       }
     }

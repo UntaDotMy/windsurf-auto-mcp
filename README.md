@@ -27,7 +27,7 @@
 
 ## 概览
 
-WindsurfAutoMcp 通过 MCP 协议标准化交互：AI 完成任务后必须 `ask_continue`，避免空转消耗；同时提供 PRD 审批弹窗与只读项目面板（Overview/PRD/Plan/Walkthrough），统计显示在侧边栏。
+WindsurfAutoMcp 通过 MCP 协议标准化交互：AI 完成任务后必须 `ask_continue`，避免空转消耗；同时提供 PRD 审批弹窗与只读项目面板（Overview/PRD/Plan/Memory/Walkthrough），统计显示在侧边栏。
 
 ## 功能特性
 
@@ -35,7 +35,9 @@ WindsurfAutoMcp 通过 MCP 协议标准化交互：AI 完成任务后必须 `ask
 - ❓ ask_question 单选澄清（选项数量不限，可取消重选）
 - 🧾 PRD 审批弹窗：复杂任务/大功能建议走 PRD 审批；PRD 非空则必须先审批
 - 🧭 项目面板：Overview / PRD / Plan / Walkthrough（只读，AI 更新）
+- 🧠 记忆面板：Project Memory / Global Memory + 关联图（只读）
 - 🧩 Mermaid 渲染：面板/PRD 审批中自动渲染 ` ```mermaid ` 图（离线内置）
+- 🧾 WAM 历史：`.wam` 下的类 git 快照（跟踪+记忆，可 log/checkout/merge/branch/tag/diff/reset/stash）
 - 📊 统计显示在侧边栏
 - 📊 项目级统计 + Memory 存储
 - ⚙️ 一键配置 Windsurf / windsurf-next：写入 MCP 配置
@@ -74,6 +76,7 @@ WindsurfAutoMcp 通过 MCP 协议标准化交互：AI 完成任务后必须 `ask
 3. 点击 **写入 Windsurf 配置**（会同时写入 `%USERPROFILE%\.codeium\windsurf\mcp_config.json` 与 `%USERPROFILE%\.codeium\windsurf-next\mcp_config.json`）
 4. **重启 Windsurf** 使 MCP 配置与 Hooks 生效
 5. 打开 Overview/PRD/Plan/Walkthrough 面板查看进度（面板只读，AI 会通过 MCP 工具更新）
+   - 也可打开 Memory 面板查看项目/全局记忆与关联图
 6. 开始使用：AI 完成任务后会调用 `ask_continue`；当需要澄清时会调用 `ask_question`
 
 > 下面的“全局规则/提示语”只提供在 README 中展示；请手动写入 Windsurf 全局规则（或每次新对话粘贴）。
@@ -109,6 +112,8 @@ WindsurfAutoMcp 通过 MCP 协议标准化交互：AI 完成任务后必须 `ask
 
 【记忆检查与初始化（必须）】实现/改动前先 memory_search（项目+全局，重点查 lesson）并 list_memories/get_memory；若该项目还没有可用记忆：基于 Overview 生成“初始记忆”（long：稳定事实/约定/运行验证；short：临时信息；lesson：错误复盘；通用经验存 global，项目细节存 project）。short 会遗忘：定期合并/提炼到 long，避免噪声膨胀。
 
+【WAM 历史（必须）】所有“项目跟踪/记忆”的变更必须形成可追溯历史（类 git）：优先依赖工具的自动提交；如 hooks 提示 WAM dirty/缺失：调用 wam_status 查看状态，必要时调用 wam_commit(message) 修复后再继续；需要回滚可用 wam_log + wam_checkout(hash)；需要合并可用 wam_merge(otherHash,message)。
+
 【RAG（必须）】实现/修改前先用 rag_search 找到相关文件与片段（不要凭感觉改）；再结合记忆决定改动点。
 
 【决策与研究循环（必须做到；禁止泛泛而谈/凭空猜）】
@@ -142,7 +147,7 @@ WindsurfAutoMcp 通过 MCP 协议标准化交互：AI 完成任务后必须 `ask
 【不信任知识（必须做到）】不要依赖记忆/常识拍脑袋：你的知识可能过时且有害。遇到关键决策（API/配置/版本/安全/安装）必须先研究，再行动。
 
 【统一工作流（必须遵循；严格按顺序；允许敏捷迭代循环）】
-架构/记忆 → Read → Research → Ask Questions（循环）→（复杂则 PRD+审批）→ Plan（含 Checklist）→ Act（按 Plan 循环实现）→ Update Progress → Check Progress → Review Session → Learn/Record → Ask
+架构/记忆 → Read → Research →（必要时 Ask Questions 循环澄清）→（复杂则 PRD+审批）→ Plan（含 TODO/Checklist）→ Act → Code Review → Act → Update Progress → Check Progress → Learn/Record → Ask
 1) 架构/记忆：先 get_project_status；若 Overview（架构记录）为空/过时则先生成/更新；先 memory_search（项目+全局）确认已有经验/坑；没有就先建立初始记忆（long/short/lesson；global vs project）。
 2) Read：读用户 story/目标/约束/现状；在改动前必须读相关代码/配置/日志；缺关键输入先 ask_question（可多轮）直到验收标准清晰可执行。
 3) Research：不要凭空猜；优先官方文档/官方 README/发布说明/源码；依赖先确认最新版用法与破坏性变更；可用则用 Context7；web search 把 2024 视为过旧，默认从 2025-10 起筛选（可加 after:2025-09-30）；结果泛泛就继续改检索词直到拿到可执行信息（API/配置/版本/路径/命令）。
@@ -185,14 +190,19 @@ WindsurfAutoMcp 通过 MCP 协议标准化交互：AI 完成任务后必须 `ask
 - 项目产出（brain）存储：
   - Windows: `%USERPROFILE%\.codeium\windsurf\windsurf-auto-mcp\brain\<projectId>\`
   - Windows (windsurf-next): `%USERPROFILE%\.codeium\windsurf-next\windsurf-auto-mcp\brain\<projectId>\`
-  - 文件：`overview.md` / `prd.md` / `implementation_plan.md` / `walkthrough.md` / `memory.md`（含 `.metadata.json` / `.resolved` / `.resolved.N` 版本快照）
-  - `overview.md` 用于“项目概览/架构/上下文”；`implementation_plan.md` 仅包含 Plan
+  - 文件：`overview.md` / `prd.md` / `plan.md` / `walkthrough.md` / `memory.md`（含 `.metadata.json` / `.resolved` / `.resolved.N` 版本快照）
+  - `overview.md` 用于“项目概览/架构/上下文”；`plan.md` 仅包含 Plan + Checklist
+- WAM（历史快照）存储：
+  - 项目级（每个 projectId 一份）：
+    - Windows: `%USERPROFILE%\.codeium\windsurf\windsurf-auto-mcp\.wam\<projectId>\`
+    - Windows (windsurf-next): `%USERPROFILE%\.codeium\windsurf-next\windsurf-auto-mcp\.wam\<projectId>\`
+  - 全局（用于全局记忆）：`%USERPROFILE%\.codeium\windsurf-auto-mcp\.wam\global\`
 - `projectId` 会在 `get_project_status` 返回的 JSON 中提供
 - 面板为只读，由 AI 通过 MCP 工具更新（Overview/PRD/Plan/Walkthrough）
 - 统计显示在侧边栏（全局调用 + 项目统计）
 - PRD 适用于复杂任务/大功能；PRD 非空则会触发审批弹窗，未审批不得实现
 - 统计为 **单项目** 级别：Overview/PRD/Plan/Walkthrough 更新计数
-- Hooks 在 `pre_write_code` 会校验：必须已有 Overview（架构记录）+ 已初始化项目记忆 +（若 PRD 非空则必须已审批）+ 必须已有 Plan；否则阻止写入
+- Hooks 在 `pre_write_code` 会校验：必须已有 Overview（架构记录）+ 已初始化项目记忆 +（若 PRD 非空则必须已审批）+ 必须已有 Plan + **WAM 必须是 clean（已提交最新快照）**；否则阻止写入
 
 ### 清理/重置
 
@@ -249,6 +259,17 @@ WindsurfAutoMcp 通过 MCP 协议标准化交互：AI 完成任务后必须 `ask
 | `check_plan` | 检查 Plan 进度与未完成项 |
 | `update_walkthrough` | 更新 Walkthrough 总结 |
 | `get_project_status` | 获取当前项目跟踪状态 |
+| `wam_status` | 查看 WAM 状态（clean/dirty + HEAD） |
+| `wam_commit` | 创建 WAM 提交（快照：跟踪+记忆） |
+| `wam_log` | 查看 WAM 提交历史 |
+| `wam_show` | 查看指定 hash 的 WAM 提交 |
+| `wam_checkout` | 从指定 WAM 提交恢复（回滚） |
+| `wam_merge` | 合并另一提交到当前状态（三方合并 + 冲突记录） |
+| `wam_branch` | 分支（refs/heads）：list/create/delete |
+| `wam_tag` | 标签（refs/tags）：list/create/delete |
+| `wam_diff` | 对比快照（tracker+memory），默认 HEAD ↔ WORKING |
+| `wam_reset` | hard 重置当前分支/HEAD 并恢复快照 |
+| `wam_stash` | 暂存/应用工作状态（push/list/apply/pop/drop） |
 | `save_memory` | 保存项目记忆 |
 | `get_memory` | 读取项目记忆 |
 | `list_memories` | 列出项目记忆键 |
@@ -265,6 +286,7 @@ WindsurfAutoMcp 通过 MCP 协议标准化交互：AI 完成任务后必须 `ask
 | `mcpService.defaultReason` | 空 | ask_continue 默认原因 |
 | `mcpService.mode` | http | MCP 服务器模式 |
 | `mcpService.autoInstallHooks` | true | 自动安装/更新用户级 hooks.json |
+| `mcpService.userHomeOverride` | 空 | 强制指定 Windows 用户目录（例如 `C:\Users\HP`），用于修复写入到错误用户目录的问题 |
 
 ## 构建 VSIX（开发者）
 
@@ -273,6 +295,12 @@ npm ci
 npm run compile
 npm run package
 ```
+
+## GitHub Actions 构建（推荐）
+
+- 推送到 `feature` 分支会自动构建 VSIX 并上传为 artifact（见 `.github/workflows/build-vsix.yml`）
+- 适合在不本地打包的情况下先验证安装效果
+- 下载方式：GitHub → Actions → 选择对应的 workflow run → Artifacts → 下载 `windsurf-auto-mcp-vsix` → 解压得到 `.vsix` → 安装并重启 Windsurf
 
 ## 常见问题
 
@@ -283,6 +311,7 @@ npm run package
 
 **Q: windsurf-next 不生效？**
 - 检查 `%USERPROFILE%\.codeium\windsurf-next\mcp_config.json` 与 `hooks.json`
+- 如果你是 WSL/Remote 环境或多用户目录导致写入错位：设置 `mcpService.userHomeOverride = C:\Users\<你>` 后重试
 
 **Q: 统计或 PRD 混用？**
 - 不会混用，按项目根目录区分；请确认当前打开的工作区

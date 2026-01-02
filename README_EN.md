@@ -27,7 +27,7 @@
 
 ## Overview
 
-WindsurfAutoMcp standardizes task completion with MCP: when the AI finishes a task, it must call `ask_continue` instead of continuing to spend credits. It also provides a PRD approval dialog and read-only project panels (Overview/PRD/Plan/Walkthrough); stats stay in the sidebar.
+WindsurfAutoMcp standardizes task completion with MCP: when the AI finishes a task, it must call `ask_continue` instead of continuing to spend credits. It also provides a PRD approval dialog and read-only project panels (Overview/PRD/Plan/Memory/Walkthrough); stats stay in the sidebar.
 
 ## Features
 
@@ -35,7 +35,9 @@ WindsurfAutoMcp standardizes task completion with MCP: when the AI finishes a ta
 - ❓ ask_question single-choice clarification (any number of options, can deselect)
 - 🧾 PRD approval dialog: PRD is for complex work; if PRD is non-empty, it must be approved before implementation
 - 🧭 Project panels: Overview / PRD / Plan / Walkthrough (read-only, AI-updated)
+- 🧠 Memory panel: Project Memory / Global Memory + relationship graph (read-only)
 - 🧩 Mermaid rendering: panels/PRD review auto-render ` ```mermaid ` diagrams (offline-bundled)
+- 🧾 WAM history: git-like snapshots under `.wam` (tracking+memory; log/checkout/merge/branch/tag/diff/reset/stash)
 - 📊 Stats in the sidebar
 - 📊 Per-project stats + Memory storage
 - ⚙️ One-click MCP config for Windsurf / windsurf-next
@@ -74,6 +76,7 @@ WindsurfAutoMcp standardizes task completion with MCP: when the AI finishes a ta
 3. Click **Write Windsurf Config** (writes to `%USERPROFILE%\.codeium\windsurf\mcp_config.json` and `%USERPROFILE%\.codeium\windsurf-next\mcp_config.json`)
 4. **Restart Windsurf** to load MCP config + hooks
 5. Open Overview/PRD/Plan/Walkthrough panels (read-only; AI updates via MCP tools)
+   - You can also open the Memory panel to view project/global memory + the relationship graph
 6. Use the assistant; it will call `ask_continue` on completion and `ask_question` when clarification is needed
 
 > The global prompt below is **documented only**. Please copy it into your Windsurf global rules (or paste per session).
@@ -109,6 +112,8 @@ WindsurfAutoMcp standardizes task completion with MCP: when the AI finishes a ta
 
 【Memory layers (required)】Before planning/implementation, run memory_search (project + global) and list_memories/get_memory. If there is no usable project memory yet, create initial memories from the architecture record: long = stable facts/conventions/verification, short = temporary notes (can be merged into long), lesson = mistakes/retro. Store reusable lessons in global scope; store project-specific details in project scope. Short memory is allowed to be pruned/forgotten; merge when it becomes stable.
 
+【WAM history (required)】Every change to project tracking/memory must be captured as a git-like history. Prefer the tools’ auto-commits; if hooks report WAM dirty/missing, run wam_status and then wam_commit(message) before proceeding. For rollback use wam_log + wam_checkout(hash). For merge use wam_merge(otherHash,message).
+
 【RAG (required)】Before implementing/patching, use rag_search to locate relevant files/snippets (no guessing), then combine with memory to decide what to change.
 
 【Decision + research loop (required; no generic answers)】
@@ -142,7 +147,7 @@ WindsurfAutoMcp standardizes task completion with MCP: when the AI finishes a ta
 【Do not trust knowledge (required)】Your knowledge can be outdated and harmful. For critical decisions (APIs/configs/versions/security/install), research first.
 
 【Workflow (must follow; strict order; agile loops allowed)】
-Architecture/Memory → Read → Research → Ask Questions (loop) → (PRD+approval if complex) → Plan (with checklist) → Act (iterate) → Update Progress → Check Progress → Review Session → Learn/Record → Ask
+Architecture/Memory → Read → Research → (Ask Questions loop when needed) → (PRD+approval if complex) → Plan (with TODO/checklist) → Act → Code Review → Act → Update Progress → Check Progress → Learn/Record → Ask
 1) Architecture/Memory: start with get_project_status; if Overview (architecture record) is missing/outdated, generate/update it; run memory_search (project+global) for lessons; if no usable memory, create initial long/short/lesson memories from the architecture record.
 2) Read: read target/state/constraints and relevant files/logs.
 3) Research: use official docs/README/changelogs/source; use Context7 if available; treat 2024 as old, default to 2025-10+ (use after:2025-09-30); keep searching if results are generic until you get actionable details.
@@ -185,14 +190,19 @@ Architecture/Memory → Read → Research → Ask Questions (loop) → (PRD+appr
 - Project artifacts (brain):
   - Windows: `%USERPROFILE%\.codeium\windsurf\windsurf-auto-mcp\brain\<projectId>\`
   - Windows (windsurf-next): `%USERPROFILE%\.codeium\windsurf-next\windsurf-auto-mcp\brain\<projectId>\`
-  - Files: `overview.md` / `prd.md` / `implementation_plan.md` / `walkthrough.md` / `memory.md` (plus `.metadata.json` / `.resolved` / `.resolved.N` snapshots)
-  - `overview.md` is “project overview/architecture/context”; `implementation_plan.md` contains only the Plan
+  - Files: `overview.md` / `prd.md` / `plan.md` / `walkthrough.md` / `memory.md` (plus `.metadata.json` / `.resolved` / `.resolved.N` snapshots)
+  - `overview.md` is “project overview/architecture/context”; `plan.md` contains only the Plan + checklist
+- WAM (history snapshots):
+  - Project-level (per projectId):
+    - Windows: `%USERPROFILE%\.codeium\windsurf\windsurf-auto-mcp\.wam\<projectId>\`
+    - Windows (windsurf-next): `%USERPROFILE%\.codeium\windsurf-next\windsurf-auto-mcp\.wam\<projectId>\`
+  - Global (for global memories): `%USERPROFILE%\.codeium\windsurf-auto-mcp\.wam\global\`
 - `projectId` is included in `get_project_status` JSON output
 - Panels are read-only and updated by the AI via MCP tools (Overview/PRD/Plan/Walkthrough)
 - Stats are shown in the sidebar (global calls + per-project)
 - PRD is for complex work; if PRD is non-empty it triggers the approval dialog and must be approved before implementation
 - Per-project stats: Overview/PRD/Plan/Walkthrough update counters
-- Hooks enforce: Overview (architecture record) must exist + project memory must be initialized + (if PRD is non-empty it must be approved) + a Plan must exist; otherwise `pre_write_code` blocks writes
+- Hooks enforce: Overview (architecture record) must exist + project memory must be initialized + (if PRD is non-empty it must be approved) + a Plan must exist + **WAM must be clean (latest snapshot committed)**; otherwise `pre_write_code` blocks writes
 
 ### Maintenance / Reset
 
@@ -249,6 +259,17 @@ The sidebar **Maintenance** card lets you:
 | `check_plan` | Check Plan progress + remaining items |
 | `update_walkthrough` | Update Walkthrough summary |
 | `get_project_status` | Get current project tracking status |
+| `wam_status` | WAM status (clean/dirty + HEAD) |
+| `wam_commit` | Create a WAM commit (snapshots tracking+memory) |
+| `wam_log` | List WAM commit history |
+| `wam_show` | Show a WAM commit by hash |
+| `wam_checkout` | Restore from a WAM commit (rollback) |
+| `wam_merge` | Merge another commit into current state (3-way merge + conflicts) |
+| `wam_branch` | Branches (refs/heads): list/create/delete |
+| `wam_tag` | Tags (refs/tags): list/create/delete |
+| `wam_diff` | Diff snapshots (tracker+memory), default HEAD ↔ WORKING |
+| `wam_reset` | hard reset current branch/HEAD and restore snapshots |
+| `wam_stash` | Stash/apply working state (push/list/apply/pop/drop) |
 | `save_memory` | Save project memory |
 | `get_memory` | Fetch project memory |
 | `list_memories` | List project memory keys |
@@ -265,6 +286,7 @@ The sidebar **Maintenance** card lets you:
 | `mcpService.defaultReason` | empty | Default ask_continue reason |
 | `mcpService.mode` | http | MCP server mode |
 | `mcpService.autoInstallHooks` | true | Auto-install/update user-level hooks.json |
+| `mcpService.userHomeOverride` | empty | Force the Windows user home (e.g. `C:\Users\HP`) if auto-detection writes to the wrong profile |
 
 ## Build VSIX (for dev)
 
@@ -273,6 +295,12 @@ npm ci
 npm run compile
 npm run package
 ```
+
+## GitHub Actions build (recommended)
+
+- Pushing to the `feature` branch triggers an automated VSIX build and uploads it as an artifact (see `.github/workflows/build-vsix.yml`)
+- Useful to validate install behavior without packaging locally
+- Download: GitHub → Actions → open the workflow run → Artifacts → download `windsurf-auto-mcp-vsix` → unzip to get the `.vsix` → install and restart Windsurf
 
 ## FAQ
 
@@ -283,6 +311,7 @@ npm run package
 
 **Q: windsurf-next not working?**
 - Check `%USERPROFILE%\.codeium\windsurf-next\mcp_config.json` and `hooks.json`
+- If you're in WSL/Remote or multi-user causes a wrong target: set `mcpService.userHomeOverride = C:\Users\<you>` and retry
 
 **Q: PRD or stats leaking across projects?**
 - They are per workspace root. Verify you opened the correct workspace.
