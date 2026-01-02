@@ -111,6 +111,22 @@ WindsurfAutoMcp standardizes task completion with MCP: when the AI finishes a ta
 
 【RAG (required)】Before implementing/patching, use rag_search to locate relevant files/snippets (no guessing), then combine with memory to decide what to change.
 
+【Decision + research loop (required; no generic answers)】
+1) Before implementation, think hard and choose the best practice for the project stack (performance/security/maintainability tradeoffs).
+2) Research must loop: Research → if results are generic/non-actionable → refine queries → Research again, until you get official, executable info (API/config/version/path/commands/code examples/edge cases).
+3) Errors must loop too: diagnose → fix → verify → retro. Record mistakes with record_lesson so you do not repeat them.
+4) If you find important doc usage/examples, store them via save_memory(kind=long, scope=project/global) with links + version + snippet so you can reuse it; re-research only when the source is outdated or conflicting.
+
+【Tool use (required)】Before calling a tool, decide if it is necessary/minimal/safe, and state a short rationale. Prefer fast context: get_project_status → memory_search → rag_search.
+
+【Agile + quality (required)】Iterate in small verifiable increments (user story → acceptance → tasks → implement → verify → code review → learn). Tech Lead is the final decision-maker and risk owner.
+
+【Testing (required)】If the repo already has a test stack, add/update unit tests + regression checks. If the repo has no tests, ask via ask_question before introducing a new test framework/dependency.
+
+【Code style + comments (required)】Read and match the project’s coding style. No trash/temporary code. For important new/changed logic, add professional doc comments for params/returns/edge cases (don’t over-comment obvious lines).
+
+【No workspace pollution (required)】Do not create extra docs/summary markdown/temporary files in the user repo unless explicitly requested or approved via ask_question. Use project tracker/memory (.codeium) for notes.
+
 【ask_question vs ask_continue】ask_question is only for clarification/planning prerequisites. ask_continue is only for “task completion” to confirm whether to proceed or accept additional instructions.
 
 【PRD (complex only) & Approval (required if PRD exists)】For complex features, create a PRD draft → user review/adjust → approval before Plan/implementation. For small/simple tasks you may skip PRD (leave PRD empty) and go directly to Plan, but if PRD is non-empty you must get approval before implementing.
@@ -138,7 +154,7 @@ Architecture/Memory → Read → Research → Ask Questions (loop) → (PRD+appr
 9) Check Progress: run build/test/lint or provide manual verification steps.
 10) Review Session (final gate): check gaps, correctness, errors, security, performance, compatibility; if issues found, return to Act, then re-run Check Progress and Review.
 11) Learn/Record: if mistakes/errors happen, record_lesson + save_memory; merge short → long when it becomes stable; update Overview/Walkthrough when architecture/conventions changed.
-12) Ask: only call ask_continue(reason) and wait; reason must include summary, risks, verification, next steps.
+12) Ask: before delivery, run check_plan to confirm the Plan is complete; if not, update_plan first. Then only call ask_continue(reason) and wait; reason must include summary, risks, verification, next steps.
 
 【Windsurf Hooks (recommended)】If hooks.json is supported, use pre_* to block dangerous commands/sensitive writes and post_cascade_response to audit missing ask_continue. Official docs: https://docs.windsurf.com/windsurf/cascade/hooks
 
@@ -230,6 +246,7 @@ The sidebar **Maintenance** card lets you:
 | `record_lesson` | Record lessons learned (project/global) |
 | `set_prd` | Create/update PRD draft |
 | `update_plan` | Set/update plan checklist |
+| `check_plan` | Check Plan progress + remaining items |
 | `update_walkthrough` | Update Walkthrough summary |
 | `get_project_status` | Get current project tracking status |
 | `save_memory` | Save project memory |

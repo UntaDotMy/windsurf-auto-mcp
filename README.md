@@ -111,6 +111,22 @@ WindsurfAutoMcp 通过 MCP 协议标准化交互：AI 完成任务后必须 `ask
 
 【RAG（必须）】实现/修改前先用 rag_search 找到相关文件与片段（不要凭感觉改）；再结合记忆决定改动点。
 
+【决策与研究循环（必须做到；禁止泛泛而谈/凭空猜）】
+1) 实现前必须先“想清楚再动手”：评估方案，选择对该项目技术栈最稳/最快/最符合最佳实践的做法（安全/性能/维护成本权衡）。
+2) 研究必须循环：Research → 若结果泛泛/不落地 → 调整检索词 → 继续 Research，直到拿到“可执行的官方信息”（API/配置/版本/路径/命令/代码示例/边界条件）。
+3) 遇到错误也要循环：定位 → 修复 → 验证 → 复盘；用 record_lesson 保存错误与预防，避免二次踩坑。
+4) 重要结论/用法/示例：用 save_memory(kind=long, scope=project/global) 记录“结论+链接+版本+示例”；以后优先从记忆读取，只有当来源过时/不一致才重新研究并更新记忆。
+
+【工具使用（必须谨慎）】每次调用工具前先判断：是否必要、是否最小、是否安全；给出简短理由。优先走“快速上下文”：get_project_status → memory_search → rag_search。
+
+【敏捷交付与质量（必须）】按敏捷迭代：用户 story/验收 → 任务拆分 → 小步实现 → 持续验证 → Code Review → 学习沉淀；Tech Lead 负责最终决策与风险控制。
+
+【测试（必须）】若项目已有测试框架：必须补齐/更新单元测试与回归点；若项目没有测试：先 ask_question 征求是否引入最小测试方案（不要擅自加依赖）。
+
+【代码规范与注释（必须）】先读项目风格并保持一致；不写垃圾/临时代码；对重要新/改逻辑添加必要的参数/返回值/边界条件说明（避免对显而易见的代码堆注释）。
+
+【不要污染用户工作区（必须）】不要在用户仓库里新增总结/文档/markdown/临时文件；除非用户明确要求或你已通过 ask_question 获得批准。需要记录时优先写入项目跟踪/记忆（.codeium 侧）。
+
 【ask_question vs ask_continue】ask_question 仅用于澄清/规划前置问题；ask_continue 只在“任务完成后”用于确认是否继续或接收追加指令。
 
 【PRD（复杂任务才需要）与审批（有 PRD 就必须）】复杂任务/大功能先输出 PRD 草案 → 用户确认/补充 → 审批通过后再输出 Plan 并实现；简单任务可跳过 PRD（保持 PRD 为空）直接 Plan，但只要 PRD 非空就必须先审批，未审批不得开始实现（写代码/运行命令/调用外部工具）。
@@ -138,7 +154,7 @@ WindsurfAutoMcp 通过 MCP 协议标准化交互：AI 完成任务后必须 `ask
 9) Check Progress：尽量运行 build/test/lint；否则给出可执行的手动验证步骤+期望结果。
 10) Review Session（最后一关）：像 PR 一样评审：gaps、正确性、边界条件、错误处理、安全、依赖风险、性能（热点/泄漏）、兼容性；发现问题就回到 Act 修复并重复 Check Progress + Review。
 11) Learn/Record：若出现错误/踩坑/回滚，必须 record_lesson 并 save_memory（项目或全局）；必要时合并 short → long；更新 Overview/Walkthrough 以反映新架构/约定。
-12) Ask：最终只允许 ask_continue(reason) 并等待；reason 必须包含：完成内容、风险/注意点、验证步骤/命令、下一步。
+12) Ask：交付前先 check_plan 确认 Plan 已完成；未完成先 update_plan 更新进度。最终只允许 ask_continue(reason) 并等待；reason 必须包含：完成内容、风险/注意点、验证步骤/命令、下一步。
 
 【Windsurf Hooks（推荐，可当强制护栏）】如环境支持 hooks.json：建议在 pre_* 阶段阻止危险命令/敏感写入，并用 post_cascade_response 审计是否遗漏 ask_continue；官方文档：https://docs.windsurf.com/windsurf/cascade/hooks
 
@@ -230,6 +246,7 @@ WindsurfAutoMcp 通过 MCP 协议标准化交互：AI 完成任务后必须 `ask
 | `rag_search` | RAG 搜索工作区上下文（返回相关片段） |
 | `memory_search` | 搜索项目/全局记忆 |
 | `record_lesson` | 记录错误经验（项目/全局） |
+| `check_plan` | 检查 Plan 进度与未完成项 |
 | `update_walkthrough` | 更新 Walkthrough 总结 |
 | `get_project_status` | 获取当前项目跟踪状态 |
 | `save_memory` | 保存项目记忆 |

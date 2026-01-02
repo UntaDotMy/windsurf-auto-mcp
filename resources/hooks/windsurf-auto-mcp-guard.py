@@ -349,6 +349,32 @@ def main():
                 file=sys.stderr,
             )
             return 1
+        # Soft audit: if the model is trying to end the task but the plan is not complete,
+        # remind it to update progress and/or record lessons before final delivery.
+        try:
+            tracker = load_tracker()
+            project = select_project(tracker)
+            if project:
+                plan = project.get("plan") or {}
+                items = plan.get("items") or []
+                if isinstance(items, list) and items:
+                    total = 0
+                    done = 0
+                    for it in items:
+                        if not isinstance(it, dict):
+                            continue
+                        total += 1
+                        if it.get("status") == "done":
+                            done += 1
+                    if total > 0 and done < total:
+                        print(
+                            f"Warning: Plan is not complete ({done}/{total}). "
+                            "Update progress via update_plan, run verification, and record lessons if needed before final delivery.",
+                            file=sys.stderr,
+                        )
+                        return 1
+        except Exception:
+            pass
 
     return 0
 

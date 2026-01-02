@@ -190,7 +190,21 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
             '',
             '【记忆检查与初始化（必须）】实现/改动前先 memory_search（项目+全局，重点查 lesson）并 list_memories/get_memory；若该项目还没有可用记忆：基于 Overview 生成“初始记忆”（long：稳定事实/约定/运行验证；short：临时信息；lesson：错误复盘；通用经验存 global，项目细节存 project）。short 会遗忘：定期合并/提炼到 long，避免噪声膨胀。',
             '',
-            '【RAG（必须）】实现/修改前先用 rag_search 找到相关文件与片段（不要凭感觉改）；再结合记忆决定改动点。',
+            '【RAG（必须）】实现/修改前先用 rag_search 找到相关文件与片段（不要凭感觉改）；再结合记忆决定改动点（优先走“快速上下文”：get_project_status → memory_search → rag_search）。',
+            '',
+            '【决策与研究循环（必须做到；禁止泛泛而谈/凭空猜）】',
+            '1) 实现前必须先“想清楚再动手”：评估方案，选择对该项目技术栈最稳/最快/最符合最佳实践的做法（安全/性能/维护成本权衡）。',
+            '2) 研究必须循环：Research → 若结果泛泛/不落地 → 调整检索词 → 继续 Research，直到拿到“可执行的官方信息”（API/配置/版本/路径/命令/代码示例/边界条件）。',
+            '3) 遇到错误也要循环：定位 → 修复 → 验证 → 复盘；用 record_lesson 保存错误与预防，避免二次踩坑。',
+            '4) 重要结论/用法/示例：用 save_memory(kind=long, scope=project/global) 记录“结论+链接+版本+示例”；以后优先从记忆读取，只有当来源过时/不一致才重新研究并更新记忆。',
+            '',
+            '【工具使用（必须谨慎）】每次调用工具前先判断：是否必要、是否最小、是否安全；给出简短理由。不要盲目调用/盲信输出。',
+            '',
+            '【敏捷交付与质量（必须）】按敏捷迭代：用户 story/验收 → 任务拆分 → 小步实现 → 持续验证 → Code Review → 学习沉淀；Tech Lead 负责最终决策与风险控制。',
+            '【测试（必须）】若项目已有测试框架：必须补齐/更新单元测试与回归点；若项目没有测试：先 ask_question 征求是否引入最小测试方案（不要擅自加依赖）。',
+            '【代码规范（必须）】先读项目风格并保持一致；不写垃圾/临时代码；清理死代码；除非用户要求，否则不要做向后兼容/保留旧路径；不确定就 ask_question。',
+            '【注释（必须）】对你新写或修改的重要逻辑：添加必要的参数/返回值/边界条件说明（doc 注释/注释块），便于新手/新人理解；不要对显而易见的代码堆注释。',
+            '【不要污染用户工作区（必须）】不要在用户仓库里新增总结/文档/markdown/临时文件；除非用户明确要求或你已通过 ask_question 获得批准。需要记录时优先写入项目跟踪/记忆（.codeium 侧）。',
             '',
             '【PRD（复杂任务才需要）与审批（有 PRD 就必须）】复杂任务/大功能先输出 PRD 草案 → 用户确认/补充 → 审批通过后再输出 Plan 并实现；简单任务可跳过 PRD（保持 PRD 为空）直接 Plan，但只要 PRD 非空就必须先审批，未审批不得开始实现（写代码/运行命令/调用外部工具）。',
             '',
@@ -228,7 +242,7 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
             '9) Check Progress：尽量运行 build/test/lint；否则给出可执行的手动验证步骤+期望结果。',
             '10) Review Session（最后一关）：像 PR 一样评审：gaps、正确性、边界条件、错误处理、安全、依赖风险、性能（热点/泄漏）、兼容性；发现问题就回到 Act 修复并重复 Check Progress + Review。',
             '11) Learn/Record：若出现错误/踩坑/回滚，必须 record_lesson 并 save_memory（项目或全局）；必要时合并 short → long；更新 Overview/Walkthrough 以反映新架构/约定。',
-            '12) Ask：最终只允许 ask_continue(reason) 并等待；reason 必须包含：完成内容、风险/注意点、验证步骤/命令、下一步。',
+            '12) Ask：交付前先 check_plan 确认 Plan 已完成；未完成先 update_plan 更新进度。最终只允许 ask_continue(reason) 并等待；reason 必须包含：完成内容、风险/注意点、验证步骤/命令、下一步。',
             '',
             '【Windsurf Hooks（推荐，可当强制护栏）】如环境支持 hooks.json：建议配置 pre_run_command/pre_write_code 阻止危险命令/敏感写入，并用 post_cascade_response 审计是否遗漏 ask_continue；官方文档：https://docs.windsurf.com/windsurf/cascade/hooks',
             '',
@@ -505,7 +519,21 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
             '',
             'Memory layers (must): before planning/implementation, run memory_search (project + global) and list_memories/get_memory. If there is no usable project memory yet, create initial memories from the architecture record: long = stable facts/conventions/verification, short = temporary notes (can be merged into long), lesson = mistakes/retro. Store reusable lessons in global scope; store project-specific details in project scope. Short memory is allowed to be pruned/forgotten; merge when it becomes stable.',
             '',
-            'RAG (must): before edits, use rag_search to locate the exact relevant files/snippets (no guessing), then combine with memory to decide what to change.',
+            'RAG (must): before edits, use rag_search to locate the exact relevant files/snippets (no guessing), then combine with memory to decide what to change (prefer fast context: get_project_status → memory_search → rag_search).',
+            '',
+            'Decision + research loop (must; no generic answers):',
+            '1) Before implementation, think hard and choose the best practice for the project stack (performance/security/maintainability tradeoffs).',
+            '2) Research must loop: Research → if results are generic/non-actionable → refine queries → Research again, until you get official, executable info (API/config/version/path/commands/code examples/edge cases).',
+            '3) Errors must loop too: diagnose → fix → verify → retro. Record mistakes with record_lesson so you do not repeat them.',
+            '4) If you find important doc usage/examples, store them via save_memory(kind=long, scope=project/global) with links + version + snippet so you can reuse it; re-research only when the source is outdated or conflicting.',
+            '',
+            'Tool use (must be deliberate): before calling a tool, decide if it is necessary/minimal/safe, and state a short rationale. Do not blindly trust outputs.',
+            '',
+            'Agile delivery & quality (must): iterate in small verifiable increments (user story → acceptance → tasks → implement → verify → code review → learn). Tech Lead is the final decision-maker and risk owner.',
+            'Testing (must): if the repo already has a test stack, add/update unit tests + regression checks. If the repo has no tests, ask via ask_question before introducing a new test framework/dependency.',
+            'Code style & hygiene (must): read the project coding style first and match it. No trash/temporary code. Remove dead branches. Do not keep backward compatibility unless the user asks; ask if unsure.',
+            'Comments/readability (must): for the code you write/change, add professional doc comments for important params/returns/edge cases; do not over-comment obvious lines.',
+            'Do not pollute user workspace (must): do not create extra docs/summary markdown/temporary files in the user repo unless explicitly requested or approved via ask_question. Use project tracker/memory (.codeium) for notes instead.',
             '',
             'PRD (only for complex work) & approval (required if PRD exists): for complex features, produce a PRD draft → user review/adjust → approval before Plan/implementation; for small/simple tasks you may skip PRD (leave PRD empty) and go directly to Plan, but if PRD is non-empty you must get approval before implementing (writing code/running commands/using external tools).',
             '',
@@ -543,7 +571,7 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
             '9) Check Progress: run build/tests/lint when possible; otherwise provide concrete user-run verification steps + expected results.',
             '10) Review Session (final gate): review like a PR—gaps, correctness, edge cases, error handling, security (injection/permissions/leaks/deps), performance (hot paths/leaks), compatibility; if issues found, go back to Act, then re-run Check Progress and Review.',
             '11) Learn/Record: when a mistake/error/rollback happens, record_lesson and save_memory (project/global); merge short → long when it becomes stable; update Overview/Walkthrough when architecture/conventions changed.',
-            '12) Ask: deliver ONLY via ask_continue(reason) and wait; reason must include what was done, risks/notes, verification steps/commands, and next steps.',
+            '12) Ask: before delivery, run check_plan to confirm the Plan is complete; if not, update_plan first. Then deliver ONLY via ask_continue(reason) and wait; reason must include what was done, risks/notes, verification steps/commands, and next steps.',
             '',
             'Windsurf Hooks (recommended; can be hard guardrails): if your environment supports hooks.json, configure pre_run_command/pre_write_code to block dangerous commands/sensitive writes, and use post_cascade_response to audit missing ask_continue. Official docs: https://docs.windsurf.com/windsurf/cascade/hooks',
             '',
@@ -2197,6 +2225,16 @@ const TOOLS = [
             required: ['reason']
         }
     },
+    {
+        name: 'check_plan',
+        description: 'Check current Plan progress and remaining items / 检查当前 Plan 进度与未完成项',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
+            }
+        }
+    },
     // ==================== Memory Tools ====================
     {
         name: 'save_memory',
@@ -2564,6 +2602,9 @@ async function handleToolCall(name: string, args: any): Promise<any> {
         case 'ask_continue':
             stats.askContinueCalls++;
             result = await handleAskContinue(args);
+            break;
+        case 'check_plan':
+            result = await handleCheckPlan(args);
             break;
         case 'save_memory':
             stats.saveMemoryCalls++;
@@ -3128,6 +3169,38 @@ function buildProjectTree(rootPath: string, maxDepth = 4, maxEntriesPerDir = 80,
     return lines.join('\n');
 }
 
+function detectKeyPaths(rootPath: string): string[] {
+    const candidates = [
+        'README.md',
+        'README_EN.md',
+        'AGENTS.md',
+        'package.json',
+        'tsconfig.json',
+        'pnpm-lock.yaml',
+        'yarn.lock',
+        'package-lock.json',
+        'pyproject.toml',
+        'requirements.txt',
+        'Cargo.toml',
+        'go.mod',
+        '.github/workflows',
+        'src',
+        'lib',
+        'app',
+        'apps',
+        'packages',
+        'docs',
+        'tests',
+        'test'
+    ];
+    const out: string[] = [];
+    for (const rel of candidates) {
+        const p = path.join(rootPath, rel);
+        if (fs.existsSync(p)) out.push(rel.endsWith('/') ? rel : (fs.statSync(p).isDirectory() ? `${rel}/` : rel));
+    }
+    return out.slice(0, 40);
+}
+
 function detectProjectSignals(rootPath: string): string[] {
     const signals: string[] = [];
     const has = (p: string) => fs.existsSync(path.join(rootPath, p));
@@ -3170,16 +3243,21 @@ function generateOverviewMarkdown(project: ProjectTracker, lang: UiLanguage): st
     const rootPath = project.rootPath;
     const title = lang === 'en' ? 'Project Overview' : '项目概览';
     const signals = detectProjectSignals(rootPath);
-    const tree = buildProjectTree(rootPath);
+    const tree = buildProjectTree(rootPath, 5, 110, 1800);
     const pkgSummary = readPackageJsonSummary(rootPath);
+    const keyPaths = detectKeyPaths(rootPath);
     const signalLines = signals.length ? signals.map((s) => `- ${s}`).join('\n') : `_${tr('panel.readOnlyEmpty', {}, lang)}_`;
     const pkgLines = pkgSummary ? pkgSummary : `_${tr('panel.readOnlyEmpty', {}, lang)}_`;
+    const keyPathLines = keyPaths.length ? keyPaths.map((p) => `- ${p}`).join('\n') : `_${tr('panel.readOnlyEmpty', {}, lang)}_`;
 
     return [
         `# ${project.name ? `${project.name} - ${title}` : title}`,
         '',
         `## ${lang === 'en' ? 'Signals' : '技术信号'}`,
         signalLines,
+        '',
+        `## ${lang === 'en' ? 'Key paths (quick map)' : '关键路径（快速定位）'}`,
+        keyPathLines,
         '',
         `## ${lang === 'en' ? 'package.json summary' : 'package.json 摘要'}`,
         pkgLines,
@@ -3258,30 +3336,40 @@ async function handleRagSearch(args: any): Promise<any> {
         throw new Error(msg);
     }
 
-    const queryTokens = tokenizeForSearch(query);
     const exclude = '{**/.git/**,**/node_modules/**,**/.windsurf/**,**/.vscode/**,**/dist/**,**/out/**,**/build/**,**/target/**,**/.venv/**,**/venv/**,**/__pycache__/**}';
-    const files = await vscode.workspace.findFiles('**/*', exclude, 1400);
 
-    const candidates: Array<{ path: string; score: number; snippet: string; startLine: number }> = [];
-    for (const uri of files) {
-        const filePath = uri.fsPath;
+    const queryTokens = tokenizeForSearch(query);
+    const expandedTokens = expandSemanticTokens(queryTokens);
+    const searchTokens = expandedTokens.length ? expandedTokens : queryTokens;
+
+    const fastMatches = await rankWorkspaceFilesByPath(searchTokens, {
+        exclude,
+        maxFiles: 180,
+        maxTotalMatches: 0,
+        timeBudgetMs: 650
+    });
+
+    const candidates: Array<{ uri: vscode.Uri; path: string; score: number; snippet: string; startLine: number }> = [];
+
+    for (const match of fastMatches) {
+        const filePath = match.uri.fsPath;
         if (isIgnoredRagFile(filePath)) continue;
         try {
-            const stat = await vscode.workspace.fs.stat(uri);
-            if (stat.size > 320_000) continue;
-            const raw = await vscode.workspace.fs.readFile(uri);
+            const stat = await vscode.workspace.fs.stat(match.uri);
+            if (stat.size > 420_000) continue;
+            const raw = await vscode.workspace.fs.readFile(match.uri);
             if (raw.length === 0) continue;
-            // quick binary check
             const head = raw.subarray(0, Math.min(raw.length, 2048));
             if (head.includes(0)) continue;
-            const text = decodeUtf8(raw.subarray(0, Math.min(raw.length, 96_000)));
-            const score = scoreByTokenOverlap(queryTokens, `${filePath}\n${text}`);
+            const text = decodeUtf8(raw.subarray(0, Math.min(raw.length, 120_000)));
+            const score = match.pathScore * 2 + scoreByTokenOverlap(searchTokens, `${filePath}\n${text}`);
             if (score <= 0) continue;
-            const { snippet, startLine } = pickBestSnippet(text, queryTokens);
-            candidates.push({ path: filePath, score, snippet, startLine });
+            const { snippet, startLine } = pickBestSnippet(text, searchTokens, 7);
+            candidates.push({ uri: match.uri, path: filePath, score, snippet, startLine });
         } catch {
             // ignore unreadable files
         }
+        if (candidates.length >= 80) break;
     }
 
     candidates.sort((a, b) => (b.score - a.score) || a.path.localeCompare(b.path));
@@ -3293,7 +3381,7 @@ async function handleRagSearch(args: any): Promise<any> {
         content: [
             { type: 'text', text: header },
             { type: 'text', text: lines.join('\n\n') || (lang === 'en' ? 'No matches.' : '无匹配结果。') },
-            { type: 'text', text: `RAG_JSON:\n${JSON.stringify({ query, results: top }, null, 2)}` }
+            { type: 'text', text: `RAG_JSON:\n${JSON.stringify({ query, tokens: searchTokens, results: top.map((r) => ({ path: r.path, startLine: r.startLine, score: r.score })) }, null, 2)}` }
         ]
     };
 }
@@ -3407,6 +3495,87 @@ function tokenizeForSearch(text: string): string[] {
         tokens.push(p);
     }
     return tokens.slice(0, 64);
+}
+
+const SEMANTIC_SYNONYMS: Record<string, string[]> = {
+    delete: ['remove', 'rm', 'unlink', 'erase'],
+    remove: ['delete', 'rm', 'unlink'],
+    auth: ['authentication', 'authorize', 'authorization', 'login'],
+    login: ['auth', 'authenticate', 'signin', 'sign-in'],
+    perf: ['performance', 'optimize', 'latency', 'slow'],
+    bug: ['issue', 'error', 'crash', 'fix'],
+    config: ['configuration', 'settings', 'env', 'dotenv']
+};
+
+function expandSemanticTokens(tokens: string[]): string[] {
+    const out: string[] = [];
+    const seen = new Set<string>();
+    const push = (t: string) => {
+        const v = String(t || '').trim().toLowerCase();
+        if (!v) return;
+        if (v.length <= 1) return;
+        if (seen.has(v)) return;
+        seen.add(v);
+        out.push(v);
+    };
+    for (const t of tokens) {
+        push(t);
+        const syn = SEMANTIC_SYNONYMS[String(t || '').toLowerCase()];
+        if (Array.isArray(syn)) {
+            for (const s of syn) push(s);
+        }
+    }
+    return out.slice(0, 28);
+}
+
+type FastWorkspaceMatch = {
+    uri: vscode.Uri;
+    pathScore: number;
+};
+
+function scoreRagPathHeuristic(filePath: string): number {
+    const p = normalizePathForCompare(filePath);
+    if (!p) return 0;
+    const ext = path.extname(p);
+    let score = 0;
+    if (p.includes('/src/')) score += 4;
+    if (p.includes('/lib/')) score += 3;
+    if (p.includes('/app/')) score += 3;
+    if (p.includes('/packages/')) score += 3;
+    if (p.includes('/components/')) score += 2;
+    if (p.includes('/server/')) score += 2;
+    if (p.includes('/api/')) score += 2;
+    if (p.includes('/tests/') || p.includes('/test/')) score += 1;
+    if (['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.py', '.go', '.rs', '.java', '.kt', '.cs', '.cpp', '.cc', '.c', '.h', '.hpp'].includes(ext)) {
+        score += 3;
+    } else if (['.md', '.json', '.yaml', '.yml', '.toml', '.ini', '.env', '.txt'].includes(ext)) {
+        score += 1;
+    }
+    return score;
+}
+
+async function rankWorkspaceFilesByPath(
+    tokens: string[],
+    options: { exclude: string; maxFiles: number; maxTotalMatches: number; timeBudgetMs: number }
+): Promise<FastWorkspaceMatch[]> {
+    const cleaned = Array.from(new Set((tokens || []).map((t) => String(t || '').trim()).filter(Boolean))).slice(0, 24);
+    if (cleaned.length === 0) return [];
+
+    // Use a fast path-only heuristic to reduce reads: rank files by token overlap on path.
+    // This keeps rag_search responsive on large repos without requiring newer VS Code APIs.
+    const files = await vscode.workspace.findFiles('**/*', options.exclude, 2600);
+    const ranked: Array<{ uri: vscode.Uri; pathScore: number }> = [];
+    for (const uri of files) {
+        const filePath = uri.fsPath;
+        if (isIgnoredRagFile(filePath)) continue;
+        const overlap = scoreByTokenOverlap(cleaned, filePath);
+        const heuristic = scoreRagPathHeuristic(filePath);
+        const score = overlap * 4 + heuristic;
+        if (score <= 0) continue;
+        ranked.push({ uri, pathScore: score });
+    }
+    ranked.sort((a, b) => (b.pathScore - a.pathScore) || a.uri.fsPath.localeCompare(b.uri.fsPath));
+    return ranked.slice(0, options.maxFiles);
 }
 
 function scoreByTokenOverlap(queryTokens: string[], text: string): number {
@@ -3805,7 +3974,31 @@ async function handleAskQuestion(args: any): Promise<any> {
 async function handleAskContinue(args: any): Promise<any> {
     const { reason } = args;
     const lang = getUiLanguage();
-    const resolvedReason = String(reason || '').trim() || getDefaultReason(lang);
+    let resolvedReason = String(reason || '').trim() || getDefaultReason(lang);
+    try {
+        const { project } = resolveProjectTracker();
+        const snapshot = buildTrackerSnapshot(project);
+        const progress = snapshot.progress;
+        if (progress.total > 0) {
+            const prefix = lang === 'en' ? '[Auto]' : '【自动】';
+            const progLine =
+                lang === 'en'
+                    ? `${prefix} Plan progress: ${progress.done}/${progress.total} (${progress.percent}%)`
+                    : `${prefix} Plan 进度：${progress.done}/${progress.total}（${progress.percent}%）`;
+            const warnLine =
+                progress.done < progress.total
+                    ? (lang === 'en'
+                        ? `${prefix} Warning: Plan is not complete — update_plan before final delivery.`
+                        : `${prefix} 警告：Plan 未完成 —— 请先 update_plan 更新进度再交付。`)
+                    : '';
+            const appendix = [progLine, warnLine].filter(Boolean).join('\n');
+            if (appendix && !resolvedReason.includes(progLine)) {
+                resolvedReason = `${resolvedReason}\n\n${appendix}`.trim();
+            }
+        }
+    } catch {
+        // best-effort
+    }
 
     const requestId = `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
@@ -3858,6 +4051,31 @@ async function handleAskContinue(args: any): Promise<any> {
 
         // 无限制等待，直到用户响应
     });
+}
+
+async function handleCheckPlan(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const rootPath = typeof args?.rootPath === 'string' ? args.rootPath : undefined;
+    const { project } = resolveProjectTracker(rootPath);
+    const snapshot = buildTrackerSnapshot(project);
+    const progress = snapshot.progress;
+    const remaining = (project.plan.items || []).filter((i) => i && i.status !== 'done').map((i) => i.text).slice(0, 50);
+
+    const header = lang === 'en' ? 'Plan status:' : 'Plan 状态：';
+    const summary =
+        lang === 'en'
+            ? `Progress: ${progress.done}/${progress.total} (${progress.percent}%)`
+            : `进度：${progress.done}/${progress.total}（${progress.percent}%）`;
+    const remainingLabel = lang === 'en' ? 'Remaining (top 50):' : '未完成（最多 50 条）：';
+    const remainingText = remaining.length ? remaining.map((t) => `- ${t}`).join('\n') : (lang === 'en' ? '(none)' : '（无）');
+    return {
+        content: [
+            { type: 'text', text: header },
+            { type: 'text', text: summary },
+            { type: 'text', text: `${remainingLabel}\n${remainingText}` },
+            { type: 'text', text: `PLAN_STATUS_JSON:\n${JSON.stringify({ progress, remaining }, null, 2)}` }
+        ]
+    };
 }
 
 // 处理来自webview的响应
