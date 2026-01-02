@@ -278,7 +278,6 @@ The sidebar **Maintenance** card lets you:
 | `save_memory` | Save project memory |
 | `get_memory` | Fetch project memory |
 | `list_memories` | List project memory keys |
-| `notify` | Show notification |
 | `ask_continue` | Ask whether to continue after completion |
 
 ## Settings

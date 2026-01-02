@@ -638,6 +638,16 @@ def main():
 
     if action == "pre_run_command":
         command_line = tool_info.get("command_line")
+        # Always read the current plan before executing commands so the model stays in sync.
+        try:
+            tracker = load_tracker()
+            project = select_project(tracker, cwd=tool_info.get("cwd"))
+            if project:
+                root_path = str(project.get("rootPath") or "").strip()
+                if root_path:
+                    call_mcp_tool(server_url, "check_plan", {"rootPath": root_path}, timeout_sec=0.7)
+        except Exception:
+            pass
         if looks_dangerous_command(command_line):
             maybe_record_lesson(
                 server_url,
@@ -656,6 +666,13 @@ def main():
         memory_data = load_memory()
         project = select_project(tracker, file_path=file_path)
         if project:
+            # Always read the current plan before writing code so the model stays in sync.
+            try:
+                root_path = str(project.get("rootPath") or "").strip()
+                if root_path:
+                    call_mcp_tool(server_url, "check_plan", {"rootPath": root_path}, timeout_sec=0.7)
+            except Exception:
+                pass
             gate = check_project_gates(project, memory_data=memory_data, server_url=server_url)
             if gate:
                 print(gate, file=sys.stderr)

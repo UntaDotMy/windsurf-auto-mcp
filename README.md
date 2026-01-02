@@ -278,7 +278,6 @@ WindsurfAutoMcp 通过 MCP 协议标准化交互：AI 完成任务后必须 `ask
 | `save_memory` | 保存项目记忆 |
 | `get_memory` | 读取项目记忆 |
 | `list_memories` | 列出项目记忆键 |
-| `notify` | 通知消息 |
 | `ask_continue` | 任务完成后询问是否继续 |
 
 ## 配置项

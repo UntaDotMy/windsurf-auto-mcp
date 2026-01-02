@@ -2997,7 +2997,6 @@ let extensionContext: vscode.ExtensionContext;
 		    askUserCalls: 0,
 		    askQuestionCalls: 0,
 		    askContinueCalls: 0,
-		    notifyCalls: 0,
 		    setPrdCalls: 0,
 		    updateOverviewCalls: 0,
 		    generateOverviewCalls: 0,
@@ -3207,32 +3206,20 @@ const TOOLS = [
             required: ['mistake', 'fix']
         }
     },
-    {
-        name: 'get_project_status',
-        description: 'Get tracker summary for current project / 获取当前项目跟踪状态',
-        inputSchema: {
-            type: 'object',
-            properties: {
-                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
-            }
-        }
-    },
-    {
-        name: 'notify',
-        description: 'Send a notification to the user / 向用户发送通知消息',
-        inputSchema: {
-            type: 'object',
-            properties: {
-                message: { type: 'string', description: 'Notification message / 通知内容' },
-                level: { type: 'string', enum: ['info', 'warning', 'error'], description: 'Notification level / 通知级别' }
-            },
-            required: ['message']
-        }
-    },
-    {
-        name: 'ask_continue',
-        description: 'Ask whether to continue after finishing a task / 任务完成后询问用户是否继续（可提供新指令）',
-        inputSchema: {
+	    {
+	        name: 'get_project_status',
+	        description: 'Get tracker summary for current project / 获取当前项目跟踪状态',
+	        inputSchema: {
+	            type: 'object',
+	            properties: {
+	                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
+	            }
+	        }
+	    },
+	    {
+	        name: 'ask_continue',
+	        description: 'Ask whether to continue after finishing a task / 任务完成后询问用户是否继续（可提供新指令）',
+	        inputSchema: {
             type: 'object',
             properties: {
                 reason: { type: 'string', description: 'Completion reason / 任务完成的原因或说明' }
@@ -3687,7 +3674,7 @@ async function handleJSONRPC(body: string, res: http.ServerResponse) {
 	            case 'initialize':
 	                result = {
 	                    protocolVersion: '2024-11-05',
-	                    serverInfo: { name: 'windsurf_auto_mcp', version: '1.0.7' },
+	                    serverInfo: { name: 'windsurf_auto_mcp', version: '1.0.8' },
 	                    capabilities: { tools: {} }
 	                };
 	                break;
@@ -3820,14 +3807,10 @@ async function handleToolCall(name: string, args: any): Promise<any> {
 	            stats.wamStashCalls++;
 	            result = await handleWamStash(args);
 	            break;
-        case 'notify':
-            stats.notifyCalls++;
-            result = await handleNotify(args);
-            break;
-        case 'ask_continue':
-            stats.askContinueCalls++;
-            result = await handleAskContinue(args);
-            break;
+	        case 'ask_continue':
+	            stats.askContinueCalls++;
+	            result = await handleAskContinue(args);
+	            break;
 		        case 'check_plan':
 		            stats.checkPlanCalls++;
 		            result = await handleCheckPlan(args);
@@ -3976,22 +3959,6 @@ async function handleAskUser(args: any): Promise<any> {
 
         // 无限制等待，直到用户响应
     });
-}
-
-async function handleNotify(args: any): Promise<any> {
-    const { message, level = 'info' } = args;
-    const lang = getUiLanguage();
-
-    if (level === 'error') {
-        vscode.window.showErrorMessage(message);
-    } else if (level === 'warning') {
-        vscode.window.showWarningMessage(message);
-    } else {
-        vscode.window.showInformationMessage(message);
-    }
-
-    const text = lang === 'en' ? `Notification sent: ${message}` : `通知已发送: ${message}`;
-    return { content: [{ type: 'text', text }] };
 }
 
 function resolveProjectTracker(rootPathOverride?: string): { data: TrackerData; project: ProjectTracker; rootPath: string } {
@@ -4748,6 +4715,16 @@ async function handleUpdatePlan(args: any): Promise<any> {
     }
     if (items.length > 0) {
         project.plan.items = items;
+        // If the plan has todos but no active item, automatically set the first todo to "doing"
+        // to keep progress tracking usable without requiring extra bookkeeping.
+        const hasDoing = project.plan.items.some((it) => it && it.status === 'doing');
+        if (!hasDoing) {
+            const firstTodo = project.plan.items.find((it) => it && it.status === 'todo');
+            if (firstTodo) {
+                firstTodo.status = 'doing';
+                firstTodo.updatedAt = nowIso();
+            }
+        }
         bumpProjectStat(project, 'planUpdates');
     }
     appendWalkthroughEntry(project, lang === 'en' ? 'Plan updated.' : '计划已更新。', lang);
@@ -10059,15 +10036,11 @@ class SidebarProvider implements vscode.WebviewViewProvider {
                     <div class="stat-label">${tr('sidebar.statGetMemory', {}, lang)}</div>
                     <div class="stat-value" id="statGetMemory">${stats.getMemoryCalls}</div>
                 </div>
-                <div class="stat">
-                    <div class="stat-label">${tr('sidebar.statListMemory', {}, lang)}</div>
-                    <div class="stat-value" id="statListMemory">${stats.listMemoryCalls}</div>
-                </div>
-                <div class="stat">
-                    <div class="stat-label">${tr('sidebar.statNotify', {}, lang)}</div>
-                    <div class="stat-value" id="statNotify">${stats.notifyCalls}</div>
-                </div>
-            </div>
+	                <div class="stat">
+	                    <div class="stat-label">${tr('sidebar.statListMemory', {}, lang)}</div>
+	                    <div class="stat-value" id="statListMemory">${stats.listMemoryCalls}</div>
+	                </div>
+	            </div>
             <div class="stats-divider"></div>
             <div class="stats-subtitle">${tr('panel.statsProject', {}, lang)}</div>
             <div class="stats-grid">
@@ -10159,9 +10132,9 @@ class SidebarProvider implements vscode.WebviewViewProvider {
             const el = document.getElementById(id);
             if (el) el.textContent = String(value ?? 0);
         };
-        const updateToolStats = (s) => {
-            if (!s) return;
-            setText('statTotalCalls', s.totalCalls);
+	        const updateToolStats = (s) => {
+	            if (!s) return;
+	            setText('statTotalCalls', s.totalCalls);
             setText('statAskContinue', s.askContinueCalls);
             setText('statAskUser', s.askUserCalls);
             setText('statAskQuestion', s.askQuestionCalls);
@@ -10175,10 +10148,9 @@ class SidebarProvider implements vscode.WebviewViewProvider {
             setText('statRecordLesson', s.recordLessonCalls);
             setText('statGetProjectStatus', s.getProjectStatusCalls);
             setText('statSaveMemory', s.saveMemoryCalls);
-            setText('statGetMemory', s.getMemoryCalls);
-            setText('statListMemory', s.listMemoryCalls);
-            setText('statNotify', s.notifyCalls);
-        };
+	            setText('statGetMemory', s.getMemoryCalls);
+	            setText('statListMemory', s.listMemoryCalls);
+	        };
         const updateProjectStats = (s) => {
             if (!s) return;
             setText('statPrdUpdates', s.prdUpdates);
