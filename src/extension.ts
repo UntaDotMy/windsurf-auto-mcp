@@ -32,6 +32,9 @@ type ProjectTrackerStats = {
     planUpdates: number;
     walkthroughUpdates: number;
     updatedAt?: string;
+    lastRagSearchAt?: string;
+    lastWamStatusAt?: string;
+    lastCheckPlanAt?: string;
 };
 type ProjectTracker = {
     projectId: string;
@@ -2406,7 +2409,10 @@ function createDefaultTrackerStats(): ProjectTrackerStats {
         prdApprovals: 0,
         overviewUpdates: 0,
         planUpdates: 0,
-        walkthroughUpdates: 0
+        walkthroughUpdates: 0,
+        lastRagSearchAt: undefined,
+        lastWamStatusAt: undefined,
+        lastCheckPlanAt: undefined
     };
 }
 
@@ -2420,7 +2426,10 @@ function normalizeTrackerStats(raw: any): ProjectTrackerStats {
         overviewUpdates: safe(raw.overviewUpdates),
         planUpdates: safe(raw.planUpdates),
         walkthroughUpdates: safe(raw.walkthroughUpdates),
-        updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined
+        updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined,
+        lastRagSearchAt: typeof raw.lastRagSearchAt === 'string' ? raw.lastRagSearchAt : undefined,
+        lastWamStatusAt: typeof raw.lastWamStatusAt === 'string' ? raw.lastWamStatusAt : undefined,
+        lastCheckPlanAt: typeof raw.lastCheckPlanAt === 'string' ? raw.lastCheckPlanAt : undefined
     };
 }
 
@@ -3673,7 +3682,7 @@ async function handleJSONRPC(body: string, res: http.ServerResponse) {
 	            case 'initialize':
 	                result = {
 	                    protocolVersion: '2024-11-05',
-	                    serverInfo: { name: 'windsurf_auto_mcp', version: '1.0.9' },
+	                    serverInfo: { name: 'windsurf_auto_mcp', version: '1.0.10' },
 	                    capabilities: { tools: {} }
 	                };
 	                break;
@@ -4545,6 +4554,16 @@ async function handleRagSearch(args: any): Promise<any> {
         throw new Error(msg);
     }
 
+    // Record that we refreshed workspace context for this project (used by hooks to enforce "RAG before edits").
+    try {
+        const trackerInfo = resolveProjectTracker(rootPath);
+        trackerInfo.project.stats = normalizeTrackerStats(trackerInfo.project.stats);
+        trackerInfo.project.stats.lastRagSearchAt = nowIso();
+        saveTrackerData(trackerInfo.data);
+    } catch {
+        // ignore
+    }
+
     const queryTokens = tokenizeForSearch(query);
     const expandedTokens = expandSemanticTokens(queryTokens);
     const searchTokens = expandedTokens.length ? expandedTokens : queryTokens;
@@ -4858,6 +4877,13 @@ async function handleWamStatus(args: any): Promise<any> {
     }
     const rootPath = typeof args?.rootPath === 'string' ? args.rootPath : undefined;
     const state = buildCurrentProjectWamState(rootPath);
+    try {
+        state.project.stats = normalizeTrackerStats(state.project.stats);
+        state.project.stats.lastWamStatusAt = nowIso();
+        saveTrackerData(state.trackerData);
+    } catch {
+        // ignore
+    }
     const head = state.wamDir ? readWamHead(state.wamDir) : {};
     const headHash = state.wamDir ? resolveWamHeadHash(state.wamDir).hash : '';
     const clean = !!headHash && head?.digest === state.digest;
@@ -6930,7 +6956,7 @@ async function handleAskContinue(args: any): Promise<any> {
     const lang = getUiLanguage();
     let resolvedReason = String(reason || '').trim() || getDefaultReason(lang);
     try {
-        const { project } = resolveProjectTracker();
+        const { data, project } = resolveProjectTracker();
         const snapshot = buildTrackerSnapshot(project);
         const progress = snapshot.progress;
         if (progress.total > 0) {
@@ -6949,6 +6975,23 @@ async function handleAskContinue(args: any): Promise<any> {
             if (appendix && !resolvedReason.includes(progLine)) {
                 resolvedReason = `${resolvedReason}\n\n${appendix}`.trim();
             }
+        }
+
+        // Always keep Walkthrough up-to-date: record that we reached a completion gate.
+        try {
+            const snippet = resolvedReason.replace(/\s+/g, ' ').slice(0, 140);
+            const entry = lang === 'en'
+                ? `ask_continue called (completion gate). Reason snippet: ${snippet}`
+                : `已调用 ask_continue（交付门禁）。原因摘要：${snippet}`;
+            const recent = String(project.walkthrough?.content || '').slice(-240);
+            if (!recent.includes('ask_continue')) {
+                bumpProjectStat(project, 'walkthroughUpdates');
+                appendWalkthroughEntry(project, entry, lang);
+                project.updatedAt = nowIso();
+                saveTrackerAndNotify(data, project, 'ask_continue', 'ai');
+            }
+        } catch {
+            // ignore
         }
     } catch {
         // best-effort
@@ -7010,7 +7053,10 @@ async function handleAskContinue(args: any): Promise<any> {
 async function handleCheckPlan(args: any): Promise<any> {
     const lang = getUiLanguage();
     const rootPath = typeof args?.rootPath === 'string' ? args.rootPath : undefined;
-    const { project } = resolveProjectTracker(rootPath);
+    const { data, project } = resolveProjectTracker(rootPath);
+    project.stats = normalizeTrackerStats(project.stats);
+    project.stats.lastCheckPlanAt = nowIso();
+    saveTrackerData(data);
     const snapshot = buildTrackerSnapshot(project);
     const progress = snapshot.progress;
     const remaining = (project.plan.items || []).filter((i) => i && i.status !== 'done').map((i) => i.text).slice(0, 50);

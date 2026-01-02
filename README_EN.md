@@ -259,7 +259,7 @@ The sidebar **Maintenance** card lets you:
 | `memory_search` | Search project/global memory |
 | `record_lesson` | Record lessons learned (project/global) |
 | `set_prd` | Create/update PRD draft |
-| `update_plan` | Set/update plan checklist |
+| `update_plan` | Update Plan checklist (defaults to merge; use `mode=replace` only when you truly need a full rewrite) |
 | `check_plan` | Check Plan progress + remaining items |
 | `ensure_release_gate` | Ensure Plan contains a release gate checklist |
 | `update_walkthrough` | Update Walkthrough summary |

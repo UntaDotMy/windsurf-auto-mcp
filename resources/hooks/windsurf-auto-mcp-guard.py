@@ -380,6 +380,23 @@ def _sha256_hex_parts(parts):
 def _normalize_item_status(status):
     return status if status in ("doing", "done") else "todo"
 
+def _latest_plan_updated_at(project):
+    try:
+        plan = project.get("plan") or {}
+        items = plan.get("items") or []
+        if not isinstance(items, list):
+            return ""
+        latest = ""
+        for it in items:
+            if not isinstance(it, dict):
+                continue
+            ts = str(it.get("updatedAt") or "").strip()
+            if ts and ts > latest:
+                latest = ts
+        return latest
+    except Exception:
+        return ""
+
 
 def _compute_project_wam_digest(project, memory_store):
     project = project or {}
@@ -604,6 +621,24 @@ def check_project_gates(project, memory_data=None, server_url=None):
     if not plan_items and not str(plan_summary).strip():
         return "Blocked: Plan is missing. Create a Plan checklist (with breakdown) before implementation."
 
+    # Enforce "RAG before edits": require rag_search to have been run after the latest plan change.
+    try:
+        stats = project.get("stats") or {}
+        last_rag = str(stats.get("lastRagSearchAt") or "").strip()
+        last_plan = _latest_plan_updated_at(project)
+        if not last_rag:
+            return (
+                "Blocked: No rag_search recorded for this project yet.\n"
+                "Required: before writing code, use rag_search to locate the exact file/snippet to edit (no guessing), then proceed."
+            )
+        if last_plan and last_rag < last_plan:
+            return (
+                "Blocked: Plan changed after the last rag_search.\n"
+                "Required: run rag_search again (with a concrete query) to refresh context for the latest Plan items, then proceed."
+            )
+    except Exception:
+        pass
+
     wam_gate = _check_wam_clean(project, memory_data, server_url)
     if wam_gate:
         return wam_gate
@@ -646,6 +681,7 @@ def main():
                 root_path = str(project.get("rootPath") or "").strip()
                 if root_path:
                     call_mcp_tool(server_url, "check_plan", {"rootPath": root_path}, timeout_sec=0.7)
+                    call_mcp_tool(server_url, "wam_status", {"scope": "project", "rootPath": root_path}, timeout_sec=0.7)
         except Exception:
             pass
         if looks_dangerous_command(command_line):
@@ -671,6 +707,7 @@ def main():
                 root_path = str(project.get("rootPath") or "").strip()
                 if root_path:
                     call_mcp_tool(server_url, "check_plan", {"rootPath": root_path}, timeout_sec=0.7)
+                    call_mcp_tool(server_url, "wam_status", {"scope": "project", "rootPath": root_path}, timeout_sec=0.7)
             except Exception:
                 pass
             gate = check_project_gates(project, memory_data=memory_data, server_url=server_url)
@@ -723,6 +760,16 @@ def main():
                             file=sys.stderr,
                         )
                         return 1
+                    if total > 0 and done == total:
+                        walkthrough = project.get("walkthrough") or {}
+                        wt_content = str(walkthrough.get("content") or "").strip()
+                        if not wt_content:
+                            print(
+                                "Warning: Plan is complete but Walkthrough is empty. "
+                                "Update walkthrough via update_walkthrough so the delivery is auditable.",
+                                file=sys.stderr,
+                            )
+                            return 1
         except Exception:
             pass
 

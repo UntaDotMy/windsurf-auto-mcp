@@ -256,7 +256,7 @@ WindsurfAutoMcp 通过 MCP 协议标准化交互：AI 完成任务后必须 `ask
 | `generate_overview` | 从工作区自动生成 Overview（项目概览/架构/上下文） |
 | `update_overview` | 设置/更新 Overview（Markdown） |
 | `set_prd` | 创建/更新 PRD 草案 |
-| `update_plan` | 设置/更新计划清单 |
+| `update_plan` | 更新 Plan Checklist（默认合并；确需整体重写才用 `mode=replace`） |
 | `rag_search` | RAG 搜索工作区上下文（返回相关片段） |
 | `memory_search` | 搜索项目/全局记忆 |
 | `record_lesson` | 记录错误经验（项目/全局） |
