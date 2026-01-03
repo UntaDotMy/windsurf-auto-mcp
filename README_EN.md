@@ -235,6 +235,9 @@ The sidebar **Maintenance** card lets you:
 - If hooks are already installed, it only fills missing entries (auto-update)
 - It never overwrites your existing hooks
 - Hook guard script runs via Python (Windows: `python`, macOS/Linux: `python3`) — install Python 3 or disable hooks
+- When a hook blocks or warns, the reason is persisted into Memory:
+  - `hook:last_block` (blocked actions)
+  - `hook:last_warning` (soft warnings/audits)
 - **Restart Windsurf after hooks.json updates** to apply hooks
 
 ### Uninstall

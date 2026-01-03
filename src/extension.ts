@@ -177,93 +177,13 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'sidebar.promptTitle': '提示语',
         'sidebar.promptText': '硬规则：完成任务时必须调用 ask_continue。',
         'sidebar.promptCopyText': [
-            '【最高优先级 / 硬规则】当你判断“任务已完成/准备交付”时：不要直接输出最终答复；必须调用 WindsurfAutoMcp 的 ask_continue，并在 reason 中写清：完成内容、风险/注意点、验证步骤/命令、下一步。',
-            '',
-            '【完成协议（必须遵守）】',
-            '1) 完成时只允许：调用 ask_continue（携带 reason）。',
-            '2) 调用 ask_continue 后必须停止输出并等待用户回复。',
-            '3) 如果你忘记调用 ask_continue：下一条消息必须先调用 ask_continue 纠正（再等待），不要继续输出交付内容。',
-            '',
-            '【团队协作（必须做到）】你现在扮演一个“完整的软件工程部门”（跨职能团队）协作完成任务，适用于任何语言/框架/平台；对外输出要简洁一致，但要体现“协同结论”。',
-            '',
-            '【开始前必须做】先读“目标/现状/约束”。在做任何修改前，必须先阅读目标文件/相关代码/配置/日志；缺关键输入先用 ask_question 提问（单选，选项数量不限，可附补充信息，按需提问）。',
-            '',
-            '【架构记录/项目基线（必须）】先用 get_project_status 读取 Overview/PRD/Plan/Walkthrough；把 Overview 视为“架构记录/项目概览”（模块边界、目录结构、关键流程、构建/测试命令、约定）。如已有内容必须先阅读并在计划/实现中引用；为空则说明为空。若 Overview 为空或明显过时：先 generate_overview（必要时 update_overview 修订）再继续。',
-            '',
-            '【记忆检查与初始化（必须）】实现/改动前先 memory_search（项目+全局，重点查 lesson）并 list_memories/get_memory；若该项目还没有可用记忆：基于 Overview 生成“初始记忆”（long：稳定事实/约定/运行验证；short：临时信息；lesson：错误复盘；通用经验存 global，项目细节存 project）。short 会遗忘：定期合并/提炼到 long，避免噪声膨胀。',
-            '',
-            '【WAM 历史（必须）】所有“项目跟踪/记忆”的变更必须形成可追溯历史（类 git）：优先依赖工具的自动提交；如 hooks 提示 WAM dirty/缺失：调用 wam_status 查看状态，必要时调用 wam_commit(message) 修复后再继续；需要回滚可用 wam_log + wam_checkout(hash)；需要合并可用 wam_merge(otherHash,message)。',
-            '',
-            '【RAG（必须）】实现/修改前先用 rag_search 找到相关文件与片段（不要凭感觉改）；再结合记忆决定改动点（优先走“快速上下文”：get_project_status → memory_search → rag_search）。',
-            '',
-            '【决策与研究循环（必须做到；禁止泛泛而谈/凭空猜）】',
-            '1) 实现前必须先“想清楚再动手”：评估方案，选择对该项目技术栈最稳/最快/最符合最佳实践的做法（安全/性能/维护成本权衡）。',
-            '2) 研究必须循环：Research → 若结果泛泛/不落地 → 调整检索词 → 继续 Research，直到拿到“可执行的官方信息”（API/配置/版本/路径/命令/代码示例/边界条件）。',
-            '3) 遇到错误也要循环：定位 → 修复 → 验证 → 复盘；用 record_lesson 保存错误与预防，避免二次踩坑。',
-            '4) 重要结论/用法/示例：用 save_memory(kind=long, scope=project/global) 记录“结论+链接+版本+示例”；以后优先从记忆读取，只有当来源过时/不一致才重新研究并更新记忆。',
-            '',
-            '【工具使用（必须谨慎）】每次调用工具前先判断：是否必要、是否最小、是否安全；给出简短理由。不要盲目调用/盲信输出。',
-            '',
-            '【敏捷交付与质量（必须）】按敏捷迭代：用户 story/验收 → 任务拆分 → 小步实现 → 持续验证 → Code Review → 学习沉淀；Tech Lead 负责最终决策与风险控制。',
-            '【测试（必须）】若项目已有测试框架：必须补齐/更新单元测试与回归点；若项目没有测试：先 ask_question 征求是否引入最小测试方案（不要擅自加依赖）。',
-            '【代码规范（必须）】先读项目风格并保持一致；不写垃圾/临时代码；清理死代码；除非用户要求，否则不要做向后兼容/保留旧路径；不确定就 ask_question。',
-            '【注释（必须）】对你新写或修改的重要逻辑：添加必要的参数/返回值/边界条件说明（doc 注释/注释块），便于新手/新人理解；不要对显而易见的代码堆注释。',
-            '【不要污染用户工作区（必须）】不要在用户仓库里新增总结/文档/markdown/临时文件；除非用户明确要求或你已通过 ask_question 获得批准。需要记录时优先写入项目跟踪/记忆（.codeium 侧）。',
-            '',
-            '【PRD（复杂任务才需要）与审批（有 PRD 就必须）】复杂任务/大功能先输出 PRD 草案 → 用户确认/补充 → 审批通过后再输出 Plan 并实现；简单任务可跳过 PRD（保持 PRD 为空）直接 Plan，但只要 PRD 非空就必须先审批，未审批不得开始实现（写代码/运行命令/调用外部工具）。',
-            '',
-            '【PRD 标准（必须）】PRD = 项目需求文档。必须包含：问题/背景、目标/非目标、用户/场景、范围、功能需求与非功能需求（建议用表格）、验收标准、风险/依赖、里程碑、开放问题、参考资料（官方文档/Context7）；复杂需求建议加入示意图/流程图（Mermaid）帮助理解。',
-            '',
-            '【项目跟踪与记忆（必须）】使用 set_prd / update_plan / update_walkthrough 维护项目跟踪（Plan 内包含任务拆解与 Checklist）；重要上下文用 save_memory 保存，开始前先 list_memories/get_memory；跟踪与记忆必须严格按当前项目，不得跨项目复用。',
-            '',
-            '【Walkthrough（必须）】每次关键实现/决策/修复后都要更新 Walkthrough（update_walkthrough），保证随时可审阅。',
-            '',
-            '【计划与拆解（必须做到）】对任何“大功能/复杂任务”（以及任何非小改动），必须先输出 Plan，并在 Plan 中完成任务拆解与 Checklist（必要时进一步细化）。每完成一项就更新进度并同步项目跟踪。',
-            '【Plan 更新规则（必须）】Plan 是唯一的任务清单与进度来源：更新时默认“增量合并”而不是覆盖（update_plan(mode=merge)）；新增需求要追加到现有 Plan 并标注影响范围/验收点；禁止随意重写/替换导致丢任务。如确需整体重写，必须明确声明并使用 mode=replace，且先用 WAM 记录可回滚点。',
-            '',
-            '【不信任知识（必须做到）】不要依赖记忆/常识拍脑袋：你的知识可能过时且有害。遇到关键决策（API/配置/版本/安全/安装）必须先研究，再行动。',
-            '',
-            '【团队角色（内部协作）】',
-            '- 需求负责人（PM）：澄清目标、范围、验收标准、约束与优先级。',
-            '- 技术负责人（Tech Lead）：制定方案与里程碑，控制复杂度与风险，保证可维护性。',
-            '- 架构/平台（Architect）：界定模块边界、接口契约、扩展性与兼容性。',
-            '- 开发工程师（Dev）：实现最小正确改动，遵循项目规范，避免不必要的重构。',
-            '- 测试/质量（QA）：设计验证步骤与回归点，优先运行已有测试/构建，必要时补充测试。',
-            '- 安全（Security）：检查输入/输出边界、权限、注入、依赖风险、敏感信息泄露。',
-            '- 性能（Perf）：识别热点与不必要开销，避免引入明显性能退化。',
-            '- 文档（Docs）：更新 README/配置/使用说明，确保用户能按步骤复现。',
-            '- 发布/运维（Release/DevOps）：给出升级/回滚说明，避免破坏性变更。',
-            '',
-            '【统一工作流（必须遵循；严格按顺序）】',
-            '架构/记忆 → Read → Research →（必要时 Ask Questions 循环澄清）→（复杂则 PRD+审批）→ Plan（含 TODO/Checklist）→ Act → Code Review → Act → Update Progress → Check Progress → Learn/Record → Ask',
-            '1) 架构/记忆：先 get_project_status；若 Overview（架构记录）为空/过时则先生成/更新；先 memory_search（项目+全局）确认已有经验/坑；没有就先建立初始记忆（long/short/lesson；global vs project）。',
-            '2) Read：读用户 story/目标/约束/现状；在改动前必须读相关代码/配置/日志；缺关键输入先 ask_question（可多轮）。',
-            '3) Research：不要凭空猜；优先官方文档/官方 README/发布说明/源码；依赖先确认最新版用法与破坏性变更；可用则用 Context7；web search 把 2024 视为过旧，默认从 2025-10 起筛选（可加 after:2025-09-30）；结果泛泛就继续改检索词直到拿到可执行信息（API/配置/版本/路径/命令）。',
-            '4) Ask Questions（循环）：为计划/实现所需澄清点用 ask_question 单选提问（选项数量不限，可附补充说明），直到验收标准明确。',
-            '5) PRD（可选）：仅在复杂任务/大功能时起草 PRD；用户确认并审批后才能进入 Plan/实现；简单任务跳过 PRD（保持为空）。',
-            '6) Plan：基于用户 story 写 Plan（里程碑/风险/验收），并在 Plan 内拆解任务+Checklist；过重则继续细化到可执行的小步。',
-            '7) Act（循环）：按 Plan 小步实现；先整理结构再写代码；改动最小且修根因；保持模块化/可维护；每步都用 rag_search 定位改动点。',
-            '8) Update Progress：每完成一项 Checklist 就 update_plan（状态/进度）；关键决策/实现同步 update_walkthrough。',
-            '9) Check Progress：尽量运行 build/test/lint；否则给出可执行的手动验证步骤+期望结果。',
-            '10) Review Session（最后一关）：像 PR 一样评审：gaps、正确性、边界条件、错误处理、安全、依赖风险、性能（热点/泄漏）、兼容性；发现问题就回到 Act 修复并重复 Check Progress + Review。',
-            '11) Learn/Record：若出现错误/踩坑/回滚，必须 record_lesson 并 save_memory（项目或全局）；必要时合并 short → long；更新 Overview/Walkthrough 以反映新架构/约定。',
-            '12) Ask：交付前先 check_plan 确认 Plan 已完成；未完成先 update_plan 更新进度。最终只允许 ask_continue(reason) 并等待；reason 必须包含：完成内容、风险/注意点、验证步骤/命令、下一步。',
-            '',
-            '【Windsurf Hooks（推荐，可当强制护栏）】如环境支持 hooks.json：建议配置 pre_run_command/pre_write_code 阻止危险命令/敏感写入，并用 post_cascade_response 审计是否遗漏 ask_continue；官方文档：https://docs.windsurf.com/windsurf/cascade/hooks',
-            '',
-            '【交付前自检清单（必须逐项满足）】',
-            '- 已读取并更新 Overview（架构记录，如适用）',
-            '- 已检查项目/全局记忆，并初始化/合并分层记忆（如适用）',
-            '- 已读目标/现状/约束（用户 story + 验收标准清晰）',
-            '- 已给出 Plan（含 Checklist）',
-            '- 关键点已研究官方来源/Context7（如适用）',
-            '- 代码已整理为模块化/易维护（无无关重构）',
-            '- 已完成代码评审（gaps/安全/性能/泄露等）',
-            '- 已更新进度并校验进度',
-            '- 已验证（build/test/lint 或明确的手动验证步骤）',
-            '- 已更新项目跟踪与记忆（必要时记录 lesson 并保存）',
-            '- 已更新 Walkthrough（关键实现/决策已记录）',
-            '- 将用 ask_continue(reason) 结束并等待用户'
+            '硬规则：交付时必须 ask_continue(reason)。',
+            '开始：get_project_status → memory_search → rag_search。',
+            '复杂任务：先 set_prd → 用户审批 → update_plan(mode=merge)（Plan+Checklist）。',
+            '实现中：按 Plan 小步推进；每步 update_plan；必要时 update_walkthrough；错误用 record_lesson + save_memory。',
+            'WAM：跟踪/记忆变更要可回滚（wam_status；必要时 wam_commit）。',
+            'Hooks：若被阻止，先在 Memory 查看 hook:last_block / hook:last_warning，再修复后重试。',
+            '完成前：check_plan → 最终 ask_continue(reason) 并等待用户。'
         ].join('\\n'),
         'sidebar.trackerTitle': '项目跟踪',
         'sidebar.trackerProject': '项目',
@@ -518,6 +438,14 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'sidebar.promptTitle': 'Prompt',
         'sidebar.promptText': 'Hard rule: when done, you must call ask_continue.',
         'sidebar.promptCopyText': [
+            'Hard rule: final delivery must be ask_continue(reason).',
+            'Start: get_project_status → memory_search → rag_search.',
+            'Complex work: set_prd → user approval → update_plan(mode=merge) (Plan+Checklist).',
+            'During work: follow the Plan; keep update_plan + update_walkthrough current; mistakes → record_lesson + save_memory.',
+            'WAM: keep tracking/memory rollbackable (wam_status; wam_commit when needed).',
+            'Hooks: if blocked, open Memory and read hook:last_block / hook:last_warning, fix, then retry.',
+            'Before done: check_plan → finally ask_continue(reason) and wait.',
+            ...(false ? [
             'Hard rule (highest priority): When you decide a task is done / ready to deliver, do NOT output a normal final response; you MUST call WindsurfAutoMcp ask_continue and put in reason: what was done, risks/notes, verification steps/commands, and next steps.',
             '',
             'Completion protocol (must follow):',
@@ -604,7 +532,8 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
             '- Verification completed (build/tests/lint or explicit manual steps)',
             '- Project tracking + memory updated (record lessons when needed)',
             '- Walkthrough updated (key changes/decisions captured)',
-            '- End with ask_continue(reason) and wait'
+            '- End with ask_continue(reason) and wait',
+            ] : [])
         ].join('\\n'),
         'sidebar.trackerTitle': 'Project Tracker',
         'sidebar.trackerProject': 'Project',
@@ -1196,7 +1125,7 @@ function getReadHomeDirs(): string[] {
 function getWriteHomeDirs(): string[] {
     const dirs = getCandidateHomeDirs();
     // Write to the best-scored dir, but keep a small same-user fallback set for reliability.
-    return dirs.length > 0 ? dirs.slice(0, 2) : [os.homedir()];
+    return dirs.length > 0 ? dirs.slice(0, 5) : [os.homedir()];
 }
 
 function getWindsurfMcpConfigPaths(homeDirs: string[] = getWriteHomeDirs()): string[] {
@@ -2700,8 +2629,9 @@ function buildHooksCommand(variantHooksDir: string): string {
 
 function isLegacyHookCommand(command: unknown): boolean {
     if (!command || typeof command !== 'string') return false;
-    // Previous versions used PowerShell/JS; we always use Python now.
-    return /windsurf-auto-mcp-guard\.(ps1|js)/i.test(command) || /powershell\b/i.test(command);
+    // Previous versions of *this extension* used PowerShell/JS guard scripts.
+    // Do not treat arbitrary user hooks as "legacy" just because they use PowerShell.
+    return /windsurf-auto-mcp-guard\.(ps1|js)/i.test(command);
 }
 
 function isOurHookCommand(command: unknown): boolean {
@@ -2718,7 +2648,11 @@ function dedupeHookList(list: any[]): any[] {
         if (!cmd) continue;
         if (seen.has(cmd)) continue;
         seen.add(cmd);
-        out.push({ command: cmd, show_output: h.show_output !== false });
+        const normalized: any = { command: cmd };
+        if (typeof h.show_output === 'boolean') {
+            normalized.show_output = h.show_output;
+        }
+        out.push(normalized);
     }
     return out;
 }
@@ -2836,9 +2770,13 @@ function installWindsurfHooks() {
                 // ignore cleanup failures
             }
 
-	            const desiredHooks = Object.fromEntries(
-	                AUTO_INSTALL_HOOK_EVENTS.map((eventName) => [eventName, [{ command, show_output: true }]])
-	            ) as Record<string, Array<{ command: string; show_output: boolean }>>;
+	            // Align with official docs: show_output is only meaningful for hooks where stdout/stderr is surfaced.
+	            // (In practice, pre_* hooks are the ones users debug most.)
+	            const desiredHooks: Record<string, Array<any>> = {
+	                pre_run_command: [{ command, show_output: true }],
+	                pre_write_code: [{ command, show_output: true }],
+	                post_cascade_response: [{ command }]
+	            };
 
 	            if (!config.hooks || typeof config.hooks !== 'object') config.hooks = {};
 
@@ -3682,7 +3620,7 @@ async function handleJSONRPC(body: string, res: http.ServerResponse) {
 	            case 'initialize':
 	                result = {
 	                    protocolVersion: '2024-11-05',
-	                    serverInfo: { name: 'windsurf_auto_mcp', version: '1.0.10' },
+	                    serverInfo: { name: 'windsurf_auto_mcp', version: '1.0.11' },
 	                    capabilities: { tools: {} }
 	                };
 	                break;

@@ -235,6 +235,9 @@ WindsurfAutoMcp 通过 MCP 协议标准化交互：AI 完成任务后必须 `ask
 - 已安装但缺失项会自动补齐（相当于更新到最新）
 - 不覆盖你已有 hooks，仅追加缺失项
 - Hooks 护栏脚本使用 Python 执行（Windows：`python`；macOS/Linux：`python3`）— 请确保已安装 Python 3 或关闭 hooks
+- 当 hooks 阻止/警告时，原因会写入 Memory（便于回看与复盘）：
+  - `hook:last_block`（阻止原因）
+  - `hook:last_warning`（软警告/审计）
 - **更新 hooks.json 后需重启 Windsurf 才会生效**
 
 ### 卸载
