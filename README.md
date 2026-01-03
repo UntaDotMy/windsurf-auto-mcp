@@ -234,12 +234,14 @@ WindsurfAutoMcp 通过 MCP 协议标准化交互：AI 完成任务后必须 `ask
 - 扩展激活时会检查并安装 **用户级 hooks.json**（默认开启）
 - 已安装但缺失项会自动补齐（相当于更新到最新）
 - 不覆盖你已有 hooks，仅追加缺失项
-- 安装的事件：`pre_run_command`、`pre_write_code`、`post_write_code`、`pre_mcp_tool_use`、`post_cascade_response`
+- 安装的事件：`pre_run_command`、`post_run_command`、`pre_write_code`、`post_write_code`、`pre_mcp_tool_use`、`post_mcp_tool_use`、`post_cascade_response`
 - 严格模式：Plan 更新后必须 `memory_search` + `rag_search`；WAM 必须 clean（`wam_commit()`）；禁止直接写 tracker/memory/.wam；对会修改状态的 MCP 工具强制要求 `rationale`；且连续 5 次 `write_code` 未 `update_plan` 会被阻止
 - Hooks 护栏脚本使用 Python 执行（Windows：`python`；macOS/Linux：`python3`）— 请确保已安装 Python 3 或关闭 hooks
 - 当 hooks 阻止/警告时，原因会写入 Memory（便于回看与复盘）：
   - `hook:last_block`（阻止原因）
   - `hook:last_warning`（软警告/审计）
+  - `hook:last_error`（命令/MCP 工具错误摘要）
+- 当遇到“命令失败 / MCP 工具报错 / 关键门禁阻止”时，hooks 会自动 `record_lesson(scope=both)` 记录到 **项目 + 全局** 记忆（用于避免重复犯错）
 - **更新 hooks.json 后需重启 Windsurf 才会生效**
 
 ### 卸载

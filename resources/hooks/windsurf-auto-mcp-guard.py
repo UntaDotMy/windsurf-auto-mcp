@@ -308,7 +308,11 @@ def persist_hook_feedback(server_url, project, action, severity, message):
             root_path = str(project.get("rootPath") or "").strip()
         if not root_path:
             scope = "global"
-        key = "hook:last_block" if severity == "block" else "hook:last_warning"
+        key = (
+            "hook:last_block"
+            if severity == "block"
+            else ("hook:last_error" if severity == "error" else "hook:last_warning")
+        )
         ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         value = f"[{ts}] {action}\n{msg}\n"
         call_mcp_tool(
@@ -327,9 +331,75 @@ def persist_hook_feedback(server_url, project, action, severity, message):
         return
 
 
-def maybe_record_lesson(server_url, project, lesson_key, mistake, fix, prevention):
+def _truncate_text(text, max_chars=1600):
+    s = str(text or "")
+    s = s.replace("\r\n", "\n").replace("\r", "\n")
+    if len(s) <= max_chars:
+        return s
+    return s[: max_chars - 3] + "..."
+
+
+def _truncate_lines(text, max_lines=40, max_chars=2400):
+    s = str(text or "")
+    s = s.replace("\r\n", "\n").replace("\r", "\n")
+    lines = s.split("\n")
+    if len(lines) > max_lines:
+        lines = lines[:max_lines] + ["... (truncated)"]
+    return _truncate_text("\n".join(lines), max_chars=max_chars)
+
+
+def _redact_secrets(text):
+    # Best-effort redaction to avoid persisting accidental secrets from stderr/stdout.
+    s = str(text or "")
+    s = s.replace("\r\n", "\n").replace("\r", "\n")
+    lower = s.lower()
+    # Common "key=value" patterns.
+    needles = ["password", "passwd", "token", "secret", "api_key", "apikey", "authorization", "bearer "]
+    if any(n in lower for n in needles):
+        # Replace "X=..." and "X: ..." forms.
+        for n in needles:
+            s = _redact_key_value(s, n)
+    # Redact very long base64-ish blobs.
+    s = _redact_long_blobs(s)
+    return s
+
+
+def _redact_key_value(text, key_name):
     try:
-        project_id = str(project.get("projectId") or "").strip()
+        import re
+
+        # key=VALUE or key: VALUE (case-insensitive)
+        pattern = re.compile(rf"(?i)({re.escape(key_name)}\s*[:=]\s*)([^\s\"']+)")
+        return pattern.sub(r"\1<redacted>", text)
+    except Exception:
+        return text
+
+
+def _redact_long_blobs(text):
+    try:
+        import re
+
+        # Heuristic: long URL-safe/base64-ish strings.
+        pattern = re.compile(r"([A-Za-z0-9_\-\/+=]{80,})")
+        return pattern.sub("<redacted_blob>", text)
+    except Exception:
+        return text
+
+
+def maybe_record_lesson(
+    server_url,
+    project,
+    lesson_key,
+    mistake,
+    fix,
+    prevention,
+    title=None,
+    tags=None,
+    scope=None,
+):
+    try:
+        project = project if isinstance(project, dict) else {}
+        project_id = str(project.get("projectId") or "").strip() or "global"
         if not project_id:
             return
         state = load_guard_state()
@@ -343,13 +413,18 @@ def maybe_record_lesson(server_url, project, lesson_key, mistake, fix, preventio
             return
 
         root_path = str(project.get("rootPath") or "").strip()
+        final_scope = scope
+        if final_scope not in ("project", "global", "both"):
+            final_scope = "both" if root_path else "global"
+        final_tags = tags if isinstance(tags, list) else []
+        final_title = str(title or "").strip() or f"Lesson: {lesson_key}"
         args = {
-            "title": f"Hook guard: {lesson_key}",
-            "mistake": mistake,
-            "fix": fix,
-            "prevention": prevention,
-            "scope": "project",
-            "tags": ["hook", "guard", "wam"],
+            "title": final_title,
+            "mistake": _truncate_text(_redact_secrets(mistake), 2400),
+            "fix": _truncate_text(fix, 1800),
+            "prevention": _truncate_text(prevention, 1800),
+            "scope": final_scope,
+            "tags": (["hook", "guard"] + final_tags)[:24],
         }
         # record_lesson uses current workspace by default; pass rootPath to keep it project-local if possible.
         call_mcp_tool(server_url, "record_lesson", args, timeout_sec=1.0)
@@ -417,6 +492,130 @@ def _extract_mcp_call(tool_info):
     if not isinstance(args, dict):
         args = {}
     return server_name, tool_name, args
+
+
+def _normalize_exit_code(raw):
+    if raw is None:
+        return None
+    try:
+        # Handles "0", 0, "1", 1, etc.
+        return int(raw)
+    except Exception:
+        return None
+
+
+def _extract_run_command_fields(tool_info):
+    cmd = _first_value(tool_info, ["command_line", "commandLine", "command", "cmd"])
+    cwd = _first_value(tool_info, ["cwd", "working_directory", "workingDirectory"])
+    exit_code = _normalize_exit_code(
+        _first_value(tool_info, ["exit_code", "exitCode", "return_code", "returnCode", "code"])
+    )
+    success = tool_info.get("success")
+    if isinstance(success, str):
+        success = success.strip().lower() in ("1", "true", "yes", "ok")
+    if success is None and exit_code is not None:
+        success = exit_code == 0
+    stdout = _first_value(tool_info, ["stdout", "out"])
+    stderr = _first_value(tool_info, ["stderr", "err", "error_output", "errorOutput"])
+    return cmd, cwd, success, exit_code, stdout, stderr
+
+
+def _extract_tool_error_text(tool_info):
+    err = tool_info.get("error")
+    if isinstance(err, str) and err.strip():
+        return err.strip()
+    if isinstance(err, dict):
+        msg = err.get("message") or err.get("error") or err.get("details")
+        if isinstance(msg, str) and msg.strip():
+            return msg.strip()
+        try:
+            return json.dumps(err, ensure_ascii=False)[:1200]
+        except Exception:
+            return str(err)[:1200]
+    for k in ["error_message", "errorMessage", "exception", "message", "stderr"]:
+        v = tool_info.get(k)
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    return ""
+
+
+def record_command_failure_lesson(server_url, project, cmd, cwd, exit_code, stdout, stderr):
+    cmd = str(cmd or "").strip()
+    if not cmd:
+        return
+    sig = _sha256_hex_parts(["run_command", cmd, str(exit_code or ""), str(stderr or "")])[:12]
+    lesson_key = f"run_command_fail:{sig}"
+    title = f"Command failed: {cmd[:60]}".strip()
+    mistake = (
+        "A run_command failed.\n\n"
+        f"Command:\n{cmd}\n\n"
+        f"CWD:\n{cwd or '(unknown)'}\n\n"
+        f"Exit code: {exit_code}\n\n"
+        f"stderr (truncated):\n{_truncate_lines(_redact_secrets(stderr), 50, 3000) if stderr else '(empty)'}\n\n"
+        f"stdout (truncated):\n{_truncate_lines(_redact_secrets(stdout), 20, 1400) if stdout else '(empty)'}\n"
+    )
+    fix = (
+        "Read the stderr and fix the root cause, then rerun the command.\n"
+        "If this is a dependency/build error, ensure dependencies are installed and versions match the official docs.\n"
+        "If this is a lint/test failure, fix the reported files and rerun lint/tests."
+    )
+    prevention = (
+        "Before running build/lint/test, verify prerequisites (deps installed, correct working directory, correct commands for the repo).\n"
+        "When an error happens: record the exact failing command + error snippet into lessons, then follow a fix→rerun loop."
+    )
+    maybe_record_lesson(
+        server_url,
+        project,
+        lesson_key,
+        mistake,
+        fix,
+        prevention,
+        title=title,
+        tags=["run_command", "error"],
+        scope="both",
+    )
+
+
+def record_mcp_tool_error_lesson(server_url, project, server_name, tool_name, tool_args, error_text):
+    tool_name = str(tool_name or "").strip() or "unknown_tool"
+    server_name = str(server_name or "").strip() or "unknown_server"
+    err = str(error_text or "").strip()
+    if not err:
+        return
+    sig = _sha256_hex_parts(["mcp_tool_error", server_name, tool_name, err])[:12]
+    lesson_key = f"mcp_tool_error:{sig}"
+    title = f"MCP tool error: {server_name}.{tool_name}"
+    safe_args = ""
+    try:
+        safe_args = json.dumps(tool_args or {}, ensure_ascii=False)[:1200]
+    except Exception:
+        safe_args = str(tool_args or "")[:1200]
+    mistake = (
+        "An MCP tool call failed.\n\n"
+        f"Server: {server_name}\n"
+        f"Tool: {tool_name}\n\n"
+        f"Args (truncated):\n{_redact_secrets(safe_args)}\n\n"
+        f"Error (truncated):\n{_truncate_lines(_redact_secrets(err), 60, 3000)}\n"
+    )
+    fix = (
+        "Read the error message and correct the MCP tool arguments (types/required fields/rootPath), then retry.\n"
+        "If the tool is blocked by hooks, follow the hook instructions (e.g., update_plan/save_memory → wam_commit → retry)."
+    )
+    prevention = (
+        "Before calling MCP tools that change state, include a rationale and validate arguments.\n"
+        "After state changes, keep WAM clean (wam_status → wam_commit) before write_code/run_command."
+    )
+    maybe_record_lesson(
+        server_url,
+        project,
+        lesson_key,
+        mistake,
+        fix,
+        prevention,
+        title=title,
+        tags=["mcp", "tool", "error"],
+        scope="both",
+    )
 
 
 def _plan_is_complete(project):
@@ -732,6 +931,17 @@ def _check_wam_clean(project, memory_data, server_url):
             "Required: keep a git-like history for tracker+memory.\n"
             "Fix: call wam_status → wam_diff (optional) → wam_commit(), then retry."
         )
+        maybe_record_lesson(
+            server_url,
+            project,
+            "wam_missing_head",
+            "WAM history is missing: .wam/HEAD.json not found.",
+            "Initialize WAM history via wam_status → wam_commit(), then retry the action.",
+            "Ensure every tracker/memory change is followed by an explicit wam_commit so WAM stays clean.",
+            title="WAM missing HEAD.json",
+            tags=["wam", "history", "block"],
+            scope="both",
+        )
         persist_hook_feedback(server_url, project, "pre_write_code", "block", msg)
         return msg
     try:
@@ -743,6 +953,17 @@ def _check_wam_clean(project, memory_data, server_url):
         msg = (
             "Blocked: WAM history is invalid (HEAD.json missing head/digest).\n"
             "Fix: call wam_commit() to initialize/repair history, then retry."
+        )
+        maybe_record_lesson(
+            server_url,
+            project,
+            "wam_invalid_head",
+            "WAM history is invalid: HEAD.json missing required fields (head/digest).",
+            "Run wam_commit() once to initialize/repair WAM, then retry.",
+            "When migrating/upgrading hooks/WAM, verify HEAD.json structure is intact; repair via wam_commit().",
+            title="WAM invalid HEAD.json",
+            tags=["wam", "history", "block"],
+            scope="both",
         )
         persist_hook_feedback(server_url, project, "pre_write_code", "block", msg)
         return msg
@@ -768,6 +989,17 @@ def _check_wam_clean(project, memory_data, server_url):
             "Required: before writing code, tracker+memory must be committed so history stays consistent.\n"
             "Fix: call wam_status → wam_diff (optional) → wam_commit(), then retry."
         )
+        maybe_record_lesson(
+            server_url,
+            project,
+            "wam_dirty_state",
+            "WAM is dirty (HEAD digest != current tracker+memory digest).",
+            "Run wam_status → (optional) wam_diff → wam_commit(), then retry write/run. This is required to keep history consistent.",
+            "After any tracker/memory change (plan/prd/overview/walkthrough/memory/lesson), explicitly run wam_commit before write_code/run_command.",
+            title="WAM dirty state blocks actions",
+            tags=["wam", "history", "block"],
+            scope="both",
+        )
         persist_hook_feedback(server_url, project, "pre_write_code", "block", msg)
         return msg
     return None
@@ -776,6 +1008,17 @@ def _check_wam_clean(project, memory_data, server_url):
 def check_project_gates(project, memory_data=None, server_url=None):
     overview = _get_overview_content(project)
     if not overview:
+        maybe_record_lesson(
+            server_url,
+            project,
+            "missing_overview",
+            "Architecture record (Overview) is missing, but code/run actions were attempted.",
+            "Call get_project_status → generate_overview/update_overview to establish the architecture baseline before implementing.",
+            "Always read target state first; keep an up-to-date Overview with folder map, key flows, commands, and conventions.",
+            title="Missing Overview blocks implementation",
+            tags=["overview", "architecture", "block"],
+            scope="both",
+        )
         return (
             "Blocked: Architecture record (Overview) is missing.\n"
             "Required flow: get_project_status → generate_overview/update_overview → initialize layered memory (save_memory: long/short/lesson) → update_plan → then implement.\n"
@@ -784,6 +1027,17 @@ def check_project_gates(project, memory_data=None, server_url=None):
 
     project_root = _get_project_root_path(project)
     if project_root and not _project_has_memories(memory_data, project_root):
+        maybe_record_lesson(
+            server_url,
+            project,
+            "missing_project_memory",
+            "Project memory is missing/uninitialized, but implementation was attempted.",
+            "Initialize layered memories (long/short/lesson) from the Overview via save_memory, then proceed.",
+            "Before planning/implementation, always run memory_search and ensure at least one project memory exists.",
+            title="Project memory not initialized",
+            tags=["memory", "block"],
+            scope="both",
+        )
         return (
             "Blocked: Project memory is not initialized.\n"
             "Create initial layered memories from the architecture record: long (stable facts), short (temporary notes), lesson (mistakes/retro). "
@@ -794,6 +1048,17 @@ def check_project_gates(project, memory_data=None, server_url=None):
     prd = project.get("prd") or {}
     prd_content = str(prd.get("content") or "").strip()
     if prd_content and prd.get("status") != "approved":
+        maybe_record_lesson(
+            server_url,
+            project,
+            "prd_not_approved",
+            "PRD exists (non-empty) but was not approved before implementation.",
+            "Run the PRD approval flow (set_prd → user approval) before implementing Plan items.",
+            "For complex work, enforce PRD approval before planning/implementation to avoid scope drift.",
+            title="PRD must be approved",
+            tags=["prd", "approval", "block"],
+            scope="both",
+        )
         return (
             "Blocked: PRD is not approved.\n"
             "Required flow: draft PRD → user approve → then Plan → then implement."
@@ -802,6 +1067,17 @@ def check_project_gates(project, memory_data=None, server_url=None):
     plan_items = plan.get("items") or []
     plan_summary = plan.get("summary") or ""
     if not plan_items and not str(plan_summary).strip():
+        maybe_record_lesson(
+            server_url,
+            project,
+            "plan_missing",
+            "Plan is missing but implementation was attempted.",
+            "Create an executable Plan checklist (tasks + acceptance + checklist) via update_plan before implementing.",
+            "Always plan first for non-trivial work, then implement and update progress.",
+            title="Missing Plan blocks implementation",
+            tags=["plan", "block"],
+            scope="both",
+        )
         return "Blocked: Plan is missing. Create a Plan checklist (with breakdown) before implementation."
 
     # Enforce "Memory + RAG before edits": require memory_search + rag_search after the latest plan change.
@@ -811,21 +1087,65 @@ def check_project_gates(project, memory_data=None, server_url=None):
         last_mem = str(stats.get("lastMemorySearchAt") or "").strip()
         last_rag = str(stats.get("lastRagSearchAt") or "").strip()
         if not last_mem:
+            maybe_record_lesson(
+                server_url,
+                project,
+                "memory_search_missing",
+                "No memory_search was recorded before attempting to write/run.",
+                "Run memory_search (project + global) with concrete queries (e.g., relevant file/feature/previous error) before implementing.",
+                "Always reuse prior lessons/decisions via memory_search; avoid guessing.",
+                title="Must run memory_search before implementing",
+                tags=["memory_search", "block"],
+                scope="both",
+            )
             return (
                 "Blocked: No memory_search recorded for this project yet.\n"
                 "Required: before writing code, use memory_search to reuse prior lessons/decisions (no guessing), then proceed."
             )
         if last_plan and last_mem < last_plan:
+            maybe_record_lesson(
+                server_url,
+                project,
+                "memory_search_stale_after_plan",
+                "Plan changed after the last memory_search, but implementation was attempted.",
+                "Run memory_search again after Plan updates to refresh context for the new tasks, then proceed.",
+                "After updating Plan, always refresh memory_search so you don't miss relevant lessons/decisions.",
+                title="Refresh memory_search after Plan updates",
+                tags=["memory_search", "plan", "block"],
+                scope="both",
+            )
             return (
                 "Blocked: Plan changed after the last memory_search.\n"
                 "Required: run memory_search again (with a concrete query) to refresh context for the latest Plan items, then proceed."
             )
         if not last_rag:
+            maybe_record_lesson(
+                server_url,
+                project,
+                "rag_search_missing",
+                "No rag_search was recorded before attempting to write/run.",
+                "Run rag_search with concrete queries to locate the exact file/snippet to edit, then implement.",
+                "Always locate code via rag_search before edits to avoid blind changes.",
+                title="Must run rag_search before implementing",
+                tags=["rag_search", "block"],
+                scope="both",
+            )
             return (
                 "Blocked: No rag_search recorded for this project yet.\n"
                 "Required: before writing code, use rag_search to locate the exact file/snippet to edit (no guessing), then proceed."
             )
         if last_plan and last_rag < last_plan:
+            maybe_record_lesson(
+                server_url,
+                project,
+                "rag_search_stale_after_plan",
+                "Plan changed after the last rag_search, but implementation was attempted.",
+                "Run rag_search again after Plan updates so edits match the latest tasks, then proceed.",
+                "After updating Plan, refresh rag_search so your context matches the current tasks.",
+                title="Refresh rag_search after Plan updates",
+                tags=["rag_search", "plan", "block"],
+                scope="both",
+            )
             return (
                 "Blocked: Plan changed after the last rag_search.\n"
                 "Required: run rag_search again (with a concrete query) to refresh context for the latest Plan items, then proceed."
@@ -858,7 +1178,15 @@ def main():
     action = payload.get("agent_action_name")
     tool_info = payload.get("tool_info") or {}
 
-    if action not in ("pre_run_command", "pre_write_code", "post_write_code", "pre_mcp_tool_use", "post_cascade_response"):
+    if action not in (
+        "pre_run_command",
+        "post_run_command",
+        "pre_write_code",
+        "post_write_code",
+        "pre_mcp_tool_use",
+        "post_mcp_tool_use",
+        "post_cascade_response",
+    ):
         return 0
 
     server_url = get_healthy_server_url()
@@ -1032,6 +1360,17 @@ def main():
                     f"Blocked: Missing rationale for MCP tool: {tool_name}.\n"
                     "Required: include a short 'rationale' string in the MCP tool arguments so the agent thinks before acting."
                 )
+                maybe_record_lesson(
+                    server_url,
+                    project,
+                    f"missing_rationale:{tool_name}",
+                    f"Called MCP tool without rationale: {tool_name}",
+                    "Add a short rationale in the MCP tool arguments (why this tool call is needed), then retry.",
+                    "Require rationale for state-changing tools to force think-before-act and avoid blind tool use.",
+                    title=f"Missing rationale blocks MCP tool: {tool_name}",
+                    tags=["rationale", "mcp", "block"],
+                    scope="both",
+                )
                 persist_hook_feedback(server_url, project, "pre_mcp_tool_use", "block", msg)
                 print(msg, file=sys.stderr)
                 return 2
@@ -1050,6 +1389,17 @@ def main():
                     f"Blocked: Plan is not complete ({done}/{total}).\n"
                     "Required: update_plan to mark items done, then run check_plan, then retry ask_continue."
                 )
+                maybe_record_lesson(
+                    server_url,
+                    project,
+                    "ask_continue_plan_incomplete",
+                    f"Attempted ask_continue while Plan is incomplete ({done}/{total}).",
+                    "Update plan progress (update_plan), verify with check_plan, then call ask_continue again.",
+                    "Always treat Plan as the source of truth; do not finalize until all required items are done.",
+                    title="ask_continue blocked: Plan incomplete",
+                    tags=["ask_continue", "plan", "block"],
+                    scope="both",
+                )
                 persist_hook_feedback(server_url, project, "pre_mcp_tool_use", "block", msg)
                 print(msg, file=sys.stderr)
                 return 2
@@ -1058,6 +1408,17 @@ def main():
                 msg = (
                     "Blocked: Code review gate is missing/not done.\n"
                     "Required: add a Plan item like 'Final code review (security/performance/gaps)' and mark it done, then retry ask_continue."
+                )
+                maybe_record_lesson(
+                    server_url,
+                    project,
+                    "ask_continue_code_review_missing",
+                    "Attempted ask_continue without completing a final code review gate.",
+                    "Add a code review Plan item (security/performance/gaps) and mark it done before final delivery.",
+                    "Make code review the last mandatory step before shipping to avoid gaps, security issues, and regressions.",
+                    title="ask_continue blocked: Code review gate missing",
+                    tags=["ask_continue", "code_review", "block"],
+                    scope="both",
                 )
                 persist_hook_feedback(server_url, project, "pre_mcp_tool_use", "block", msg)
                 print(msg, file=sys.stderr)
@@ -1068,9 +1429,46 @@ def main():
                     "Blocked: Walkthrough is empty.\n"
                     "Required: update_walkthrough with a short project log (what changed, verification, risks), then retry ask_continue."
                 )
+                maybe_record_lesson(
+                    server_url,
+                    project,
+                    "ask_continue_walkthrough_empty",
+                    "Attempted ask_continue with an empty Walkthrough.",
+                    "Update walkthrough with what changed, verification steps, and risks, then retry ask_continue.",
+                    "Keep Walkthrough updated during work; ensure it is non-empty before final delivery for auditability.",
+                    title="ask_continue blocked: Walkthrough empty",
+                    tags=["ask_continue", "walkthrough", "block"],
+                    scope="both",
+                )
                 persist_hook_feedback(server_url, project, "pre_mcp_tool_use", "block", msg)
                 print(msg, file=sys.stderr)
                 return 2
+
+    if action == "post_mcp_tool_use":
+        server_name, tool_name, tool_args = _extract_mcp_call(tool_info)
+        # Only record lessons for our own MCP server to avoid noise.
+        if str(server_name or "").strip() not in ("windsurf_auto_mcp",):
+            return 0
+        tracker = load_tracker()
+        project = select_project(tracker, cwd=tool_info.get("cwd"))
+        error_text = _extract_tool_error_text(tool_info)
+        if error_text:
+            persist_hook_feedback(
+                server_url,
+                project,
+                "post_mcp_tool_use",
+                "error",
+                f"MCP tool failed: {server_name}.{tool_name}\n{_truncate_lines(error_text, 60, 2400)}",
+            )
+            record_mcp_tool_error_lesson(
+                server_url,
+                project,
+                server_name,
+                tool_name,
+                tool_args,
+                error_text,
+            )
+        return 0
 
     if action == "post_cascade_response":
         response = str(tool_info.get("response") or "")
@@ -1120,6 +1518,21 @@ def main():
                             return 1
         except Exception:
             pass
+
+    if action == "post_run_command":
+        cmd, cwd, success, exit_code, stdout, stderr = _extract_run_command_fields(tool_info)
+        if success is False or (exit_code is not None and exit_code != 0):
+            tracker = load_tracker()
+            project = select_project(tracker, cwd=cwd or tool_info.get("cwd"))
+            persist_hook_feedback(
+                server_url,
+                project,
+                "post_run_command",
+                "error",
+                f"Command failed (exit={exit_code}): {cmd}",
+            )
+            record_command_failure_lesson(server_url, project, cmd, cwd, exit_code, stdout, stderr)
+        return 0
 
     return 0
 

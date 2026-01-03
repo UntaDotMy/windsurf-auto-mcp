@@ -1185,7 +1185,15 @@ const WINDSURF_HOOK_EVENTS = [
 ] as const;
 
 // Auto-install only what we enforce in the guard to reduce overhead.
-const AUTO_INSTALL_HOOK_EVENTS = ['pre_run_command', 'pre_write_code', 'post_write_code', 'pre_mcp_tool_use', 'post_cascade_response'] as const;
+const AUTO_INSTALL_HOOK_EVENTS = [
+    'pre_run_command',
+    'post_run_command',
+    'pre_write_code',
+    'post_write_code',
+    'pre_mcp_tool_use',
+    'post_mcp_tool_use',
+    'post_cascade_response'
+] as const;
 
 const TRACKER_FILE_NAME = 'windsurf-auto-mcp-tracker.json';
 const MEMORY_FILE_NAME = 'windsurf-auto-mcp-memories.json';
@@ -2912,15 +2920,17 @@ function installWindsurfHooks() {
                 // ignore cleanup failures
             }
 
-	            // Align with official docs: show_output is only meaningful for hooks where stdout/stderr is surfaced.
-	            // (In practice, pre_* hooks are the ones users debug most.)
-		            const desiredHooks: Record<string, Array<any>> = {
-		                pre_run_command: [{ command, show_output: true }],
-		                pre_write_code: [{ command, show_output: true }],
-		                post_write_code: [{ command }],
-		                pre_mcp_tool_use: [{ command, show_output: true }],
-		                post_cascade_response: [{ command }]
-		            };
+		            // Align with official docs: show_output is only meaningful for hooks where stdout/stderr is surfaced.
+		            // (In practice, pre_* hooks are the ones users debug most.)
+			            const desiredHooks: Record<string, Array<any>> = {
+			                pre_run_command: [{ command, show_output: true }],
+			                post_run_command: [{ command }],
+			                pre_write_code: [{ command, show_output: true }],
+			                post_write_code: [{ command }],
+			                pre_mcp_tool_use: [{ command, show_output: true }],
+			                post_mcp_tool_use: [{ command }],
+			                post_cascade_response: [{ command }]
+			            };
 
 	            if (!config.hooks || typeof config.hooks !== 'object') config.hooks = {};
 
