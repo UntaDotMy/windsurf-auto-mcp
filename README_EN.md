@@ -113,7 +113,7 @@ WindsurfAutoMcp standardizes task completion with MCP: when the AI finishes a ta
 
 【Memory layers (required)】Before planning/implementation, run memory_search (project + global) and list_memories/get_memory. If there is no usable project memory yet, create initial memories from the architecture record: long = stable facts/conventions/verification, short = temporary notes (can be merged into long), lesson = mistakes/retro. Store reusable lessons in global scope; store project-specific details in project scope. Short memory is allowed to be pruned/forgotten; merge when it becomes stable.
 
-【WAM history (required)】Every change to project tracking/memory must be captured as a git-like history. Prefer the tools’ auto-commits; if hooks report WAM dirty/missing, run wam_status and then wam_commit(message) before proceeding. For rollback use wam_log + wam_checkout(hash). For merge use wam_merge(otherHash,message).
+【WAM history (required)】Every change to project tracking/memory must be captured as a git-like history. After changes, run wam_status to confirm clean/dirty; if hooks report WAM dirty/missing: wam_status → (optional) wam_diff → wam_commit() (message auto-generated if omitted) before proceeding. For rollback use wam_log + wam_checkout(hash). For merge use wam_merge(otherHash,message).
 
 【RAG (required)】Before implementing/patching, use rag_search to locate relevant files/snippets (no guessing), then combine with memory to decide what to change.
 
@@ -206,7 +206,7 @@ Architecture/Memory → Read → Research → (Ask Questions loop when needed) �
 - Stats are shown in the sidebar (global calls + per-project)
 - PRD is for complex work; if PRD is non-empty it triggers the approval dialog and must be approved before implementation
 - Per-project stats: Overview/PRD/Plan/Walkthrough update counters
-- Hooks enforce: Overview must exist + project memory must be initialized + (if PRD is non-empty it must be approved) + a Plan must exist + WAM should be clean (best-effort auto-commit/repair; otherwise `pre_write_code` blocks writes)
+- Hooks (strict) enforce on `pre_write_code` / `pre_run_command` / `pre_mcp_tool_use`: Overview exists + project memory initialized + (if PRD is non-empty it must be approved) + Plan exists + must run `memory_search` + `rag_search` (rerun after Plan updates) + WAM clean (else blocked until `wam_commit()`); also blocks direct writes to tracker/memory/.wam.
 
 ### Maintenance / Reset
 
@@ -234,6 +234,8 @@ The sidebar **Maintenance** card lets you:
 - On activation, the extension checks and installs **user-level hooks.json** (enabled by default)
 - If hooks are already installed, it only fills missing entries (auto-update)
 - It never overwrites your existing hooks
+- Installed events: `pre_run_command`, `pre_write_code`, `post_write_code`, `pre_mcp_tool_use`, `post_cascade_response`
+- Strict mode: requires `memory_search` + `rag_search` after Plan updates; requires WAM clean (`wam_commit()`); blocks direct writes to tracker/memory/.wam; enforces `rationale` for state-changing MCP tools; and blocks after 5 `write_code` calls without `update_plan`
 - Hook guard script runs via Python (Windows: `python`, macOS/Linux: `python3`) — install Python 3 or disable hooks
 - When a hook blocks or warns, the reason is persisted into Memory:
   - `hook:last_block` (blocked actions)

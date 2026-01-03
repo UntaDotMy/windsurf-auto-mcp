@@ -11,7 +11,45 @@ from urllib.error import URLError, HTTPError
 
 TRACKER_FILE_NAME = "windsurf-auto-mcp-tracker.json"
 MEMORY_FILE_NAME = "windsurf-auto-mcp-memories.json"
+GLOBAL_MEMORY_FILE_NAME = "windsurf-auto-mcp-global-memories.json"
 STATE_FILE_NAME = "windsurf-auto-mcp-guard-state.json"
+
+MAX_WRITES_WITHOUT_PLAN_UPDATE = 5
+
+REQUIRE_RATIONALE_TOOLS = {
+    # Tracking/PRD/Plan/Walkthrough
+    "set_prd",
+    "approve_prd",
+    "update_overview",
+    "generate_overview",
+    "update_plan",
+    "update_walkthrough",
+    "generate_walkthrough",
+    "ensure_release_gate",
+    # Memory
+    "save_memory",
+    "record_lesson",
+    # WAM (history)
+    "wam_commit",
+    "wam_checkout",
+    "wam_reset",
+    "wam_merge",
+    "wam_branch",
+    "wam_tag",
+    "wam_stash",
+}
+
+CODE_REVIEW_KEYWORDS = [
+    "code review",
+    "final code review",
+    "review session",
+    "security review",
+    "performance review",
+    "代码审查",
+    "代码 review",
+    "最终代码审查",
+    "审查",
+]
 
 
 def read_stdin(max_bytes=5 * 1024 * 1024):
@@ -71,6 +109,24 @@ def looks_sensitive_write_path(file_path):
     if p.startswith("c:/program files/"):
         return True
     if p.startswith("c:/program files (x86)/"):
+        return True
+    return False
+
+
+def looks_internal_wam_write_path(file_path):
+    p = normalize_path(file_path)
+    if not p:
+        return False
+    # Only guard our own persisted state under ~/.codeium/... (never the user workspace).
+    if "/.codeium/" not in p:
+        return False
+    if p.endswith("/" + TRACKER_FILE_NAME):
+        return True
+    if p.endswith("/" + MEMORY_FILE_NAME):
+        return True
+    if p.endswith("/" + GLOBAL_MEMORY_FILE_NAME):
+        return True
+    if "/windsurf-auto-mcp/.wam/" in p:
         return True
     return False
 
@@ -184,6 +240,26 @@ def save_guard_state(state):
         return
 
 
+def _get_project_state(state, project_id):
+    if not project_id:
+        return state, None
+    if not isinstance(state, dict):
+        state = {}
+    projects = state.get("projects")
+    if not isinstance(projects, dict):
+        projects = {}
+        state["projects"] = projects
+    ps = projects.get(project_id)
+    if not isinstance(ps, dict):
+        ps = {}
+        projects[project_id] = ps
+    return state, ps
+
+
+def _iso_now():
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
 def call_mcp_tool(server_url, tool_name, arguments, timeout_sec=0.8):
     if not server_url:
         return None
@@ -284,6 +360,103 @@ def maybe_record_lesson(server_url, project, lesson_key, mistake, fix, preventio
         save_guard_state(state)
     except Exception:
         return
+
+
+def _first_value(obj, keys):
+    if not isinstance(obj, dict):
+        return None
+    for k in keys:
+        v = obj.get(k)
+        if v is None:
+            continue
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+        if v:
+            return v
+    return None
+
+
+def _extract_mcp_call(tool_info):
+    server_name = _first_value(
+        tool_info,
+        [
+            "mcp_server_name",
+            "mcpServerName",
+            "server_name",
+            "serverName",
+            "server",
+            "mcp_server",
+        ],
+    )
+    tool_name = _first_value(
+        tool_info,
+        [
+            "mcp_tool_name",
+            "mcpToolName",
+            "tool_name",
+            "toolName",
+            "name",
+        ],
+    )
+    args = (
+        tool_info.get("mcp_tool_arguments")
+        if isinstance(tool_info, dict)
+        else None
+    )
+    if args is None and isinstance(tool_info, dict):
+        args = tool_info.get("tool_arguments")
+    if args is None and isinstance(tool_info, dict):
+        args = tool_info.get("arguments")
+    if isinstance(args, str):
+        try:
+            parsed = json.loads(args)
+            if isinstance(parsed, dict):
+                args = parsed
+        except Exception:
+            args = {}
+    if not isinstance(args, dict):
+        args = {}
+    return server_name, tool_name, args
+
+
+def _plan_is_complete(project):
+    plan = project.get("plan") or {}
+    items = plan.get("items") or []
+    if not isinstance(items, list) or not items:
+        return False, 0, 0
+    total = 0
+    done = 0
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        total += 1
+        if it.get("status") == "done":
+            done += 1
+    return total > 0 and done == total, done, total
+
+
+def _plan_has_done_code_review(project):
+    plan = project.get("plan") or {}
+    items = plan.get("items") or []
+    if not isinstance(items, list):
+        return False
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        if it.get("status") != "done":
+            continue
+        text = str(it.get("text") or "").strip().lower()
+        if not text:
+            continue
+        for kw in CODE_REVIEW_KEYWORDS:
+            if str(kw).lower() in text:
+                return True
+    return False
+
+
+def _walkthrough_has_content(project):
+    wt = project.get("walkthrough") or {}
+    return bool(str(wt.get("content") or "").strip())
 
 def find_tracker_path():
     try:
@@ -554,23 +727,10 @@ def _find_wam_head_path(project):
 def _check_wam_clean(project, memory_data, server_url):
     head_path = _find_wam_head_path(project)
     if not head_path or not os.path.exists(head_path):
-        # Best-effort auto-init: create the first commit so the model doesn't get stuck in a loop.
-        root_path = str(project.get("rootPath") or "").strip()
-        if server_url and root_path:
-            resp = call_mcp_tool(
-                server_url,
-                "wam_commit",
-                {"message": "auto-init (hooks): initialize WAM history", "author": "auto", "rootPath": root_path},
-                timeout_sec=1.0,
-            )
-            if _mcp_call_succeeded(resp):
-                return None
-        if head_path and os.path.exists(head_path):
-            return None
         msg = (
             "Blocked: WAM history is missing (no .wam/HEAD.json).\n"
             "Required: keep a git-like history for tracker+memory.\n"
-            "Fix: call wam_commit(message) (or any tracking/memory update tool that auto-commits), then retry."
+            "Fix: call wam_status → wam_diff (optional) → wam_commit(), then retry."
         )
         persist_hook_feedback(server_url, project, "pre_write_code", "block", msg)
         return msg
@@ -580,26 +740,9 @@ def _check_wam_clean(project, memory_data, server_url):
     except Exception:
         head = None
     if not isinstance(head, dict) or not head.get("head") or not head.get("digest"):
-        root_path = str(project.get("rootPath") or "").strip()
-        if server_url and root_path:
-            resp = call_mcp_tool(
-                server_url,
-                "wam_commit",
-                {"message": "auto-repair (hooks): repair invalid WAM HEAD", "author": "auto", "rootPath": root_path},
-                timeout_sec=1.0,
-            )
-            if _mcp_call_succeeded(resp):
-                return None
-        try:
-            with open(head_path, "r", encoding="utf-8") as f:
-                head = json.load(f)
-        except Exception:
-            head = None
-        if isinstance(head, dict) and head.get("head") and head.get("digest"):
-            return None
         msg = (
             "Blocked: WAM history is invalid (HEAD.json missing head/digest).\n"
-            "Fix: call wam_commit(message) to initialize history, then retry."
+            "Fix: call wam_commit() to initialize/repair history, then retry."
         )
         persist_hook_feedback(server_url, project, "pre_write_code", "block", msg)
         return msg
@@ -620,45 +763,10 @@ def _check_wam_clean(project, memory_data, server_url):
 
     digest = _compute_project_wam_digest(project, memory_store)
     if str(head.get("digest")) != digest:
-        root_path = str(project.get("rootPath") or "").strip()
-        if server_url and root_path:
-            resp = call_mcp_tool(
-                server_url,
-                "wam_commit",
-                {"message": "auto-sync (hooks): commit tracker+memory before write", "author": "auto", "rootPath": root_path},
-                timeout_sec=1.0,
-            )
-            # If we could reach MCP and attempted an auto-commit, allow writes to avoid deadlocks.
-            if _mcp_call_succeeded(resp):
-                maybe_record_lesson(
-                    server_url,
-                    project,
-                    "wam-dirty-auto-commit",
-                    "Tried to write code while WAM history was dirty (tracker/memory changed without a commit).",
-                    "Commit tracker+memory via wam_commit(message) before writing code (or use update_plan/set_prd/save_memory which auto-commit).",
-                    "Before any implementation/write_code, run wam_status and keep WAM clean; update plan/memory and commit as needed.",
-                )
-                return None
-        # If auto-commit succeeded, allow.
-        try:
-            with open(head_path, "r", encoding="utf-8") as f:
-                head2 = json.load(f)
-            if isinstance(head2, dict) and str(head2.get("digest")) == digest:
-                maybe_record_lesson(
-                    server_url,
-                    project,
-                    "wam-dirty-auto-commit",
-                    "Tried to write code while WAM history was dirty (tracker/memory changed without a commit).",
-                    "Commit tracker+memory via wam_commit(message) before writing code (or use update_plan/set_prd/save_memory which auto-commit).",
-                    "Before any implementation/write_code, run wam_status and keep WAM clean; update plan/memory and commit as needed.",
-                )
-                return None
-        except Exception:
-            pass
         msg = (
             "Blocked: WAM history is out-of-date (dirty state).\n"
             "Required: before writing code, tracker+memory must be committed so history stays consistent.\n"
-            "Fix: call wam_commit(message) (or update_plan/set_prd/save_memory which auto-commit), then retry."
+            "Fix: call wam_status → wam_diff (optional) → wam_commit(), then retry."
         )
         persist_hook_feedback(server_url, project, "pre_write_code", "block", msg)
         return msg
@@ -696,11 +804,22 @@ def check_project_gates(project, memory_data=None, server_url=None):
     if not plan_items and not str(plan_summary).strip():
         return "Blocked: Plan is missing. Create a Plan checklist (with breakdown) before implementation."
 
-    # Enforce "RAG before edits": require rag_search to have been run after the latest plan change.
+    # Enforce "Memory + RAG before edits": require memory_search + rag_search after the latest plan change.
     try:
         stats = project.get("stats") or {}
+        last_plan = str(stats.get("lastPlanUpdateAt") or "").strip() or _latest_plan_updated_at(project)
+        last_mem = str(stats.get("lastMemorySearchAt") or "").strip()
         last_rag = str(stats.get("lastRagSearchAt") or "").strip()
-        last_plan = _latest_plan_updated_at(project)
+        if not last_mem:
+            return (
+                "Blocked: No memory_search recorded for this project yet.\n"
+                "Required: before writing code, use memory_search to reuse prior lessons/decisions (no guessing), then proceed."
+            )
+        if last_plan and last_mem < last_plan:
+            return (
+                "Blocked: Plan changed after the last memory_search.\n"
+                "Required: run memory_search again (with a concrete query) to refresh context for the latest Plan items, then proceed."
+            )
         if not last_rag:
             return (
                 "Blocked: No rag_search recorded for this project yet.\n"
@@ -739,7 +858,7 @@ def main():
     action = payload.get("agent_action_name")
     tool_info = payload.get("tool_info") or {}
 
-    if action not in ("pre_run_command", "pre_write_code", "post_cascade_response"):
+    if action not in ("pre_run_command", "pre_write_code", "post_write_code", "pre_mcp_tool_use", "post_cascade_response"):
         return 0
 
     server_url = get_healthy_server_url()
@@ -748,17 +867,49 @@ def main():
 
     if action == "pre_run_command":
         command_line = tool_info.get("command_line")
-        # Always read the current plan before executing commands so the model stays in sync.
-        try:
-            tracker = load_tracker()
-            project = select_project(tracker, cwd=tool_info.get("cwd"))
-            if project:
+        tracker = load_tracker()
+        memory_data = load_memory()
+        project = select_project(tracker, cwd=tool_info.get("cwd"))
+        if project:
+            # Enforce periodic Plan progress updates during implementation (to prevent drifting trackers).
+            try:
+                project_id = str(project.get("projectId") or "").strip()
+                if project_id:
+                    state = load_guard_state()
+                    state, ps = _get_project_state(state, project_id)
+                    stats = project.get("stats") or {}
+                    plan_at = str(stats.get("lastPlanUpdateAt") or "").strip() or _latest_plan_updated_at(project)
+                    seen_plan_at = str(ps.get("lastPlanUpdateAtSeen") or "").strip()
+                    if plan_at and plan_at != seen_plan_at:
+                        ps["lastPlanUpdateAtSeen"] = plan_at
+                        ps["writesSincePlanUpdate"] = 0
+                        save_guard_state(state)
+                    writes_since = int(ps.get("writesSincePlanUpdate") or 0)
+                    if writes_since >= MAX_WRITES_WITHOUT_PLAN_UPDATE:
+                        msg = (
+                            f"Blocked: Too many code writes without a Plan progress update ({writes_since}).\n"
+                            "Required: update_plan (mark progress), then wam_commit(), then continue."
+                        )
+                        persist_hook_feedback(server_url, project, "pre_run_command", "block", msg)
+                        print(msg, file=sys.stderr)
+                        return 2
+            except Exception:
+                pass
+
+            # Always read the current plan before executing commands so the model stays in sync.
+            try:
                 root_path = str(project.get("rootPath") or "").strip()
                 if root_path:
                     call_mcp_tool(server_url, "check_plan", {"rootPath": root_path}, timeout_sec=0.7)
                     call_mcp_tool(server_url, "wam_status", {"scope": "project", "rootPath": root_path}, timeout_sec=0.7)
-        except Exception:
-            pass
+            except Exception:
+                pass
+
+            gate = check_project_gates(project, memory_data=memory_data, server_url=server_url)
+            if gate:
+                persist_hook_feedback(server_url, project, "pre_run_command", "block", gate)
+                print(gate, file=sys.stderr)
+                return 2
         if looks_dangerous_command(command_line):
             maybe_record_lesson(
                 server_url,
@@ -784,27 +935,45 @@ def main():
         tracker = load_tracker()
         memory_data = load_memory()
         project = select_project(tracker, file_path=file_path)
+        if looks_internal_wam_write_path(file_path):
+            msg = (
+                f"Blocked: Direct writes to WAM/tracker/memory files are not allowed: {file_path}\n"
+                "Required: use MCP tools (update_plan/save_memory/etc) and then wam_commit() to change tracked state."
+            )
+            persist_hook_feedback(server_url, project, "pre_write_code", "block", msg)
+            print(msg, file=sys.stderr)
+            return 2
         if project:
+            # Enforce periodic Plan progress updates during implementation (to prevent drifting trackers).
+            try:
+                project_id = str(project.get("projectId") or "").strip()
+                if project_id:
+                    state = load_guard_state()
+                    state, ps = _get_project_state(state, project_id)
+                    stats = project.get("stats") or {}
+                    plan_at = str(stats.get("lastPlanUpdateAt") or "").strip() or _latest_plan_updated_at(project)
+                    seen_plan_at = str(ps.get("lastPlanUpdateAtSeen") or "").strip()
+                    if plan_at and plan_at != seen_plan_at:
+                        ps["lastPlanUpdateAtSeen"] = plan_at
+                        ps["writesSincePlanUpdate"] = 0
+                        save_guard_state(state)
+                    writes_since = int(ps.get("writesSincePlanUpdate") or 0)
+                    if writes_since >= MAX_WRITES_WITHOUT_PLAN_UPDATE:
+                        msg = (
+                            f"Blocked: Too many code writes without a Plan progress update ({writes_since}).\n"
+                            "Required: update_plan (mark progress), then wam_commit(), then continue."
+                        )
+                        persist_hook_feedback(server_url, project, "pre_write_code", "block", msg)
+                        print(msg, file=sys.stderr)
+                        return 2
+            except Exception:
+                pass
             # Always read the current plan before writing code so the model stays in sync.
             try:
                 root_path = str(project.get("rootPath") or "").strip()
                 if root_path:
                     call_mcp_tool(server_url, "check_plan", {"rootPath": root_path}, timeout_sec=0.7)
                     call_mcp_tool(server_url, "wam_status", {"scope": "project", "rootPath": root_path}, timeout_sec=0.7)
-            except Exception:
-                pass
-            # Best-effort: if the plan changed and no fresh RAG search was recorded, run a lightweight
-            # rag_search automatically to avoid deadlocks (the model may not see hook errors).
-            try:
-                stats = project.get("stats") or {}
-                last_rag = str(stats.get("lastRagSearchAt") or "").strip()
-                last_plan = _latest_plan_updated_at(project)
-                needs_rag = (not last_rag) or (last_plan and last_rag < last_plan)
-                if needs_rag and file_path:
-                    q = str(file_path).strip()
-                    if q:
-                        query = os.path.basename(q) or q
-                        call_mcp_tool(server_url, "rag_search", {"query": query, "maxResults": 8}, timeout_sec=1.2)
             except Exception:
                 pass
             gate = check_project_gates(project, memory_data=memory_data, server_url=server_url)
@@ -826,6 +995,82 @@ def main():
             persist_hook_feedback(server_url, project, "pre_write_code", "block", msg)
             print(msg, file=sys.stderr)
             return 2
+
+    if action == "post_write_code":
+        file_path = tool_info.get("file_path")
+        tracker = load_tracker()
+        project = select_project(tracker, file_path=file_path)
+        if project:
+            try:
+                project_id = str(project.get("projectId") or "").strip()
+                if project_id:
+                    state = load_guard_state()
+                    state, ps = _get_project_state(state, project_id)
+                    ps["lastCodeWriteAt"] = _iso_now()
+                    ps["lastCodeWritePath"] = str(file_path or "")
+                    ps["writesSincePlanUpdate"] = int(ps.get("writesSincePlanUpdate") or 0) + 1
+                    save_guard_state(state)
+            except Exception:
+                pass
+        return 0
+
+    if action == "pre_mcp_tool_use":
+        server_name, tool_name, tool_args = _extract_mcp_call(tool_info)
+        # Only enforce for our own MCP server to avoid breaking other MCPs.
+        if str(server_name or "").strip() not in ("windsurf_auto_mcp",):
+            return 0
+
+        tracker = load_tracker()
+        memory_data = load_memory()
+        root_hint = str(tool_args.get("rootPath") or tool_args.get("root_path") or "").strip()
+        project = select_project(tracker, cwd=(root_hint or tool_info.get("cwd")))
+
+        if tool_name in REQUIRE_RATIONALE_TOOLS:
+            rationale = str(tool_args.get("rationale") or "").strip()
+            if not rationale:
+                msg = (
+                    f"Blocked: Missing rationale for MCP tool: {tool_name}.\n"
+                    "Required: include a short 'rationale' string in the MCP tool arguments so the agent thinks before acting."
+                )
+                persist_hook_feedback(server_url, project, "pre_mcp_tool_use", "block", msg)
+                print(msg, file=sys.stderr)
+                return 2
+
+        if tool_name == "ask_continue" and project:
+            # Ensure all core gates are satisfied before allowing task completion.
+            gate = check_project_gates(project, memory_data=memory_data, server_url=server_url)
+            if gate:
+                persist_hook_feedback(server_url, project, "pre_mcp_tool_use", "block", gate)
+                print(gate, file=sys.stderr)
+                return 2
+
+            complete, done, total = _plan_is_complete(project)
+            if total > 0 and not complete:
+                msg = (
+                    f"Blocked: Plan is not complete ({done}/{total}).\n"
+                    "Required: update_plan to mark items done, then run check_plan, then retry ask_continue."
+                )
+                persist_hook_feedback(server_url, project, "pre_mcp_tool_use", "block", msg)
+                print(msg, file=sys.stderr)
+                return 2
+
+            if not _plan_has_done_code_review(project):
+                msg = (
+                    "Blocked: Code review gate is missing/not done.\n"
+                    "Required: add a Plan item like 'Final code review (security/performance/gaps)' and mark it done, then retry ask_continue."
+                )
+                persist_hook_feedback(server_url, project, "pre_mcp_tool_use", "block", msg)
+                print(msg, file=sys.stderr)
+                return 2
+
+            if not _walkthrough_has_content(project):
+                msg = (
+                    "Blocked: Walkthrough is empty.\n"
+                    "Required: update_walkthrough with a short project log (what changed, verification, risks), then retry ask_continue."
+                )
+                persist_hook_feedback(server_url, project, "pre_mcp_tool_use", "block", msg)
+                print(msg, file=sys.stderr)
+                return 2
 
     if action == "post_cascade_response":
         response = str(tool_info.get("response") or "")

@@ -33,8 +33,11 @@ type ProjectTrackerStats = {
     walkthroughUpdates: number;
     updatedAt?: string;
     lastRagSearchAt?: string;
+    lastMemorySearchAt?: string;
     lastWamStatusAt?: string;
     lastCheckPlanAt?: string;
+    lastPlanUpdateAt?: string;
+    lastWalkthroughUpdateAt?: string;
 };
 type ProjectTracker = {
     projectId: string;
@@ -174,17 +177,17 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'sidebar.chatTitle': '对话',
         'sidebar.openDialog': '打开对话窗口',
         'sidebar.shortcut': '快捷键:',
-        'sidebar.promptTitle': '提示语',
-        'sidebar.promptText': '硬规则：完成任务时必须调用 ask_continue。',
-        'sidebar.promptCopyText': [
-            '硬规则：交付时必须 ask_continue(reason)。',
-            '开始：get_project_status → memory_search → rag_search。',
-            '复杂任务：先 set_prd → 用户审批 → update_plan(mode=merge)（Plan+Checklist）。',
-            '实现中：按 Plan 小步推进；每步 update_plan；必要时 update_walkthrough；错误用 record_lesson + save_memory。',
-            'WAM：跟踪/记忆变更要可回滚（wam_status；必要时 wam_commit）。',
-            'Hooks：若被阻止，先在 Memory 查看 hook:last_block / hook:last_warning，再修复后重试。',
-            '完成前：check_plan → 最终 ask_continue(reason) 并等待用户。'
-        ].join('\\n'),
+	        'sidebar.promptTitle': '提示语',
+	        'sidebar.promptText': '硬规则：完成任务时必须调用 ask_continue。',
+	        'sidebar.promptCopyText': [
+	            '硬规则：交付时必须 ask_continue(reason)。',
+	            '开始：get_project_status → memory_search → rag_search。',
+	            '复杂任务：先 set_prd → 用户审批 → update_plan(mode=merge)（Plan+Checklist）。',
+	            '实现中：按 Plan 小步推进；每步 update_plan；必要时 update_walkthrough；错误用 record_lesson + save_memory。',
+	            'WAM：跟踪/记忆变更后保持 clean（wam_status；可选 wam_diff；再 wam_commit()）。',
+	            'Hooks：若被阻止，先在 Memory 查看 hook:last_block / hook:last_warning，再修复后重试。',
+	            '完成前：check_plan → 最终 ask_continue(reason) 并等待用户。'
+	        ].join('\\n'),
         'sidebar.trackerTitle': '项目跟踪',
         'sidebar.trackerProject': '项目',
         'sidebar.trackerProgress': '进度',
@@ -435,16 +438,16 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'sidebar.chatTitle': 'Conversation',
         'sidebar.openDialog': 'Open dialog',
         'sidebar.shortcut': 'Shortcut:',
-        'sidebar.promptTitle': 'Prompt',
-        'sidebar.promptText': 'Hard rule: when done, you must call ask_continue.',
-        'sidebar.promptCopyText': [
-            'Hard rule: final delivery must be ask_continue(reason).',
-            'Start: get_project_status → memory_search → rag_search.',
-            'Complex work: set_prd → user approval → update_plan(mode=merge) (Plan+Checklist).',
-            'During work: follow the Plan; keep update_plan + update_walkthrough current; mistakes → record_lesson + save_memory.',
-            'WAM: keep tracking/memory rollbackable (wam_status; wam_commit when needed).',
-            'Hooks: if blocked, open Memory and read hook:last_block / hook:last_warning, fix, then retry.',
-            'Before done: check_plan → finally ask_continue(reason) and wait.',
+	        'sidebar.promptTitle': 'Prompt',
+	        'sidebar.promptText': 'Hard rule: when done, you must call ask_continue.',
+	        'sidebar.promptCopyText': [
+	            'Hard rule: final delivery must be ask_continue(reason).',
+	            'Start: get_project_status → memory_search → rag_search.',
+	            'Complex work: set_prd → user approval → update_plan(mode=merge) (Plan+Checklist).',
+	            'During work: follow the Plan; keep update_plan + update_walkthrough current; mistakes → record_lesson + save_memory.',
+	            'WAM: keep tracking/memory clean + rollbackable (wam_status; optional wam_diff; then wam_commit()).',
+	            'Hooks: if blocked, open Memory and read hook:last_block / hook:last_warning, fix, then retry.',
+	            'Before done: check_plan → finally ask_continue(reason) and wait.',
             ...(false ? [
             'Hard rule (highest priority): When you decide a task is done / ready to deliver, do NOT output a normal final response; you MUST call WindsurfAutoMcp ask_continue and put in reason: what was done, risks/notes, verification steps/commands, and next steps.',
             '',
@@ -461,7 +464,7 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
             '',
             'Memory layers (must): before planning/implementation, run memory_search (project + global) and list_memories/get_memory. If there is no usable project memory yet, create initial memories from the architecture record: long = stable facts/conventions/verification, short = temporary notes (can be merged into long), lesson = mistakes/retro. Store reusable lessons in global scope; store project-specific details in project scope. Short memory is allowed to be pruned/forgotten; merge when it becomes stable.',
             '',
-            'WAM history (must): every change to project tracking/memory must be captured as a git-like history. Prefer the tools’ auto-commits; if hooks report WAM dirty/missing, run wam_status and then wam_commit(message) before proceeding. For rollback use wam_log + wam_checkout(hash). For merge use wam_merge(otherHash,message).',
+	            'WAM history (must): every change to project tracking/memory must be captured as a git-like history. After changes, run wam_status; if hooks report WAM dirty/missing, run wam_status → (optional) wam_diff → wam_commit() before proceeding. For rollback use wam_log + wam_checkout(hash). For merge use wam_merge(otherHash,message).',
             '',
             'RAG (must): before edits, use rag_search to locate the exact relevant files/snippets (no guessing), then combine with memory to decide what to change (prefer fast context: get_project_status → memory_search → rag_search).',
             '',
@@ -1182,7 +1185,7 @@ const WINDSURF_HOOK_EVENTS = [
 ] as const;
 
 // Auto-install only what we enforce in the guard to reduce overhead.
-const AUTO_INSTALL_HOOK_EVENTS = ['pre_run_command', 'pre_write_code', 'post_cascade_response'] as const;
+const AUTO_INSTALL_HOOK_EVENTS = ['pre_run_command', 'pre_write_code', 'post_write_code', 'pre_mcp_tool_use', 'post_cascade_response'] as const;
 
 const TRACKER_FILE_NAME = 'windsurf-auto-mcp-tracker.json';
 const MEMORY_FILE_NAME = 'windsurf-auto-mcp-memories.json';
@@ -1239,6 +1242,7 @@ type WamCommit = {
     digest: string;
     snapshots: Record<string, string>;
     conflicts?: string[];
+    changes?: any;
 };
 
 function nowIso(): string {
@@ -1930,11 +1934,17 @@ function commitProjectWam(
     rootPathOverride?: string,
     parentsOverride?: string[],
     options?: { conflicts?: string[] }
-): { committed: boolean; hash?: string } {
+): { committed: boolean; hash?: string; commit?: WamCommit } {
     try {
         const { data: trackerData, project, rootPath } = resolveProjectTracker(rootPathOverride);
         const { data: memoryData, project: memoryProject } = resolveProjectMemory(rootPath);
         if (!project.projectId) project.projectId = createProjectId();
+
+        const normalizeMessage = (raw: string): string => {
+            const oneLine = String(raw || '').replace(/\s+/g, ' ').trim();
+            if (!oneLine) return '';
+            return oneLine.length > 140 ? `${oneLine.slice(0, 137)}...` : oneLine;
+        };
 
         const trackerSnapshot = {
             schemaVersion: 1,
@@ -1985,13 +1995,98 @@ function commitProjectWam(
             parentList = resolvedHeadHash ? [resolvedHeadHash] : [];
         }
 
-        const hash = sha256Hex(`${createdAt}\n${parentList.join(',')}\n${message}\n${digest}`);
+        const readDir = resolveProjectWamDir(project.projectId) || dirs[0]?.dir;
+        const baseHashForDiff = parentList.length ? parentList[0] : resolvedHeadHash;
+        const baseTrackerSnap = baseHashForDiff && readDir ? readWamSnapshot(readDir, baseHashForDiff, 'tracker') : null;
+        const baseMemorySnap = baseHashForDiff && readDir ? readWamSnapshot(readDir, baseHashForDiff, 'memory') : null;
+        const baseTracker = normalizeTrackerForMerge(
+            baseTrackerSnap?.tracker ? JSON.parse(JSON.stringify(baseTrackerSnap.tracker)) : {},
+            rootPath,
+            project.projectId
+        );
+        const baseMemory = normalizeMemoryForMerge(baseMemorySnap?.memory ? JSON.parse(JSON.stringify(baseMemorySnap.memory)) : { memories: {}, timeline: [] });
+        const workingTracker = normalizeTrackerForMerge(JSON.parse(JSON.stringify(project)), rootPath, project.projectId);
+        const workingMemory = normalizeMemoryForMerge(JSON.parse(JSON.stringify(memoryProject)));
+
+        const trackerDiff = {
+            overviewChanged: String(baseTracker?.overview?.content || '') !== String(workingTracker?.overview?.content || ''),
+            prdChanged:
+                String(baseTracker?.prd?.content || '') !== String(workingTracker?.prd?.content || '') ||
+                String(baseTracker?.prd?.status || '') !== String(workingTracker?.prd?.status || ''),
+            planSummaryChanged: String(baseTracker?.plan?.summary || '') !== String(workingTracker?.plan?.summary || ''),
+            planItems: diffPlanItems(baseTracker?.plan?.items || [], workingTracker?.plan?.items || []),
+            walkthroughChanged: String(baseTracker?.walkthrough?.content || '') !== String(workingTracker?.walkthrough?.content || '')
+        };
+        const memoryDiff = diffMemoryKeys(baseMemory, workingMemory);
+
+        const limitStrings = (arr: any[], maxItems = 20): string[] =>
+            (Array.isArray(arr) ? arr : [])
+                .map((v) => String(v || '').trim())
+                .filter(Boolean)
+                .slice(0, maxItems);
+        const limitChanged = (
+            arr: Array<{ text: string; from: string; to: string }>,
+            maxItems = 20
+        ): Array<{ text: string; from: string; to: string }> => (Array.isArray(arr) ? arr : []).slice(0, maxItems);
+
+        const changes = {
+            base: baseHashForDiff ? String(baseHashForDiff).slice(0, 10) : 'none',
+            progress: computeProgress(workingTracker),
+            tracker: {
+                overviewChanged: trackerDiff.overviewChanged,
+                prdChanged: trackerDiff.prdChanged,
+                planSummaryChanged: trackerDiff.planSummaryChanged,
+                planItems: {
+                    added: { count: trackerDiff.planItems.added.length, samples: limitStrings(trackerDiff.planItems.added, 20) },
+                    removed: { count: trackerDiff.planItems.removed.length, samples: limitStrings(trackerDiff.planItems.removed, 20) },
+                    statusChanged: { count: trackerDiff.planItems.changed.length, samples: limitChanged(trackerDiff.planItems.changed, 20) }
+                },
+                walkthroughChanged: trackerDiff.walkthroughChanged
+            },
+            memory: {
+                added: { count: memoryDiff.added.length, samples: limitStrings(memoryDiff.added, 20) },
+                removed: { count: memoryDiff.removed.length, samples: limitStrings(memoryDiff.removed, 20) },
+                changed: { count: memoryDiff.changed.length, samples: limitStrings(memoryDiff.changed, 20) }
+            }
+        };
+
+        const formatTriplet = (added: number, removed: number, changed: number): string => {
+            const parts: string[] = [];
+            if (added) parts.push(`+${added}`);
+            if (removed) parts.push(`-${removed}`);
+            if (changed) parts.push(`~${changed}`);
+            return parts.length ? parts.join(' ') : 'no-op';
+        };
+        const autoMessage = () => {
+            if (!baseHashForDiff) {
+                return `wam: init (${workingTracker.name || 'project'})`;
+            }
+            const aspects: string[] = [];
+            if (trackerDiff.overviewChanged) aspects.push('overview');
+            if (trackerDiff.prdChanged) aspects.push('prd');
+            const planChanged =
+                trackerDiff.planSummaryChanged ||
+                trackerDiff.planItems.added.length > 0 ||
+                trackerDiff.planItems.removed.length > 0 ||
+                trackerDiff.planItems.changed.length > 0;
+            if (planChanged) {
+                const p = computeProgress(workingTracker);
+                aspects.push(`plan ${p.done}/${p.total} (${formatTriplet(trackerDiff.planItems.added.length, trackerDiff.planItems.removed.length, trackerDiff.planItems.changed.length)})`);
+            }
+            if (trackerDiff.walkthroughChanged) aspects.push('walkthrough');
+            const memChanged = memoryDiff.added.length + memoryDiff.removed.length + memoryDiff.changed.length;
+            if (memChanged) aspects.push(`memory (${formatTriplet(memoryDiff.added.length, memoryDiff.removed.length, memoryDiff.changed.length)})`);
+            return `wam: ${aspects.join(' + ') || 'snapshot'}`;
+        };
+
+        const finalMessage = normalizeMessage(message) || normalizeMessage(autoMessage());
+        const hash = sha256Hex(`${createdAt}\n${parentList.join(',')}\n${finalMessage}\n${digest}`);
 
         const commit: WamCommit = {
             hash,
             parents: parentList,
             createdAt,
-            message: message || 'update',
+            message: finalMessage || 'update',
             author,
             scope: 'project',
             projectId: project.projectId,
@@ -2001,7 +2096,8 @@ function commitProjectWam(
                 tracker: `${WAM_SNAPSHOTS_DIR}/${hash}/tracker.json`,
                 memory: `${WAM_SNAPSHOTS_DIR}/${hash}/memory.json`
             },
-            conflicts: Array.isArray(options?.conflicts) && options?.conflicts.length ? options?.conflicts : undefined
+            conflicts: Array.isArray(options?.conflicts) && options?.conflicts.length ? options?.conflicts : undefined,
+            changes
         };
 
         for (const { dir } of dirs) {
@@ -2028,7 +2124,7 @@ function commitProjectWam(
         // Ensure latest state is persisted.
         saveTrackerData(trackerData);
         saveMemoryData(memoryData);
-        return { committed: true, hash };
+        return { committed: true, hash, commit };
     } catch (e: any) {
         outputChannel?.appendLine(`WAM commit failed: ${e?.message ?? String(e)}`);
         return { committed: false };
@@ -2046,7 +2142,7 @@ function autoWamCommit(
 function autoWamCommitGlobal(
     message: string,
     author: 'auto' | 'ai' | 'user' = 'auto'
-): { committed: boolean; hash?: string } {
+): { committed: boolean; hash?: string; commit?: WamCommit } {
     try {
         const globalMemory = loadGlobalMemoryData();
         const snapshot = {
@@ -2055,6 +2151,12 @@ function autoWamCommitGlobal(
         };
         const createdAt = nowIsoNano();
         const digest = computeGlobalWamDigest(globalMemory);
+
+        const normalizeMessage = (raw: string): string => {
+            const oneLine = String(raw || '').replace(/\s+/g, ' ').trim();
+            if (!oneLine) return '';
+            return oneLine.length > 140 ? `${oneLine.slice(0, 137)}...` : oneLine;
+        };
 
         const dirs = getGlobalWamDirs(getWriteHomeDirs());
         for (const { dir } of dirs) ensureWamRepoLayout(dir);
@@ -2080,19 +2182,53 @@ function autoWamCommitGlobal(
             return { committed: false };
         }
 
+        const readDir = resolveGlobalWamDir() || dirs[0]?.dir;
+        const baseHashForDiff = resolvedHeadHash;
+        const baseSnap = baseHashForDiff && readDir ? readWamSnapshot(readDir, baseHashForDiff, 'global_memory') : null;
+        const baseGlobal = baseSnap?.globalMemory || { schemaVersion: 1, memories: {}, timeline: [] };
+        const baseStore = normalizeMemoryForMerge({ memories: baseGlobal.memories || {}, timeline: baseGlobal.timeline || [] });
+        const workingStore = normalizeMemoryForMerge({ memories: globalMemory.memories || {}, timeline: globalMemory.timeline || [] });
+        const memDiff = diffMemoryKeys(baseStore, workingStore);
+        const limitStrings = (arr: any[], maxItems = 20): string[] =>
+            (Array.isArray(arr) ? arr : [])
+                .map((v) => String(v || '').trim())
+                .filter(Boolean)
+                .slice(0, maxItems);
+        const changes = {
+            base: baseHashForDiff ? String(baseHashForDiff).slice(0, 10) : 'none',
+            memory: {
+                added: { count: memDiff.added.length, samples: limitStrings(memDiff.added, 20) },
+                removed: { count: memDiff.removed.length, samples: limitStrings(memDiff.removed, 20) },
+                changed: { count: memDiff.changed.length, samples: limitStrings(memDiff.changed, 20) }
+            }
+        };
+        const formatTriplet = (added: number, removed: number, changed: number): string => {
+            const parts: string[] = [];
+            if (added) parts.push(`+${added}`);
+            if (removed) parts.push(`-${removed}`);
+            if (changed) parts.push(`~${changed}`);
+            return parts.length ? parts.join(' ') : 'no-op';
+        };
+        const autoMessage = () => {
+            if (!baseHashForDiff) return 'wam: init (global)';
+            return `wam: global memory (${formatTriplet(memDiff.added.length, memDiff.removed.length, memDiff.changed.length)})`;
+        };
+        const finalMessage = normalizeMessage(message) || normalizeMessage(autoMessage());
+
         const parentList = resolvedHeadHash ? [resolvedHeadHash] : [];
-        const hash = sha256Hex(`${createdAt}\n${parentList.join(',')}\n${message}\n${digest}`);
+        const hash = sha256Hex(`${createdAt}\n${parentList.join(',')}\n${finalMessage}\n${digest}`);
         const commit: WamCommit = {
             hash,
             parents: parentList,
             createdAt,
-            message: message || 'update',
+            message: finalMessage || 'update',
             author,
             scope: 'global',
             digest,
             snapshots: {
                 global_memory: `${WAM_SNAPSHOTS_DIR}/${hash}/global_memory.json`
-            }
+            },
+            changes
         };
 
         for (const { dir } of dirs) {
@@ -2109,7 +2245,7 @@ function autoWamCommitGlobal(
         }
 
         saveGlobalMemoryData(globalMemory);
-        return { committed: true, hash };
+        return { committed: true, hash, commit };
     } catch (e: any) {
         outputChannel?.appendLine(`WAM global commit failed: ${e?.message ?? String(e)}`);
         return { committed: false };
@@ -2340,8 +2476,11 @@ function createDefaultTrackerStats(): ProjectTrackerStats {
         planUpdates: 0,
         walkthroughUpdates: 0,
         lastRagSearchAt: undefined,
+        lastMemorySearchAt: undefined,
         lastWamStatusAt: undefined,
-        lastCheckPlanAt: undefined
+        lastCheckPlanAt: undefined,
+        lastPlanUpdateAt: undefined,
+        lastWalkthroughUpdateAt: undefined
     };
 }
 
@@ -2357,8 +2496,11 @@ function normalizeTrackerStats(raw: any): ProjectTrackerStats {
         walkthroughUpdates: safe(raw.walkthroughUpdates),
         updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined,
         lastRagSearchAt: typeof raw.lastRagSearchAt === 'string' ? raw.lastRagSearchAt : undefined,
+        lastMemorySearchAt: typeof raw.lastMemorySearchAt === 'string' ? raw.lastMemorySearchAt : undefined,
         lastWamStatusAt: typeof raw.lastWamStatusAt === 'string' ? raw.lastWamStatusAt : undefined,
-        lastCheckPlanAt: typeof raw.lastCheckPlanAt === 'string' ? raw.lastCheckPlanAt : undefined
+        lastCheckPlanAt: typeof raw.lastCheckPlanAt === 'string' ? raw.lastCheckPlanAt : undefined,
+        lastPlanUpdateAt: typeof raw.lastPlanUpdateAt === 'string' ? raw.lastPlanUpdateAt : undefined,
+        lastWalkthroughUpdateAt: typeof raw.lastWalkthroughUpdateAt === 'string' ? raw.lastWalkthroughUpdateAt : undefined
     };
 }
 
@@ -2772,11 +2914,13 @@ function installWindsurfHooks() {
 
 	            // Align with official docs: show_output is only meaningful for hooks where stdout/stderr is surfaced.
 	            // (In practice, pre_* hooks are the ones users debug most.)
-	            const desiredHooks: Record<string, Array<any>> = {
-	                pre_run_command: [{ command, show_output: true }],
-	                pre_write_code: [{ command, show_output: true }],
-	                post_cascade_response: [{ command }]
-	            };
+		            const desiredHooks: Record<string, Array<any>> = {
+		                pre_run_command: [{ command, show_output: true }],
+		                pre_write_code: [{ command, show_output: true }],
+		                post_write_code: [{ command }],
+		                pre_mcp_tool_use: [{ command, show_output: true }],
+		                post_cascade_response: [{ command }]
+		            };
 
 	            if (!config.hooks || typeof config.hooks !== 'object') config.hooks = {};
 
@@ -3052,26 +3196,28 @@ const TOOLS = [
             required: ['message']
         }
     },
-    {
-        name: 'set_prd',
-        description: 'Create/update PRD draft for current project / 创建或更新当前项目 PRD 草案',
-        inputSchema: {
-            type: 'object',
-            properties: {
-                content: { type: 'string', description: 'PRD content / PRD 内容' }
-            },
-            required: ['content']
-        }
-    },
 	    {
-	        name: 'update_plan',
-	        description: 'Update plan (include tasks/checklist); default merges, avoid accidental loss / 更新计划（含任务/清单）；默认合并，避免误覆盖',
+	        name: 'set_prd',
+	        description: 'Create/update PRD draft for current project / 创建或更新当前项目 PRD 草案',
 	        inputSchema: {
 	            type: 'object',
 	            properties: {
-	                mode: { type: 'string', enum: ['merge', 'replace'], description: 'Update mode: merge (default) or replace / 更新模式：merge（默认）或 replace' },
-	                summary: { type: 'string', description: 'Plan summary / 计划摘要' },
-	                items: {
+	                rationale: { type: 'string', description: 'Why you are doing this (required by hooks) / 为什么要做（hooks 要求）' },
+	                content: { type: 'string', description: 'PRD content / PRD 内容' }
+	            },
+	            required: ['content']
+	        }
+	    },
+		    {
+		        name: 'update_plan',
+		        description: 'Update plan (include tasks/checklist); default merges, avoid accidental loss / 更新计划（含任务/清单）；默认合并，避免误覆盖',
+		        inputSchema: {
+		            type: 'object',
+		            properties: {
+		                rationale: { type: 'string', description: 'Why you are updating the plan (required by hooks) / 为什么更新计划（hooks 要求）' },
+		                mode: { type: 'string', enum: ['merge', 'replace'], description: 'Update mode: merge (default) or replace / 更新模式：merge（默认）或 replace' },
+		                summary: { type: 'string', description: 'Plan summary / 计划摘要' },
+		                items: {
 	                    type: 'array',
 	                    description: 'Plan items (tasks/checklist) / 计划条目（任务/清单）',
 	                    items: {
@@ -3087,25 +3233,28 @@ const TOOLS = [
 	            }
 	        }
 	    },
-    {
-        name: 'update_overview',
-        description: 'Set/update project overview (architecture/context) / 设置或更新项目概览（架构/上下文）',
-        inputSchema: {
-            type: 'object',
-            properties: {
-                content: { type: 'string', description: 'Overview content (Markdown) / 概览内容（Markdown）' }
-            },
-            required: ['content']
-        }
-    },
-    {
-        name: 'generate_overview',
-        description: 'Auto-generate project overview from workspace / 从工作区自动生成项目概览',
-        inputSchema: {
-            type: 'object',
-            properties: {}
-        }
-    },
+	    {
+	        name: 'update_overview',
+	        description: 'Set/update project overview (architecture/context) / 设置或更新项目概览（架构/上下文）',
+	        inputSchema: {
+	            type: 'object',
+	            properties: {
+	                rationale: { type: 'string', description: 'Why you are updating the overview (required by hooks) / 为什么更新概览（hooks 要求）' },
+	                content: { type: 'string', description: 'Overview content (Markdown) / 概览内容（Markdown）' }
+	            },
+	            required: ['content']
+	        }
+	    },
+	    {
+	        name: 'generate_overview',
+	        description: 'Auto-generate project overview from workspace / 从工作区自动生成项目概览',
+	        inputSchema: {
+	            type: 'object',
+	            properties: {
+	                rationale: { type: 'string', description: 'Why you are generating the overview (required by hooks) / 为什么生成概览（hooks 要求）' }
+	            }
+	        }
+	    },
     {
         name: 'rag_search',
         description: 'Search workspace context (RAG) for faster/safer edits / 通过检索增强（RAG）搜索工作区上下文',
@@ -3136,17 +3285,18 @@ const TOOLS = [
             required: ['query']
         }
     },
-    {
-        name: 'record_lesson',
-        description: 'Record a lesson learned from a mistake (human-like learning) / 记录错误经验（类人学习）',
-        inputSchema: {
-            type: 'object',
-            properties: {
-                title: { type: 'string', description: 'Short title / 标题' },
-                mistake: { type: 'string', description: 'What went wrong / 错误描述' },
-                fix: { type: 'string', description: 'How it was fixed / 修复方式' },
-                prevention: { type: 'string', description: 'How to prevent it / 预防措施' },
-                scope: { type: 'string', enum: ['project', 'global', 'both'], description: 'Where to store / 保存范围' },
+	    {
+	        name: 'record_lesson',
+	        description: 'Record a lesson learned from a mistake (human-like learning) / 记录错误经验（类人学习）',
+	        inputSchema: {
+	            type: 'object',
+	            properties: {
+	                rationale: { type: 'string', description: 'Why you are recording this lesson (required by hooks) / 为什么记录（hooks 要求）' },
+	                title: { type: 'string', description: 'Short title / 标题' },
+	                mistake: { type: 'string', description: 'What went wrong / 错误描述' },
+	                fix: { type: 'string', description: 'How it was fixed / 修复方式' },
+	                prevention: { type: 'string', description: 'How to prevent it / 预防措施' },
+	                scope: { type: 'string', enum: ['project', 'global', 'both'], description: 'Where to store / 保存范围' },
                 tags: { type: 'array', items: { type: 'string' }, description: 'Tags / 标签' }
             },
             required: ['mistake', 'fix']
@@ -3183,16 +3333,17 @@ const TOOLS = [
 	            }
 	        }
 	    },
-	    {
-	        name: 'ensure_release_gate',
-	        description: 'Ensure the Plan contains a release gate checklist (tests/lint/security/perf/docs) / 确保 Plan 包含发布门禁清单（测试/检查/安全/性能/文档）',
-	        inputSchema: {
-	            type: 'object',
-	            properties: {
-	                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
-	            }
-	        }
-	    },
+		    {
+		        name: 'ensure_release_gate',
+		        description: 'Ensure the Plan contains a release gate checklist (tests/lint/security/perf/docs) / 确保 Plan 包含发布门禁清单（测试/检查/安全/性能/文档）',
+		        inputSchema: {
+		            type: 'object',
+		            properties: {
+		                rationale: { type: 'string', description: 'Why you are adding the release gate (required by hooks) / 为什么添加门禁（hooks 要求）' },
+		                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
+		            }
+		        }
+		    },
 	    // ==================== WAM (History) Tools ====================
 	    {
 	        name: 'wam_status',
@@ -3205,20 +3356,20 @@ const TOOLS = [
             }
         }
     },
-    {
-        name: 'wam_commit',
-        description: 'Create a WAM commit (snapshots tracker+memory) / 创建 WAM 提交（快照：跟踪+记忆）',
-        inputSchema: {
-            type: 'object',
-            properties: {
-                scope: { type: 'string', enum: ['project', 'global'], description: 'Scope: project or global / 范围：项目或全局' },
-                message: { type: 'string', description: 'Commit message / 提交说明' },
-                author: { type: 'string', enum: ['auto', 'ai', 'user'], description: 'Author / 作者' },
-                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
-            },
-            required: ['message']
-        }
-    },
+	    {
+	        name: 'wam_commit',
+	        description: 'Create a WAM commit (snapshots tracker+memory) / 创建 WAM 提交（快照：跟踪+记忆）',
+		        inputSchema: {
+		            type: 'object',
+		            properties: {
+		                rationale: { type: 'string', description: 'Why you are committing (required by hooks) / 为什么提交（hooks 要求）' },
+		                scope: { type: 'string', enum: ['project', 'global'], description: 'Scope: project or global / 范围：项目或全局' },
+		                message: { type: 'string', description: 'Commit message (optional; auto-generated if omitted) / 提交说明（可选；留空则自动生成）' },
+		                author: { type: 'string', enum: ['auto', 'ai', 'user'], description: 'Author / 作者' },
+		                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
+		            }
+		        }
+		    },
     {
         name: 'wam_log',
         description: 'List WAM commit history / 列出 WAM 提交历史',
@@ -3244,65 +3395,69 @@ const TOOLS = [
             required: ['hash']
         }
     },
-	    {
-	        name: 'wam_checkout',
-	        description: 'Restore tracker/memory from a WAM commit (rollback) / 从 WAM 提交恢复跟踪/记忆（回滚）',
-	        inputSchema: {
-	            type: 'object',
-	            properties: {
-	                scope: { type: 'string', enum: ['project', 'global'], description: 'Scope: project or global / 范围：项目或全局' },
-	                target: { type: 'string', description: 'Commit/ref specifier (hash, HEAD, branch, refs/...) / 目标（hash/HEAD/分支/refs/...）' },
-	                hash: { type: 'string', description: 'Legacy: commit hash / 兼容：提交 hash' },
-	                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
-	            }
-	        }
-	    },
-	    {
-	        name: 'wam_merge',
-	        description: 'Merge another WAM commit into current state (3-way merge with conflicts) / 合并另一条 WAM 提交到当前状态（三方合并 + 冲突记录）',
-	        inputSchema: {
-	            type: 'object',
-	            properties: {
-	                otherHash: { type: 'string', description: 'Other commit specifier (hash/branch/tag/refs/...) / 另一提交（hash/分支/tag/refs/...）' },
-	                message: { type: 'string', description: 'Merge commit message / 合并提交说明' },
-	                author: { type: 'string', enum: ['auto', 'ai', 'user'], description: 'Author / 作者' },
-	                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
-	            },
-	            required: ['otherHash', 'message']
-	        }
-	    },
-	    {
-	        name: 'wam_branch',
-	        description: 'Manage WAM branches (refs/heads) / 管理 WAM 分支（refs/heads）',
-	        inputSchema: {
-	            type: 'object',
-	            properties: {
-	                scope: { type: 'string', enum: ['project', 'global'], description: 'Scope: project or global / 范围：项目或全局' },
-	                action: { type: 'string', enum: ['list', 'create', 'delete'], description: 'Action / 操作' },
-	                name: { type: 'string', description: 'Branch name / 分支名' },
-	                startPoint: { type: 'string', description: 'Optional start point (hash/HEAD/tag/branch) / 可选起点（hash/HEAD/tag/分支）' },
-	                force: { type: 'boolean', description: 'Force overwrite (create) / 强制覆盖（创建）' },
-	                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
-	            },
-	            required: ['action']
-	        }
-	    },
-	    {
-	        name: 'wam_tag',
-	        description: 'Manage WAM tags (refs/tags) / 管理 WAM 标签（refs/tags）',
-	        inputSchema: {
-	            type: 'object',
-	            properties: {
-	                scope: { type: 'string', enum: ['project', 'global'], description: 'Scope: project or global / 范围：项目或全局' },
-	                action: { type: 'string', enum: ['list', 'create', 'delete'], description: 'Action / 操作' },
-	                name: { type: 'string', description: 'Tag name / 标签名' },
-	                target: { type: 'string', description: 'Target (hash/HEAD/branch) / 目标（hash/HEAD/分支）' },
-	                force: { type: 'boolean', description: 'Force overwrite (create) / 强制覆盖（创建）' },
-	                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
-	            },
-	            required: ['action']
-	        }
-	    },
+		    {
+		        name: 'wam_checkout',
+		        description: 'Restore tracker/memory from a WAM commit (rollback) / 从 WAM 提交恢复跟踪/记忆（回滚）',
+		        inputSchema: {
+		            type: 'object',
+		            properties: {
+		                rationale: { type: 'string', description: 'Why you are checking out (required by hooks) / 为什么检出/回滚（hooks 要求）' },
+		                scope: { type: 'string', enum: ['project', 'global'], description: 'Scope: project or global / 范围：项目或全局' },
+		                target: { type: 'string', description: 'Commit/ref specifier (hash, HEAD, branch, refs/...) / 目标（hash/HEAD/分支/refs/...）' },
+		                hash: { type: 'string', description: 'Legacy: commit hash / 兼容：提交 hash' },
+		                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
+		            }
+		        }
+		    },
+		    {
+		        name: 'wam_merge',
+		        description: 'Merge another WAM commit into current state (3-way merge with conflicts) / 合并另一条 WAM 提交到当前状态（三方合并 + 冲突记录）',
+		        inputSchema: {
+		            type: 'object',
+		            properties: {
+		                rationale: { type: 'string', description: 'Why you are merging (required by hooks) / 为什么合并（hooks 要求）' },
+		                otherHash: { type: 'string', description: 'Other commit specifier (hash/branch/tag/refs/...) / 另一提交（hash/分支/tag/refs/...）' },
+		                message: { type: 'string', description: 'Merge commit message / 合并提交说明' },
+		                author: { type: 'string', enum: ['auto', 'ai', 'user'], description: 'Author / 作者' },
+		                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
+		            },
+		            required: ['otherHash', 'message']
+		        }
+		    },
+		    {
+		        name: 'wam_branch',
+		        description: 'Manage WAM branches (refs/heads) / 管理 WAM 分支（refs/heads）',
+		        inputSchema: {
+		            type: 'object',
+		            properties: {
+		                rationale: { type: 'string', description: 'Why you are managing branches (required by hooks) / 为什么管理分支（hooks 要求）' },
+		                scope: { type: 'string', enum: ['project', 'global'], description: 'Scope: project or global / 范围：项目或全局' },
+		                action: { type: 'string', enum: ['list', 'create', 'delete'], description: 'Action / 操作' },
+		                name: { type: 'string', description: 'Branch name / 分支名' },
+		                startPoint: { type: 'string', description: 'Optional start point (hash/HEAD/tag/branch) / 可选起点（hash/HEAD/tag/分支）' },
+		                force: { type: 'boolean', description: 'Force overwrite (create) / 强制覆盖（创建）' },
+		                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
+		            },
+		            required: ['action']
+		        }
+		    },
+		    {
+		        name: 'wam_tag',
+		        description: 'Manage WAM tags (refs/tags) / 管理 WAM 标签（refs/tags）',
+		        inputSchema: {
+		            type: 'object',
+		            properties: {
+		                rationale: { type: 'string', description: 'Why you are managing tags (required by hooks) / 为什么管理标签（hooks 要求）' },
+		                scope: { type: 'string', enum: ['project', 'global'], description: 'Scope: project or global / 范围：项目或全局' },
+		                action: { type: 'string', enum: ['list', 'create', 'delete'], description: 'Action / 操作' },
+		                name: { type: 'string', description: 'Tag name / 标签名' },
+		                target: { type: 'string', description: 'Target (hash/HEAD/branch) / 目标（hash/HEAD/分支）' },
+		                force: { type: 'boolean', description: 'Force overwrite (create) / 强制覆盖（创建）' },
+		                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
+		            },
+		            required: ['action']
+		        }
+		    },
 	    {
 	        name: 'wam_diff',
 	        description: 'Diff WAM snapshots (tracker+memory) / 对比 WAM 快照（跟踪+记忆）',
@@ -3316,48 +3471,51 @@ const TOOLS = [
 	            }
 	        }
 	    },
-	    {
-	        name: 'wam_reset',
-	        description: 'Reset current branch/HEAD to a commit and restore snapshots (hard) / 重置当前分支/HEAD 到某提交并恢复快照（hard）',
-	        inputSchema: {
-	            type: 'object',
-	            properties: {
-	                scope: { type: 'string', enum: ['project', 'global'], description: 'Scope: project or global / 范围：项目或全局' },
-	                target: { type: 'string', description: 'Target spec (hash/HEAD/branch/tag/refs/...) / 目标（hash/HEAD/分支/tag/refs/...）' },
-	                mode: { type: 'string', enum: ['hard'], description: 'Reset mode (only hard supported) / 重置模式（仅支持 hard）' },
-	                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
-	            },
-	            required: ['target']
-	        }
-	    },
-	    {
-	        name: 'wam_stash',
-	        description: 'Stash/apply WAM working state (tracker+memory) / 暂存/应用 WAM 工作状态（跟踪+记忆）',
-	        inputSchema: {
-	            type: 'object',
-	            properties: {
-	                scope: { type: 'string', enum: ['project', 'global'], description: 'Scope: project or global / 范围：项目或全局' },
-	                action: { type: 'string', enum: ['push', 'list', 'apply', 'pop', 'drop'], description: 'Action / 操作' },
-	                message: { type: 'string', description: 'Stash message (push) / 暂存说明（push）' },
-	                id: { type: 'string', description: 'Stash id (apply/pop/drop); default latest / 暂存 id（apply/pop/drop，默认最新）' },
-	                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
-	            },
-	            required: ['action']
-	        }
-	    },
+		    {
+		        name: 'wam_reset',
+		        description: 'Reset current branch/HEAD to a commit and restore snapshots (hard) / 重置当前分支/HEAD 到某提交并恢复快照（hard）',
+		        inputSchema: {
+		            type: 'object',
+		            properties: {
+		                rationale: { type: 'string', description: 'Why you are resetting (required by hooks) / 为什么重置（hooks 要求）' },
+		                scope: { type: 'string', enum: ['project', 'global'], description: 'Scope: project or global / 范围：项目或全局' },
+		                target: { type: 'string', description: 'Target spec (hash/HEAD/branch/tag/refs/...) / 目标（hash/HEAD/分支/tag/refs/...）' },
+		                mode: { type: 'string', enum: ['hard'], description: 'Reset mode (only hard supported) / 重置模式（仅支持 hard）' },
+		                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
+		            },
+		            required: ['target']
+		        }
+		    },
+		    {
+		        name: 'wam_stash',
+		        description: 'Stash/apply WAM working state (tracker+memory) / 暂存/应用 WAM 工作状态（跟踪+记忆）',
+		        inputSchema: {
+		            type: 'object',
+		            properties: {
+		                rationale: { type: 'string', description: 'Why you are using stash (required by hooks) / 为什么使用暂存（hooks 要求）' },
+		                scope: { type: 'string', enum: ['project', 'global'], description: 'Scope: project or global / 范围：项目或全局' },
+		                action: { type: 'string', enum: ['push', 'list', 'apply', 'pop', 'drop'], description: 'Action / 操作' },
+		                message: { type: 'string', description: 'Stash message (push) / 暂存说明（push）' },
+		                id: { type: 'string', description: 'Stash id (apply/pop/drop); default latest / 暂存 id（apply/pop/drop，默认最新）' },
+		                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
+		            },
+		            required: ['action']
+		        }
+		    },
 	    // ==================== Memory Tools ====================
 	    {
 	        name: 'save_memory',
 	        description: 'Save development context/learnings for this project (persists across sessions) / 保存开发上下文/经验（跨会话持久化）',
-        inputSchema: {
-            type: 'object',
-            properties: {
-                key: { type: 'string', description: 'Memory key identifier / 内存键标识符' },
-                value: { type: 'string', description: 'Memory value to store / 要存储的内存值' },
-                scope: { type: 'string', enum: ['project', 'global', 'both'], description: 'Where to store / 保存范围' },
-                kind: { type: 'string', enum: ['short', 'long', 'lesson'], description: 'Memory kind / 记忆类型' },
-                tags: { type: 'array', items: { type: 'string' }, description: 'Tags / 标签' },
-                links: { type: 'array', items: { type: 'string' }, description: 'Related keys / 关联键' }
+	        inputSchema: {
+	            type: 'object',
+	            properties: {
+	                rationale: { type: 'string', description: 'Why you are saving this memory (required by hooks) / 为什么保存（hooks 要求）' },
+	                key: { type: 'string', description: 'Memory key identifier / 内存键标识符' },
+	                value: { type: 'string', description: 'Memory value to store / 要存储的内存值' },
+	                scope: { type: 'string', enum: ['project', 'global', 'both'], description: 'Where to store / 保存范围' },
+	                kind: { type: 'string', enum: ['short', 'long', 'lesson'], description: 'Memory kind / 记忆类型' },
+	                tags: { type: 'array', items: { type: 'string' }, description: 'Tags / 标签' },
+	                links: { type: 'array', items: { type: 'string' }, description: 'Related keys / 关联键' }
             },
             required: ['key', 'value']
         }
@@ -3381,28 +3539,30 @@ const TOOLS = [
             properties: {}
         }
     },
-    {
-        name: 'update_walkthrough',
-        description: 'Update walkthrough summary / 更新 Walkthrough 总结',
-        inputSchema: {
-            type: 'object',
-            properties: {
-                content: { type: 'string', description: 'Walkthrough markdown content / 摘要 Markdown 内容' }
-            },
-            required: ['content']
-        }
-    },
-    {
-        name: 'generate_walkthrough',
-        description: 'Alias of update_walkthrough / update_walkthrough 的别名',
-        inputSchema: {
-            type: 'object',
-            properties: {
-                content: { type: 'string', description: 'Walkthrough markdown content / 摘要 Markdown 内容' }
-            },
-            required: ['content']
-        }
-    }
+	    {
+	        name: 'update_walkthrough',
+	        description: 'Update walkthrough summary / 更新 Walkthrough 总结',
+	        inputSchema: {
+	            type: 'object',
+	            properties: {
+	                rationale: { type: 'string', description: 'Why you are updating the walkthrough (required by hooks) / 为什么更新走查（hooks 要求）' },
+	                content: { type: 'string', description: 'Walkthrough markdown content / 摘要 Markdown 内容' }
+	            },
+	            required: ['content']
+	        }
+	    },
+	    {
+	        name: 'generate_walkthrough',
+	        description: 'Alias of update_walkthrough / update_walkthrough 的别名',
+	        inputSchema: {
+	            type: 'object',
+	            properties: {
+	                rationale: { type: 'string', description: 'Why you are updating the walkthrough (required by hooks) / 为什么更新走查（hooks 要求）' },
+	                content: { type: 'string', description: 'Walkthrough markdown content / 摘要 Markdown 内容' }
+	            },
+	            required: ['content']
+	        }
+	    }
 ];
 
 // ==================== 扩展激活 ====================
@@ -3939,9 +4099,7 @@ function resolveProjectMemory(rootPathOverride?: string): { data: MemoryData; pr
 
 function saveTrackerAndNotify(
     data: TrackerData,
-    project: ProjectTracker,
-    wamMessage?: string,
-    wamAuthor: 'auto' | 'ai' | 'user' = 'auto'
+    project: ProjectTracker
 ) {
     saveTrackerData(data);
     try {
@@ -3952,14 +4110,6 @@ function saveTrackerAndNotify(
     const snapshot = buildTrackerSnapshot(project);
     sidebarProvider?.postMessage({ type: 'tracker', data: snapshot });
     refreshOpenPanels(project);
-
-    if (wamMessage) {
-        try {
-            commitProjectWam(wamMessage, wamAuthor, project.rootPath);
-        } catch (e: any) {
-            outputChannel?.appendLine(`WAM auto-commit failed: ${e?.message ?? String(e)}`);
-        }
-    }
 }
 
 function saveMemoryAndNotify(data: MemoryData): void {
@@ -4087,7 +4237,7 @@ async function clearProjectPrd() {
     appendWalkthroughEntry(project, lang === 'en' ? 'PRD cleared by user.' : 'PRD 已被清空。', lang);
     project.updatedAt = nowIso();
     removeProjectArtifacts(project, ['prd.md']);
-    saveTrackerAndNotify(data, project, 'clear_prd', 'user');
+    saveTrackerAndNotify(data, project);
 }
 
 async function clearProjectOverview() {
@@ -4100,7 +4250,7 @@ async function clearProjectOverview() {
     appendWalkthroughEntry(project, lang === 'en' ? 'Overview cleared by user.' : '项目概览已被清空。', lang);
     project.updatedAt = nowIso();
     removeProjectArtifacts(project, ['overview.md']);
-    saveTrackerAndNotify(data, project, 'clear_overview', 'user');
+    saveTrackerAndNotify(data, project);
 }
 
 async function clearProjectPlan() {
@@ -4114,7 +4264,7 @@ async function clearProjectPlan() {
     appendWalkthroughEntry(project, lang === 'en' ? 'Plan cleared by user.' : '计划已被清空。', lang);
     project.updatedAt = nowIso();
     removeProjectArtifacts(project, ['plan.md']);
-    saveTrackerAndNotify(data, project, 'clear_plan', 'user');
+    saveTrackerAndNotify(data, project);
 }
 
 async function clearProjectWalkthrough() {
@@ -4126,7 +4276,7 @@ async function clearProjectWalkthrough() {
     bumpProjectStat(project, 'walkthroughUpdates');
     project.updatedAt = nowIso();
     removeProjectArtifacts(project, ['walkthrough.md']);
-    saveTrackerAndNotify(data, project, 'clear_walkthrough', 'user');
+    saveTrackerAndNotify(data, project);
 }
 
 async function clearProjectTracking() {
@@ -4142,7 +4292,7 @@ async function clearProjectTracking() {
     project.stats = createDefaultTrackerStats();
     project.updatedAt = nowIso();
     removeProjectArtifacts(project, ['overview.md', 'prd.md', 'plan.md', 'walkthrough.md']);
-    saveTrackerAndNotify(data, project, 'clear_tracking', 'user');
+    saveTrackerAndNotify(data, project);
 }
 
 function syncMemoryArtifacts(project: ProjectTracker, memoryStore: ProjectMemoryStore): void {
@@ -4230,7 +4380,7 @@ async function handleSetPrd(args: any): Promise<any> {
     bumpProjectStat(project, 'prdUpdates');
     appendWalkthroughEntry(project, lang === 'en' ? 'PRD draft updated.' : 'PRD 草案已更新。', lang);
     project.updatedAt = nowIso();
-    saveTrackerAndNotify(data, project, 'set_prd:draft', 'ai');
+    saveTrackerAndNotify(data, project);
 
     const approval = await requestPrdApproval(content, project.name);
     if (approval.approved) {
@@ -4247,7 +4397,7 @@ async function handleSetPrd(args: any): Promise<any> {
     }
     project.prd.reviewedAt = nowIso();
     project.updatedAt = nowIso();
-    saveTrackerAndNotify(data, project, approval.approved ? 'set_prd:approved' : 'set_prd:changes_requested', 'user');
+    saveTrackerAndNotify(data, project);
 
     const text = approval.approved
         ? (lang === 'en' ? 'PRD approved by user.' : 'PRD 已由用户审批。')
@@ -4618,7 +4768,7 @@ async function handleUpdateOverview(args: any): Promise<any> {
     bumpProjectStat(project, 'overviewUpdates');
     appendWalkthroughEntry(project, lang === 'en' ? 'Overview updated.' : '项目概览已更新。', lang);
     project.updatedAt = nowIso();
-    saveTrackerAndNotify(data, project, 'update_overview', 'ai');
+    saveTrackerAndNotify(data, project);
     const text = lang === 'en' ? 'Overview updated.' : '项目概览已更新。';
     return { content: [{ type: 'text', text }, { type: 'text', text: `OVERVIEW_JSON:\n${JSON.stringify(buildTrackerSnapshot(project), null, 2)}` }] };
 }
@@ -4631,7 +4781,7 @@ async function handleGenerateOverview(_args: any): Promise<any> {
     bumpProjectStat(project, 'overviewUpdates');
     appendWalkthroughEntry(project, lang === 'en' ? 'Overview generated.' : '项目概览已生成。', lang);
     project.updatedAt = nowIso();
-    saveTrackerAndNotify(data, project, 'generate_overview', 'auto');
+    saveTrackerAndNotify(data, project);
     const text = lang === 'en' ? 'Overview generated.' : '项目概览已生成。';
     return { content: [{ type: 'text', text }, { type: 'text', text: `OVERVIEW_JSON:\n${JSON.stringify(buildTrackerSnapshot(project), null, 2)}` }] };
 }
@@ -4728,8 +4878,10 @@ async function handleUpdatePlan(args: any): Promise<any> {
         bumpProjectStat(project, 'planUpdates');
     }
     appendWalkthroughEntry(project, lang === 'en' ? 'Plan updated.' : '计划已更新。', lang);
+    project.stats = normalizeTrackerStats(project.stats);
+    project.stats.lastPlanUpdateAt = nowIso();
     project.updatedAt = nowIso();
-    saveTrackerAndNotify(data, project, 'update_plan', 'ai');
+    saveTrackerAndNotify(data, project);
     const text = lang === 'en' ? 'Plan updated.' : '计划已更新。';
     return { content: [{ type: 'text', text }, { type: 'text', text: `PLAN_JSON:\n${JSON.stringify(buildTrackerSnapshot(project), null, 2)}` }] };
 }
@@ -4839,18 +4991,22 @@ async function handleWamStatus(args: any): Promise<any> {
 async function handleWamCommit(args: any): Promise<any> {
     const lang = getUiLanguage();
     const scope = parseWamScope(args);
-    const message = typeof args?.message === 'string' ? args.message.trim() : '';
-    if (!message) {
-        throw new Error(lang === 'en' ? 'wam_commit requires message.' : 'wam_commit 需要 message。');
-    }
     const author: 'auto' | 'ai' | 'user' = args?.author === 'ai' || args?.author === 'user' ? args.author : 'auto';
+    const message = typeof args?.message === 'string' ? args.message.trim() : '';
     if (scope === 'global') {
         const result = autoWamCommitGlobal(message, author);
         const text =
             lang === 'en'
                 ? (result.committed ? `WAM(global) committed: ${result.hash}` : 'WAM(global) no changes; skipped.')
                 : (result.committed ? `WAM（全局）已提交：${result.hash}` : 'WAM（全局）无变化，跳过。');
-        return { content: [{ type: 'text', text }] };
+        const payload = {
+            scope,
+            committed: result.committed,
+            hash: result.hash || '',
+            message: result.commit?.message || '',
+            changes: result.commit?.changes || null
+        };
+        return { content: [{ type: 'text', text }, { type: 'text', text: `WAM_COMMIT_JSON:\n${JSON.stringify(payload, null, 2)}` }] };
     }
     const rootPath = typeof args?.rootPath === 'string' ? args.rootPath : undefined;
     const result = commitProjectWam(message, author, rootPath);
@@ -4858,7 +5014,14 @@ async function handleWamCommit(args: any): Promise<any> {
         lang === 'en'
             ? (result.committed ? `WAM(project) committed: ${result.hash}` : 'WAM(project) no changes; skipped.')
             : (result.committed ? `WAM（项目）已提交：${result.hash}` : 'WAM（项目）无变化，跳过。');
-    return { content: [{ type: 'text', text }] };
+    const payload = {
+        scope,
+        committed: result.committed,
+        hash: result.hash || '',
+        message: result.commit?.message || '',
+        changes: result.commit?.changes || null
+    };
+    return { content: [{ type: 'text', text }, { type: 'text', text: `WAM_COMMIT_JSON:\n${JSON.stringify(payload, null, 2)}` }] };
 }
 
 async function handleWamLog(args: any): Promise<any> {
@@ -5510,13 +5673,13 @@ async function handleWamMerge(args: any): Promise<any> {
     ensureWamRepoLayout(state.wamDir);
     const oursHeadInfo = resolveWamHeadHash(state.wamDir);
     const oursHash = oursHeadInfo.hash;
-    if (!oursHash) {
-        const text =
-            lang === 'en'
-                ? 'WAM(project): no HEAD commit yet. Call wam_commit(message) first.'
-                : 'WAM（项目）：尚无 HEAD 提交，请先调用 wam_commit(message)。';
-        return { content: [{ type: 'text', text }] };
-    }
+	    if (!oursHash) {
+	        const text =
+	            lang === 'en'
+	                ? 'WAM(project): no HEAD commit yet. Call wam_commit() first.'
+	                : 'WAM（项目）：尚无 HEAD 提交，请先调用 wam_commit()。';
+	        return { content: [{ type: 'text', text }] };
+	    }
 
     const theirsHash = resolveWamHashFromSpecifier(state.wamDir, otherSpec);
     const otherCommit = readWamCommit(state.wamDir, theirsHash);
@@ -6007,11 +6170,11 @@ async function handleWamStash(args: any): Promise<any> {
         return { content: [{ type: 'text', text }] };
     }
 
-    if (action === 'push') {
-        if (!headHash) {
-            const text = lang === 'en' ? 'WAM stash: no HEAD commit yet. Call wam_commit(message) first.' : 'WAM 暂存：尚无 HEAD 提交，请先调用 wam_commit(message)。';
-            return { content: [{ type: 'text', text }] };
-        }
+	    if (action === 'push') {
+	        if (!headHash) {
+	            const text = lang === 'en' ? 'WAM stash: no HEAD commit yet. Call wam_commit() first.' : 'WAM 暂存：尚无 HEAD 提交，请先调用 wam_commit()。';
+	            return { content: [{ type: 'text', text }] };
+	        }
         const msg = typeof args?.message === 'string' ? args.message.trim() : '';
         if (scope === 'global') {
             const current = loadGlobalMemoryData();
@@ -6584,15 +6747,10 @@ async function handleSaveMemory(args: any): Promise<any> {
             const trackerInfo = resolveProjectTracker(rootPath);
             saveTrackerData(trackerInfo.data);
             syncMemoryArtifacts(trackerInfo.project, project);
-        } catch (e: any) {
-            outputChannel?.appendLine(`Memory artifact sync failed: ${e?.message ?? String(e)}`);
-        }
-        try {
-            commitProjectWam(`save_memory(project): ${key}`, 'ai', rootPath);
-        } catch (e: any) {
-            outputChannel?.appendLine(`WAM auto-commit (project memory) failed: ${e?.message ?? String(e)}`);
-        }
-    }
+	        } catch (e: any) {
+	            outputChannel?.appendLine(`Memory artifact sync failed: ${e?.message ?? String(e)}`);
+	        }
+	    }
 
     if (writeGlobal) {
         const global = loadGlobalMemoryData();
@@ -6607,15 +6765,10 @@ async function handleSaveMemory(args: any): Promise<any> {
             createdAt: existing?.createdAt || now,
             updatedAt: now
         };
-        pushTimelineEntry(global.timeline, { kind, key, content: value });
-        pruneShortMemories(global);
-        saveGlobalMemoryData(global);
-        try {
-            autoWamCommitGlobal(`save_memory(global): ${key}`, 'ai');
-        } catch (e: any) {
-            outputChannel?.appendLine(`WAM auto-commit (global memory) failed: ${e?.message ?? String(e)}`);
-        }
-    }
+	        pushTimelineEntry(global.timeline, { kind, key, content: value });
+	        pruneShortMemories(global);
+	        saveGlobalMemoryData(global);
+	    }
 
     const where =
         scope === 'both'
@@ -6677,6 +6830,17 @@ async function handleMemorySearch(args: any): Promise<any> {
         const msg = lang === 'en' ? 'memory_search requires query.' : 'memory_search 需要 query。';
         throw new Error(msg);
     }
+
+    // Record that we refreshed memory context for this project (used by hooks to enforce "memory_search before edits").
+    try {
+        const trackerInfo = resolveProjectTracker();
+        trackerInfo.project.stats = normalizeTrackerStats(trackerInfo.project.stats);
+        trackerInfo.project.stats.lastMemorySearchAt = nowIso();
+        saveTrackerData(trackerInfo.data);
+    } catch {
+        // ignore
+    }
+
     const scope: 'project' | 'global' | 'both' = args?.scope === 'global' || args?.scope === 'both' ? args.scope : 'project';
     const kinds = Array.isArray(args?.kinds) ? args.kinds.filter((k: any) => k === 'short' || k === 'long' || k === 'lesson') : [];
     const maxResults = Number.isFinite(args?.maxResults) ? Math.max(1, Math.min(20, Math.floor(args.maxResults))) : 8;
@@ -6772,8 +6936,10 @@ async function handleUpdateWalkthrough(args: any): Promise<any> {
         updatedAt: nowIso()
     };
     bumpProjectStat(project, 'walkthroughUpdates');
+    project.stats = normalizeTrackerStats(project.stats);
+    project.stats.lastWalkthroughUpdateAt = nowIso();
     project.updatedAt = nowIso();
-    saveTrackerAndNotify(data, project, 'update_walkthrough', 'ai');
+    saveTrackerAndNotify(data, project);
 
     const text = lang === 'en' ? 'Walkthrough updated.' : 'Walkthrough 已更新。';
     return { content: [{ type: 'text', text }] };
@@ -6926,7 +7092,7 @@ async function handleAskContinue(args: any): Promise<any> {
                 bumpProjectStat(project, 'walkthroughUpdates');
                 appendWalkthroughEntry(project, entry, lang);
                 project.updatedAt = nowIso();
-                saveTrackerAndNotify(data, project, 'ask_continue', 'ai');
+                saveTrackerAndNotify(data, project);
             }
         } catch {
             // ignore
@@ -7078,7 +7244,7 @@ async function handleEnsureReleaseGate(args: any): Promise<any> {
     bumpProjectStat(project, 'planUpdates');
     appendWalkthroughEntry(project, lang === 'en' ? 'Release gate ensured in Plan.' : '已在 Plan 中加入发布门禁。', lang);
     project.updatedAt = nowIso();
-    saveTrackerAndNotify(data, project, 'ensure_release_gate', 'ai');
+    saveTrackerAndNotify(data, project);
 
     const text =
         added.length > 0
@@ -7910,11 +8076,11 @@ function getWamPanelHtml(project: ProjectTracker, lang: UiLanguage, webview: vsc
 
     const headLine = headHash ? headHash.slice(0, 12) : (lang === 'en' ? 'none' : '无');
     const digestLine = state.digest ? state.digest.slice(0, 12) : '';
-    const dirtyHint = !clean
-        ? (lang === 'en'
-            ? `WAM is dirty. Fix: call <code>wam_commit(message)</code>.`
-            : `WAM 有改动。修复：调用 <code>wam_commit(message)</code>。`)
-        : '';
+	    const dirtyHint = !clean
+	        ? (lang === 'en'
+	            ? `WAM is dirty. Fix: call <code>wam_commit()</code>.`
+	            : `WAM 有改动。修复：调用 <code>wam_commit()</code>。`)
+	        : '';
 
     const commitsRows = commits.length
         ? commits.map((c) => {
