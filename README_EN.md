@@ -109,11 +109,15 @@ WindsurfAutoMcp standardizes task completion with MCP: when the AI finishes a ta
 
 【Before you start】Read the user story/target/current state/constraints first. If key inputs are missing, ask questions via ask_question as needed (single-choice, any number of options + optional extra text) and loop until acceptance criteria are clear.
 
+【Each new user prompt (required)】Before any implementation/write_code/run_command, run a preflight so you don’t skip existing plan/memory/WAM: get_project_status → check_plan → memory_search → rag_search → wam_status. Then think hard and merge new requirements into the existing Plan (update_plan(mode=merge)) before acting.
+
 【Architecture record / baseline (required)】Call get_project_status to read Overview/PRD/Plan/Walkthrough. Treat Overview as the architecture record (module boundaries, folder map, key flows, build/test commands, conventions). If Overview is empty or clearly outdated, call generate_overview (and update_overview if needed) before planning/implementation.
 
 【Memory layers (required)】Before planning/implementation, run memory_search (project + global) and list_memories/get_memory. If there is no usable project memory yet, create initial memories from the architecture record: long = stable facts/conventions/verification, short = temporary notes (can be merged into long), lesson = mistakes/retro. Store reusable lessons in global scope; store project-specific details in project scope. Short memory is allowed to be pruned/forgotten; merge when it becomes stable.
 
 【WAM history (required)】Every change to project tracking/memory must be captured as a git-like history. After changes, run wam_status to confirm clean/dirty; if hooks report WAM dirty/missing: wam_status → (optional) wam_diff → wam_commit() (message auto-generated if omitted) before proceeding. For rollback use wam_log + wam_checkout(hash). For merge use wam_merge(otherHash,message).
+
+【Hooks guardrails (must read)】If hooks block/error, read the reason first (memory_search / get_memory: hook:last_block / hook:last_warning / hook:last_error), fix it, then retry. Do not ignore hook output and continue to force writes.
 
 【RAG (required)】Before implementing/patching, use rag_search to locate relevant files/snippets (no guessing), then combine with memory to decide what to change.
 
@@ -144,6 +148,7 @@ WindsurfAutoMcp standardizes task completion with MCP: when the AI finishes a ta
 【Walkthrough (required)】After every meaningful implementation/decision/fix, update the walkthrough via update_walkthrough so it stays review-ready.
 
 【Planning & breakdown (required)】For any big feature/complex task (and any non-trivial change), produce a Plan with task breakdown + checklist (split further when needed). Update progress as you go.
+(Recommended) After creating the Plan, run ensure_release_gate to auto-add release checklist items (tests/build/lint/deps/security/perf/final review) before implementing.
 
 【Do not trust knowledge (required)】Your knowledge can be outdated and harmful. For critical decisions (APIs/configs/versions/security/install), research first.
 
@@ -235,7 +240,7 @@ The sidebar **Maintenance** card lets you:
 - If hooks are already installed, it only fills missing entries (auto-update)
 - It never overwrites your existing hooks
 - Installed events: `pre_user_prompt`, `pre_run_command`, `post_run_command`, `pre_write_code`, `post_write_code`, `pre_mcp_tool_use`, `post_mcp_tool_use`, `post_cascade_response`
-- Strict mode: requires `memory_search` + `rag_search` after Plan updates; requires WAM clean (`wam_commit()`); blocks direct writes to tracker/memory/.wam; enforces `rationale` for state-changing MCP tools; and blocks after 5 `write_code` calls without `update_plan`
+- Strict mode: requires a real Plan checklist (items) and the Plan must include verification (tests/build/lint) + a code review gate (recommended: run `ensure_release_gate` to auto-add); requires `memory_search` + `rag_search` after Plan updates; requires WAM clean (`wam_commit()`); blocks direct writes to tracker/memory/.wam; enforces `rationale` for state-changing MCP tools; and blocks after 3 `write_code` calls without `update_plan`
 - After every new user prompt (`pre_user_prompt`): before any `write_code` / `run_command`, you must complete the preflight: `get_project_status` + `check_plan` + `memory_search` + `rag_search` + `wam_status`
 - Hook guard script runs via Python (Windows: `python`, macOS/Linux: `python3`) — install Python 3 or disable hooks
 - When a hook blocks or warns, the reason is persisted into Memory:

@@ -14,7 +14,7 @@ MEMORY_FILE_NAME = "windsurf-auto-mcp-memories.json"
 GLOBAL_MEMORY_FILE_NAME = "windsurf-auto-mcp-global-memories.json"
 STATE_FILE_NAME = "windsurf-auto-mcp-guard-state.json"
 
-MAX_WRITES_WITHOUT_PLAN_UPDATE = 5
+MAX_WRITES_WITHOUT_PLAN_UPDATE = 3
 
 REQUIRE_RATIONALE_TOOLS = {
     # Tracking/PRD/Plan/Walkthrough
@@ -50,6 +50,44 @@ CODE_REVIEW_KEYWORDS = [
     "最终代码审查",
     "审查",
 ]
+
+VERIFY_KEYWORDS = [
+    "run tests",
+    "tests",
+    "test",
+    "pytest",
+    "unit test",
+    "integration test",
+    "lint",
+    "format",
+    "build",
+    "compile",
+    "verify",
+    "verification",
+    "acceptance",
+    "验收",
+    "验证",
+    "测试",
+    "构建",
+    "编译",
+]
+
+
+def _plan_has_keyword(items, keywords, require_done=False):
+    if not isinstance(items, list):
+        return False
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        if require_done and it.get("status") != "done":
+            continue
+        text = str(it.get("text") or "").strip().lower()
+        if not text:
+            continue
+        for kw in keywords:
+            if str(kw).lower() in text:
+                return True
+    return False
 
 
 def read_stdin(max_bytes=5 * 1024 * 1024):
@@ -1134,20 +1172,57 @@ def check_project_gates(project, memory_data=None, server_url=None):
         )
     plan = project.get("plan") or {}
     plan_items = plan.get("items") or []
-    plan_summary = plan.get("summary") or ""
-    if not plan_items and not str(plan_summary).strip():
+    if not isinstance(plan_items, list) or len(plan_items) == 0:
         maybe_record_lesson(
             server_url,
             project,
-            "plan_missing",
-            "Plan is missing but implementation was attempted.",
-            "Create an executable Plan checklist (tasks + acceptance + checklist) via update_plan before implementing.",
-            "Always plan first for non-trivial work, then implement and update progress.",
-            title="Missing Plan blocks implementation",
+            "plan_checklist_missing",
+            "Plan checklist (items) is missing but implementation was attempted.",
+            "Create an executable Plan checklist via update_plan(items=...) before implementing. Prefer update_plan(mode=merge) so you do not overwrite existing tasks.",
+            "Always use a Plan checklist (items) as the single source of truth. Do not implement with only a vague summary.",
+            title="Missing Plan checklist blocks implementation",
             tags=["plan", "block"],
             scope="both",
         )
-        return "Blocked: Plan is missing. Create a Plan checklist (with breakdown) before implementation."
+        return (
+            "Blocked: Plan checklist is missing.\n"
+            "Required: create Plan items (tasks + checklist) via update_plan before implementation."
+        )
+
+    # Ensure the Plan includes a release gate (verification + code review) before any implementation.
+    if not _plan_has_keyword(plan_items, CODE_REVIEW_KEYWORDS, require_done=False):
+        maybe_record_lesson(
+            server_url,
+            project,
+            "plan_missing_code_review_item",
+            "Plan is missing a code review item, but implementation was attempted.",
+            "Add a Plan item like 'Final code review (security/performance/gaps)' or run ensure_release_gate to auto-add a release checklist, then proceed.",
+            "Always plan a code review gate before implementation so shipping cannot skip security/performance/gap checks.",
+            title="Plan must include a code review gate",
+            tags=["plan", "code_review", "block"],
+            scope="both",
+        )
+        return (
+            "Blocked: Plan is missing a code review gate.\n"
+            "Fix: run ensure_release_gate (recommended) or add a Plan item like 'Final code review (security/performance/gaps)'."
+        )
+
+    if not _plan_has_keyword(plan_items, VERIFY_KEYWORDS, require_done=False):
+        maybe_record_lesson(
+            server_url,
+            project,
+            "plan_missing_verification_item",
+            "Plan is missing verification/testing items, but implementation was attempted.",
+            "Add Plan items for build/test/lint/verification (or run ensure_release_gate to auto-add them) before implementing.",
+            "Always include verification steps in the Plan so changes are validated and regressions are caught early.",
+            title="Plan must include verification steps",
+            tags=["plan", "verification", "block"],
+            scope="both",
+        )
+        return (
+            "Blocked: Plan is missing verification items (tests/build/lint).\n"
+            "Fix: run ensure_release_gate (recommended) or add Plan items for build/test/lint and acceptance verification."
+        )
 
     # Enforce "Memory + RAG before edits": require memory_search + rag_search after the latest plan change.
     try:

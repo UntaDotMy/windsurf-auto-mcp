@@ -185,9 +185,10 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
 		            '开始：get_project_status → memory_search → rag_search。',
 		            '每次新用户输入：get_project_status → check_plan → memory_search → rag_search → wam_status。',
 		            '复杂任务：先 set_prd → 用户审批 → update_plan(mode=merge)（Plan+Checklist）。',
+		            'Plan 后（推荐）：ensure_release_gate 自动补齐测试/构建/lint/依赖/安全/性能/最终审查等发布门禁。',
 		            '实现中：按 Plan 小步推进；每步 update_plan；必要时 update_walkthrough；错误用 record_lesson + save_memory。',
 		            'WAM：跟踪/记忆变更后保持 clean（wam_status；可选 wam_diff；再 wam_commit()）。',
-		            'Hooks：若被阻止，先在 Memory 查看 hook:last_block / hook:last_warning，再修复后重试。',
+		            'Hooks：若被阻止/报错，先在 Memory 查看 hook:last_block / hook:last_warning / hook:last_error，再修复后重试。',
 		            '完成前：check_plan → 最终 ask_continue(reason) 并等待用户。'
 		        ].join('\\n'),
         'sidebar.trackerTitle': '项目跟踪',
@@ -447,9 +448,10 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
 		            'Start: get_project_status → memory_search → rag_search.',
 		            'Each new user prompt: get_project_status → check_plan → memory_search → rag_search → wam_status.',
 		            'Complex work: set_prd → user approval → update_plan(mode=merge) (Plan+Checklist).',
+		            'After Plan (recommended): ensure_release_gate to auto-add tests/build/lint/deps/security/perf/final review gates.',
 		            'During work: follow the Plan; keep update_plan + update_walkthrough current; mistakes → record_lesson + save_memory.',
 		            'WAM: keep tracking/memory clean + rollbackable (wam_status; optional wam_diff; then wam_commit()).',
-		            'Hooks: if blocked, open Memory and read hook:last_block / hook:last_warning, fix, then retry.',
+		            'Hooks: if blocked/errored, open Memory and read hook:last_block / hook:last_warning / hook:last_error, fix, then retry.',
 		            'Before done: check_plan → finally ask_continue(reason) and wait.',
             ...(false ? [
             'Hard rule (highest priority): When you decide a task is done / ready to deliver, do NOT output a normal final response; you MUST call WindsurfAutoMcp ask_continue and put in reason: what was done, risks/notes, verification steps/commands, and next steps.',

@@ -109,11 +109,15 @@ WindsurfAutoMcp 通过 MCP 协议标准化交互：AI 完成任务后必须 `ask
 
 【开始前必须做】先读“目标/现状/约束”。在做任何修改前，必须先阅读目标文件/相关代码/配置/日志；不确定点必须用 ask_question 按需提问（单选，选项数量不限，可附补充信息）。
 
+【每次新用户输入（必须）】在任何实现/写代码/运行命令前，必须先完成一次“预检查”（让你不会跳过现有计划/记忆/WAM）：get_project_status → check_plan → memory_search → rag_search → wam_status。然后再“想清楚”是否需要把新需求合并进现有 Plan（update_plan(mode=merge)），再开始实现。
+
 【架构记录/项目基线（必须）】先用 get_project_status 读取 Overview/PRD/Plan/Walkthrough；把 Overview 视为“架构记录/项目概览”（模块边界、目录结构、关键流程、构建/测试命令、约定）。如已存在内容必须先阅读并在计划/实现中引用；为空则说明为空。若 Overview 为空或明显过时：先 generate_overview（必要时 update_overview 修订）再继续。
 
 【记忆检查与初始化（必须）】实现/改动前先 memory_search（项目+全局，重点查 lesson）并 list_memories/get_memory；若该项目还没有可用记忆：基于 Overview 生成“初始记忆”（long：稳定事实/约定/运行验证；short：临时信息；lesson：错误复盘；通用经验存 global，项目细节存 project）。short 会遗忘：定期合并/提炼到 long，避免噪声膨胀。
 
 【WAM 历史（必须）】所有“项目跟踪/记忆”的变更必须形成可追溯历史（类 git）：每次变更后先 wam_status 确认 clean/dirty；如 hooks 提示 WAM dirty/缺失：先 wam_status →（可选）wam_diff → wam_commit()（message 可省略自动生成）修复后再继续；需要回滚可用 wam_log + wam_checkout(hash)；需要合并可用 wam_merge(otherHash,message)。
+
+【Hooks 护栏（必须读）】如果 hooks 阻止/报错：先读取并理解原因（memory_search / get_memory：hook:last_block / hook:last_warning / hook:last_error），按提示修复后再重试；不要忽略 hook 输出继续硬写。
 
 【RAG（必须）】实现/修改前先用 rag_search 找到相关文件与片段（不要凭感觉改）；再结合记忆决定改动点。
 
@@ -144,6 +148,7 @@ WindsurfAutoMcp 通过 MCP 协议标准化交互：AI 完成任务后必须 `ask
 【Walkthrough（必须）】每次关键实现/决策/修复后都要更新 Walkthrough（update_walkthrough），保证随时可审阅。
 
 【计划与拆解（必须做到）】对任何“大功能/复杂任务”（以及任何非小改动），必须先输出 Plan，并在 Plan 中完成任务拆解与 Checklist（必要时进一步细化）。每完成一项就更新进度。
+（建议）Plan 生成后立即调用 ensure_release_gate，把“测试/构建/lint/依赖/安全/性能/最终审查”等发布门禁自动补齐到 Plan 中，再开始实现。
 
 【不信任知识（必须做到）】不要依赖记忆/常识拍脑袋：你的知识可能过时且有害。遇到关键决策（API/配置/版本/安全/安装）必须先研究，再行动。
 
@@ -235,7 +240,7 @@ WindsurfAutoMcp 通过 MCP 协议标准化交互：AI 完成任务后必须 `ask
 - 已安装但缺失项会自动补齐（相当于更新到最新）
 - 不覆盖你已有 hooks，仅追加缺失项
 - 安装的事件：`pre_user_prompt`、`pre_run_command`、`post_run_command`、`pre_write_code`、`post_write_code`、`pre_mcp_tool_use`、`post_mcp_tool_use`、`post_cascade_response`
-- 严格模式：Plan 更新后必须 `memory_search` + `rag_search`；WAM 必须 clean（`wam_commit()`）；禁止直接写 tracker/memory/.wam；对会修改状态的 MCP 工具强制要求 `rationale`；且连续 5 次 `write_code` 未 `update_plan` 会被阻止
+- 严格模式：必须有 Plan Checklist（items），且 Plan 必须包含“验证/测试/构建/lint”与“代码审查”门禁（推荐先 `ensure_release_gate` 自动补齐）；Plan 更新后必须 `memory_search` + `rag_search`；WAM 必须 clean（`wam_commit()`）；禁止直接写 tracker/memory/.wam；对会修改状态的 MCP 工具强制要求 `rationale`；且连续 3 次 `write_code` 未 `update_plan` 会被阻止
 - 每次新用户输入后（`pre_user_prompt`）：在 `write_code` / `run_command` 前必须先完成“预检查”：`get_project_status` + `check_plan` + `memory_search` + `rag_search` + `wam_status`
 - Hooks 护栏脚本使用 Python 执行（Windows：`python`；macOS/Linux：`python3`）— 请确保已安装 Python 3 或关闭 hooks
 - 当 hooks 阻止/警告时，原因会写入 Memory（便于回看与复盘）：
