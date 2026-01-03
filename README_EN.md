@@ -234,8 +234,9 @@ The sidebar **Maintenance** card lets you:
 - On activation, the extension checks and installs **user-level hooks.json** (enabled by default)
 - If hooks are already installed, it only fills missing entries (auto-update)
 - It never overwrites your existing hooks
-- Installed events: `pre_run_command`, `post_run_command`, `pre_write_code`, `post_write_code`, `pre_mcp_tool_use`, `post_mcp_tool_use`, `post_cascade_response`
+- Installed events: `pre_user_prompt`, `pre_run_command`, `post_run_command`, `pre_write_code`, `post_write_code`, `pre_mcp_tool_use`, `post_mcp_tool_use`, `post_cascade_response`
 - Strict mode: requires `memory_search` + `rag_search` after Plan updates; requires WAM clean (`wam_commit()`); blocks direct writes to tracker/memory/.wam; enforces `rationale` for state-changing MCP tools; and blocks after 5 `write_code` calls without `update_plan`
+- After every new user prompt (`pre_user_prompt`): before any `write_code` / `run_command`, you must complete the preflight: `get_project_status` + `check_plan` + `memory_search` + `rag_search` + `wam_status`
 - Hook guard script runs via Python (Windows: `python`, macOS/Linux: `python3`) — install Python 3 or disable hooks
 - When a hook blocks or warns, the reason is persisted into Memory:
   - `hook:last_block` (blocked actions)

@@ -36,6 +36,7 @@ type ProjectTrackerStats = {
     lastMemorySearchAt?: string;
     lastWamStatusAt?: string;
     lastCheckPlanAt?: string;
+    lastProjectStatusAt?: string;
     lastPlanUpdateAt?: string;
     lastWalkthroughUpdateAt?: string;
 };
@@ -179,15 +180,16 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'sidebar.shortcut': '快捷键:',
 	        'sidebar.promptTitle': '提示语',
 	        'sidebar.promptText': '硬规则：完成任务时必须调用 ask_continue。',
-	        'sidebar.promptCopyText': [
-	            '硬规则：交付时必须 ask_continue(reason)。',
-	            '开始：get_project_status → memory_search → rag_search。',
-	            '复杂任务：先 set_prd → 用户审批 → update_plan(mode=merge)（Plan+Checklist）。',
-	            '实现中：按 Plan 小步推进；每步 update_plan；必要时 update_walkthrough；错误用 record_lesson + save_memory。',
-	            'WAM：跟踪/记忆变更后保持 clean（wam_status；可选 wam_diff；再 wam_commit()）。',
-	            'Hooks：若被阻止，先在 Memory 查看 hook:last_block / hook:last_warning，再修复后重试。',
-	            '完成前：check_plan → 最终 ask_continue(reason) 并等待用户。'
-	        ].join('\\n'),
+		        'sidebar.promptCopyText': [
+		            '硬规则：交付时必须 ask_continue(reason)。',
+		            '开始：get_project_status → memory_search → rag_search。',
+		            '每次新用户输入：get_project_status → check_plan → memory_search → rag_search → wam_status。',
+		            '复杂任务：先 set_prd → 用户审批 → update_plan(mode=merge)（Plan+Checklist）。',
+		            '实现中：按 Plan 小步推进；每步 update_plan；必要时 update_walkthrough；错误用 record_lesson + save_memory。',
+		            'WAM：跟踪/记忆变更后保持 clean（wam_status；可选 wam_diff；再 wam_commit()）。',
+		            'Hooks：若被阻止，先在 Memory 查看 hook:last_block / hook:last_warning，再修复后重试。',
+		            '完成前：check_plan → 最终 ask_continue(reason) 并等待用户。'
+		        ].join('\\n'),
         'sidebar.trackerTitle': '项目跟踪',
         'sidebar.trackerProject': '项目',
         'sidebar.trackerProgress': '进度',
@@ -440,14 +442,15 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'sidebar.shortcut': 'Shortcut:',
 	        'sidebar.promptTitle': 'Prompt',
 	        'sidebar.promptText': 'Hard rule: when done, you must call ask_continue.',
-	        'sidebar.promptCopyText': [
-	            'Hard rule: final delivery must be ask_continue(reason).',
-	            'Start: get_project_status → memory_search → rag_search.',
-	            'Complex work: set_prd → user approval → update_plan(mode=merge) (Plan+Checklist).',
-	            'During work: follow the Plan; keep update_plan + update_walkthrough current; mistakes → record_lesson + save_memory.',
-	            'WAM: keep tracking/memory clean + rollbackable (wam_status; optional wam_diff; then wam_commit()).',
-	            'Hooks: if blocked, open Memory and read hook:last_block / hook:last_warning, fix, then retry.',
-	            'Before done: check_plan → finally ask_continue(reason) and wait.',
+		        'sidebar.promptCopyText': [
+		            'Hard rule: final delivery must be ask_continue(reason).',
+		            'Start: get_project_status → memory_search → rag_search.',
+		            'Each new user prompt: get_project_status → check_plan → memory_search → rag_search → wam_status.',
+		            'Complex work: set_prd → user approval → update_plan(mode=merge) (Plan+Checklist).',
+		            'During work: follow the Plan; keep update_plan + update_walkthrough current; mistakes → record_lesson + save_memory.',
+		            'WAM: keep tracking/memory clean + rollbackable (wam_status; optional wam_diff; then wam_commit()).',
+		            'Hooks: if blocked, open Memory and read hook:last_block / hook:last_warning, fix, then retry.',
+		            'Before done: check_plan → finally ask_continue(reason) and wait.',
             ...(false ? [
             'Hard rule (highest priority): When you decide a task is done / ready to deliver, do NOT output a normal final response; you MUST call WindsurfAutoMcp ask_continue and put in reason: what was done, risks/notes, verification steps/commands, and next steps.',
             '',
@@ -1192,6 +1195,7 @@ const AUTO_INSTALL_HOOK_EVENTS = [
     'post_write_code',
     'pre_mcp_tool_use',
     'post_mcp_tool_use',
+    'pre_user_prompt',
     'post_cascade_response'
 ] as const;
 
@@ -2487,6 +2491,7 @@ function createDefaultTrackerStats(): ProjectTrackerStats {
         lastMemorySearchAt: undefined,
         lastWamStatusAt: undefined,
         lastCheckPlanAt: undefined,
+        lastProjectStatusAt: undefined,
         lastPlanUpdateAt: undefined,
         lastWalkthroughUpdateAt: undefined
     };
@@ -2507,6 +2512,7 @@ function normalizeTrackerStats(raw: any): ProjectTrackerStats {
         lastMemorySearchAt: typeof raw.lastMemorySearchAt === 'string' ? raw.lastMemorySearchAt : undefined,
         lastWamStatusAt: typeof raw.lastWamStatusAt === 'string' ? raw.lastWamStatusAt : undefined,
         lastCheckPlanAt: typeof raw.lastCheckPlanAt === 'string' ? raw.lastCheckPlanAt : undefined,
+        lastProjectStatusAt: typeof raw.lastProjectStatusAt === 'string' ? raw.lastProjectStatusAt : undefined,
         lastPlanUpdateAt: typeof raw.lastPlanUpdateAt === 'string' ? raw.lastPlanUpdateAt : undefined,
         lastWalkthroughUpdateAt: typeof raw.lastWalkthroughUpdateAt === 'string' ? raw.lastWalkthroughUpdateAt : undefined
     };
@@ -2929,6 +2935,7 @@ function installWindsurfHooks() {
 			                post_write_code: [{ command }],
 			                pre_mcp_tool_use: [{ command, show_output: true }],
 			                post_mcp_tool_use: [{ command }],
+			                pre_user_prompt: [{ command }],
 			                post_cascade_response: [{ command }]
 			            };
 
@@ -4899,7 +4906,14 @@ async function handleUpdatePlan(args: any): Promise<any> {
 async function handleGetProjectStatus(args: any): Promise<any> {
     const lang = getUiLanguage();
     const rootPath = typeof args?.rootPath === 'string' ? args.rootPath : undefined;
-    const { project } = resolveProjectTracker(rootPath);
+    const { data, project } = resolveProjectTracker(rootPath);
+    try {
+        project.stats = normalizeTrackerStats(project.stats);
+        project.stats.lastProjectStatusAt = nowIso();
+        saveTrackerData(data);
+    } catch {
+        // ignore
+    }
     try {
         syncProjectArtifacts(project);
         const { project: memoryStore } = resolveProjectMemory(rootPath);

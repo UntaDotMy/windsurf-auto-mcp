@@ -618,6 +618,75 @@ def record_mcp_tool_error_lesson(server_url, project, server_name, tool_name, to
     )
 
 
+def _check_prompt_preflight(server_url, project):
+    """
+    Enforce "think-first" on every new user prompt:
+    Before any write_code/run_command, the agent must explicitly refresh:
+    get_project_status, check_plan, memory_search, rag_search, wam_status.
+    """
+    try:
+        if not isinstance(project, dict):
+            return None
+        project_id = str(project.get("projectId") or "").strip()
+        if not project_id:
+            return None
+
+        state = load_guard_state()
+        state, ps = _get_project_state(state, project_id)
+        required_since = str(ps.get("lastUserPromptAt") or "").strip()
+        if not required_since:
+            return None
+
+        stats = project.get("stats") or {}
+        if not isinstance(stats, dict):
+            stats = {}
+
+        def _needs(stat_key):
+            v = str(stats.get(stat_key) or "").strip()
+            return (not v) or (v < required_since)
+
+        missing = []
+        if _needs("lastProjectStatusAt"):
+            missing.append("get_project_status")
+        if _needs("lastCheckPlanAt"):
+            missing.append("check_plan")
+        if _needs("lastMemorySearchAt"):
+            missing.append("memory_search")
+        if _needs("lastRagSearchAt"):
+            missing.append("rag_search")
+        if _needs("lastWamStatusAt"):
+            missing.append("wam_status")
+
+        if not missing:
+            return None
+
+        msg = (
+            "Blocked: Preflight not completed for the latest user prompt.\n"
+            "Required (run these tools, then continue):\n"
+            "- get_project_status (read Overview/PRD/Plan/WAM/Walkthrough)\n"
+            "- check_plan (review progress + next items)\n"
+            "- memory_search (reuse lessons/decisions; include hook:last_* if blocked)\n"
+            "- rag_search (locate exact file/snippet to edit; no guessing)\n"
+            "- wam_status (confirm clean/dirty; if dirty run wam_commit)\n"
+            f"Missing: {', '.join(missing)}\n"
+            "Then: if requirements changed, update_plan(mode=merge) before implementation."
+        )
+        maybe_record_lesson(
+            server_url,
+            project,
+            "preflight_missing_after_user_prompt",
+            "Attempted to write/run immediately after a new user prompt without refreshing project state and plan context.",
+            "Run the required preflight tools (get_project_status, check_plan, memory_search, rag_search, wam_status), then proceed. Commit WAM (wam_commit) if WAM is dirty.",
+            "For every new user prompt: read current tracker + memory + plan, then plan/update_plan before implementation. Treat Plan as the source of truth and keep it updated.",
+            title="Missing preflight after user prompt",
+            tags=["preflight", "plan", "memory", "rag", "wam", "block"],
+            scope="both",
+        )
+        return msg
+    except Exception:
+        return None
+
+
 def _plan_is_complete(project):
     plan = project.get("plan") or {}
     items = plan.get("items") or []
@@ -1179,6 +1248,7 @@ def main():
     tool_info = payload.get("tool_info") or {}
 
     if action not in (
+        "pre_user_prompt",
         "pre_run_command",
         "post_run_command",
         "pre_write_code",
@@ -1193,12 +1263,32 @@ def main():
     if not should_enforce_guards(server_url):
         return 0
 
+    if action == "pre_user_prompt":
+        tracker = load_tracker()
+        project = select_project(tracker, cwd=tool_info.get("cwd"))
+        if project:
+            try:
+                project_id = str(project.get("projectId") or "").strip()
+                if project_id:
+                    state = load_guard_state()
+                    state, ps = _get_project_state(state, project_id)
+                    ps["lastUserPromptAt"] = _iso_now()
+                    save_guard_state(state)
+            except Exception:
+                pass
+        return 0
+
     if action == "pre_run_command":
         command_line = tool_info.get("command_line")
         tracker = load_tracker()
         memory_data = load_memory()
         project = select_project(tracker, cwd=tool_info.get("cwd"))
         if project:
+            preflight = _check_prompt_preflight(server_url, project)
+            if preflight:
+                persist_hook_feedback(server_url, project, "pre_run_command", "block", preflight)
+                print(preflight, file=sys.stderr)
+                return 2
             # Enforce periodic Plan progress updates during implementation (to prevent drifting trackers).
             try:
                 project_id = str(project.get("projectId") or "").strip()
@@ -1221,15 +1311,6 @@ def main():
                         persist_hook_feedback(server_url, project, "pre_run_command", "block", msg)
                         print(msg, file=sys.stderr)
                         return 2
-            except Exception:
-                pass
-
-            # Always read the current plan before executing commands so the model stays in sync.
-            try:
-                root_path = str(project.get("rootPath") or "").strip()
-                if root_path:
-                    call_mcp_tool(server_url, "check_plan", {"rootPath": root_path}, timeout_sec=0.7)
-                    call_mcp_tool(server_url, "wam_status", {"scope": "project", "rootPath": root_path}, timeout_sec=0.7)
             except Exception:
                 pass
 
@@ -1272,6 +1353,11 @@ def main():
             print(msg, file=sys.stderr)
             return 2
         if project:
+            preflight = _check_prompt_preflight(server_url, project)
+            if preflight:
+                persist_hook_feedback(server_url, project, "pre_write_code", "block", preflight)
+                print(preflight, file=sys.stderr)
+                return 2
             # Enforce periodic Plan progress updates during implementation (to prevent drifting trackers).
             try:
                 project_id = str(project.get("projectId") or "").strip()
@@ -1294,14 +1380,6 @@ def main():
                         persist_hook_feedback(server_url, project, "pre_write_code", "block", msg)
                         print(msg, file=sys.stderr)
                         return 2
-            except Exception:
-                pass
-            # Always read the current plan before writing code so the model stays in sync.
-            try:
-                root_path = str(project.get("rootPath") or "").strip()
-                if root_path:
-                    call_mcp_tool(server_url, "check_plan", {"rootPath": root_path}, timeout_sec=0.7)
-                    call_mcp_tool(server_url, "wam_status", {"scope": "project", "rootPath": root_path}, timeout_sec=0.7)
             except Exception:
                 pass
             gate = check_project_gates(project, memory_data=memory_data, server_url=server_url)
