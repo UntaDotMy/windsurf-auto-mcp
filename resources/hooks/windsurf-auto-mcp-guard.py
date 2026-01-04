@@ -37,6 +37,7 @@ WORKFLOW_STATES = {
 WORKFLOW_ADVANCE_TOOLS = {
     "preflight": "PREFLIGHT_DONE",
     "get_project_status": "PREFLIGHT_DONE",  # Alternative to preflight
+    "index_codebase": "PREFLIGHT_DONE",  # Deep codebase analysis
     "update_plan": "PLAN_EXISTS",
     "check_plan": "READY_TO_ASK",
 }
@@ -1024,15 +1025,20 @@ def _check_prompt_preflight(server_url, project):
             return None
 
         msg = (
-            "Blocked: Preflight not completed for the latest user prompt.\n"
-            "Required: run preflight(userPrompt=...) (recommended) OR run these tools, then continue:\n"
-            "- get_project_status (read Overview/PRD/Plan/WAM/Walkthrough)\n"
-            "- check_plan (review progress + next items)\n"
-            "- memory_search (reuse lessons/decisions; include hook:last_* if blocked)\n"
-            "- rag_search (locate exact file/snippet to edit; no guessing)\n"
-            "- wam_status (confirm clean/dirty; if dirty run wam_commit)\n"
-            f"Missing: {', '.join(missing)}\n"
-            "Then: if requirements changed, update_plan(mode=merge) before implementation."
+            "\n" + "="*60 + "\n"
+            "BLOCKED: THINK-FIRST WORKFLOW REQUIRED\n"
+            "="*60 + "\n\n"
+            "Before ANY action, you MUST understand the context first!\n\n"
+            "QUICK FIX: Run preflight(userPrompt='<current task>')\n\n"
+            "OR run these tools IN ORDER:\n"
+            "1. get_project_status - Understand current project state\n"
+            "2. check_plan - Review plan progress and next items\n"
+            "3. memory_search(query='relevant keywords') - Recall lessons/decisions\n"
+            "4. rag_search(query='what to find') - Locate exact code to edit\n"
+            "5. wam_status - Check if history is clean\n\n"
+            f"MISSING: {', '.join(missing)}\n\n"
+            "THEN: Create/update plan with update_plan(items=[...]) before coding.\n"
+            + "="*60
         )
         maybe_record_lesson(
             server_url,
@@ -1580,9 +1586,17 @@ def check_project_gates(project, memory_data=None, server_url=None):
             scope="both",
         )
         return (
-            "Blocked: Architecture record (Overview) is missing.\n"
-            "Required flow: get_project_status → generate_overview/update_overview → initialize layered memory (save_memory: long/short/lesson) → update_plan → then implement.\n"
-            "Think-first: do not guess; use rag_search to locate exact files before edits, and memory_search to reuse lessons."
+            "\n" + "="*60 + "\n"
+            "BLOCKED: PROJECT OVERVIEW REQUIRED\n"
+            "="*60 + "\n\n"
+            "The project has no architecture overview yet.\n\n"
+            "REQUIRED STEPS:\n"
+            "1. Run index_codebase(rationale='initial context') - Deep analyze codebase\n"
+            "2. Run generate_overview(rationale='establish baseline') - Create overview\n"
+            "3. Run save_memory(key='project:context', value='...', kind='long') - Save key facts\n"
+            "4. Run update_plan(items=[...]) - Create actionable plan\n\n"
+            "THEN you can start implementing.\n"
+            + "="*60
         )
 
     project_root = _get_project_root_path(project)
@@ -1638,8 +1652,18 @@ def check_project_gates(project, memory_data=None, server_url=None):
             scope="both",
         )
         return (
-            "Blocked: Plan checklist is missing.\n"
-            "Required: create Plan items (tasks + checklist) via update_plan before implementation."
+            "\n" + "="*60 + "\n"
+            "BLOCKED: PLAN REQUIRED BEFORE IMPLEMENTATION\n"
+            "="*60 + "\n\n"
+            "You MUST create a plan before writing any code!\n\n"
+            "REQUIRED: Run update_plan(rationale='...', items=[\n"
+            "  {text: 'Task 1 description', status: 'todo'},\n"
+            "  {text: 'Task 2 description', status: 'todo'},\n"
+            "  {text: 'Final code review', status: 'todo'},\n"
+            "  {text: 'Run tests and verify', status: 'todo'}\n"
+            "])\n\n"
+            "REMEMBER: Always include verification and code review items!\n"
+            + "="*60
         )
 
     # Ensure the Plan includes a release gate (verification + code review) before any implementation.

@@ -564,96 +564,7 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
             '? Is this in the Sprint?',
             '? Code correct?',
             '? Safe?',
-            '? User goal met?',
-            ...(false ? [
-            'Hard rule (highest priority): When you decide a task is done / ready to deliver, do NOT output a normal final response; you MUST call WindsurfAutoMcp ask_continue and put in reason: what was done, risks/notes, verification steps/commands, and next steps.',
-            '',
-            'Completion protocol (must follow):',
-            '1) When done, the ONLY allowed action is calling ask_continue (with reason).',
-            '2) After calling ask_continue, stop output and wait for the user.',
-            '3) If you forgot to call ask_continue, your next message must first call ask_continue to correct (then wait).',
-            '',
-            'Collaboration (must): operate as a full "software engineering department" (cross-functional team) across any language/framework/platform. Output must be unified and concise, but reflect a consolidated team conclusion.',
-            '',
-            'Before anything (must): read the target/user story first. Before decisions/edits, read relevant files/config/logs; if key inputs are missing, use ask_question (single-choice, any number of options, ask as needed) and loop until acceptance criteria are clear.',
-            '',
-            'Architecture record / baseline (must): call get_project_status to read Overview/PRD/Plan/Walkthrough. Treat Overview as the architecture record (module boundaries, folder map, key flows, build/test commands, conventions). If Overview is empty or clearly outdated, call generate_overview (and update_overview if needed) before proceeding.',
-            '',
-            'Memory layers (must): before planning/implementation, run memory_search (project + global) and list_memories/get_memory. If there is no usable project memory yet, create initial memories from the architecture record: long = stable facts/conventions/verification, short = temporary notes (can be merged into long), lesson = mistakes/retro. Store reusable lessons in global scope; store project-specific details in project scope. Short memory is allowed to be pruned/forgotten; merge when it becomes stable.',
-            '',
-	            'WAM history (must): every change to project tracking/memory must be captured as a git-like history. After changes, run wam_status; if hooks report WAM dirty/missing, run wam_status → (optional) wam_diff → wam_commit() before proceeding. For rollback use wam_log + wam_checkout(hash). For merge use wam_merge(otherHash,message).',
-            '',
-            'RAG (must): before edits, use rag_search to locate the exact relevant files/snippets (no guessing), then combine with memory to decide what to change (prefer fast context: get_project_status → memory_search → rag_search).',
-            '',
-            'Decision + research loop (must; no generic answers):',
-            '1) Before implementation, think hard and choose the best practice for the project stack (performance/security/maintainability tradeoffs).',
-            '2) Research must loop: Research → if results are generic/non-actionable → refine queries → Research again, until you get official, executable info (API/config/version/path/commands/code examples/edge cases).',
-            '3) Errors must loop too: diagnose → fix → verify → retro. Record mistakes with record_lesson so you do not repeat them.',
-            '4) If you find important doc usage/examples, store them via save_memory(kind=long, scope=project/global) with links + version + snippet so you can reuse it; re-research only when the source is outdated or conflicting.',
-            '',
-            'Tool use (must be deliberate): before calling a tool, decide if it is necessary/minimal/safe, and state a short rationale. Do not blindly trust outputs.',
-            '',
-            'Agile delivery & quality (must): iterate in small verifiable increments (user story → acceptance → tasks → implement → verify → code review → learn). Tech Lead is the final decision-maker and risk owner.',
-            'Testing (must): if the repo already has a test stack, add/update unit tests + regression checks. If the repo has no tests, ask via ask_question before introducing a new test framework/dependency.',
-            'Code style & hygiene (must): read the project coding style first and match it. No trash/temporary code. Remove dead branches. Do not keep backward compatibility unless the user asks; ask if unsure.',
-            'Comments/readability (must): for the code you write/change, add professional doc comments for important params/returns/edge cases; do not over-comment obvious lines.',
-            'Do not pollute user workspace (must): do not create extra docs/summary markdown/temporary files in the user repo unless explicitly requested or approved via ask_question. Use project tracker/memory (.codeium) for notes instead.',
-            '',
-            'PRD (only for complex work) & approval (required if PRD exists): for complex features, produce a PRD draft → user review/adjust → approval before Plan/implementation; for small/simple tasks you may skip PRD (leave PRD empty) and go directly to Plan, but if PRD is non-empty you must get approval before implementing (writing code/running commands/using external tools).',
-            '',
-            'PRD standard (must): PRD = Project Requirements Document. Must include problem/background, goals/non-goals, users/personas, scope, functional + non-functional requirements (prefer tables), acceptance criteria, risks/dependencies, milestones, open questions, references (official docs/Context7). For complex work, add a diagram/flowchart (Mermaid) when helpful.',
-            '',
-            'Project tracking & memory (must): keep tracking updated via set_prd / update_plan / update_walkthrough (Plan includes task breakdown + checklist); store key context in save_memory, and review list_memories/get_memory before starting; never reuse tracking/memory across projects.',
-            '',
-            'Walkthrough (must): update walkthrough after every meaningful implementation/decision/fix (update_walkthrough), keep it review-ready.',
-            '',
-            'Planning & breakdown (must): for any big feature/complex task (and any non-trivial change), produce a Plan with task breakdown + checklist (split further when needed). Update progress as you go.',
-            '',
-            'Do not trust your knowledge (must): your knowledge can be outdated and harmful. For any important decision (API/config/version/security/install), research first, then act.',
-            '',
-            'Team roles (internal coordination; keep external output concise):',
-            '- PM: clarify goals, scope, acceptance criteria, constraints, priorities.',
-            '- Tech Lead: propose an executable plan, manage risk/complexity, ensure maintainability.',
-            '- Architect/Platform: define boundaries, interfaces, extensibility, compatibility.',
-            '- Dev: implement minimal correct changes; follow repo conventions; avoid unnecessary refactors.',
-            '- QA: define verification steps and regression points; run build/tests when possible; add tests when appropriate.',
-            '- Security: validate boundaries, permissions, injection risks, dependency risks, secrets handling.',
-            '- Performance: avoid regressions; remove needless work; measure when relevant.',
-            '- Docs: keep README/config/usage accurate and reproducible.',
-            '- Release/DevOps: provide upgrade/rollback notes; avoid breaking changes.',
-            '',
-            'Workflow (must follow; strict order; agile loops allowed):',
-            'Architecture/Memory → Read → Research → (Ask Questions loop when needed) → (PRD+approval if complex) → Plan (with TODO/checklist) → Act → Code Review → Act → Update Progress → Check Progress → Learn/Record → Ask',
-            '1) Architecture/Memory: start with get_project_status; if Overview (architecture record) is missing/outdated, generate/update it; run memory_search (project+global) for lessons; if no usable memory, create initial long/short/lesson memories from the architecture record.',
-            '2) Read: read the user story/goal/constraints/current state; before any edit, read the relevant code/config/logs.',
-            '3) Research (no guessing): prefer official docs/README/release notes/source; confirm latest usage + breaking changes before upgrading/replacing; use Context7 if available; treat 2024 as outdated and default to sources updated from Oct 2025 onward (≥ 2025-10, add after:2025-09-30); if results are generic, refine and keep searching until you get exact API/config/version/path/commands.',
-            '4) Ask Questions (loop): use ask_question to clarify planning/implementation blockers (single-choice; any number of options; optional extra text) until acceptance criteria are actionable.',
-            '5) PRD (optional): only for complex work; draft PRD → user review/adjust → approval → then Plan/implementation. For simple work, keep PRD empty.',
-            '6) Plan: produce an executable plan with milestones/risks/acceptance + TODO/checklist breakdown; if too heavy, keep breaking down until tasks are verifiable.',
-            '   Plan update rules (must): the Plan is the single source of truth. Default to incremental merge (update_plan(mode=merge))—do not overwrite and lose tasks. When requirements change, append/update items in the existing Plan and note impacts/acceptance. Only use mode=replace when explicitly requested, and ensure WAM has a rollback point first.',
-            '7) Act (iterate): implement following the Plan; keep changes minimal and modular; use rag_search before edits; update dependencies only when it improves correctness/security/performance.',
-            '8) Update Progress: keep progress current via update_plan (status/progress) and update_walkthrough (key decisions/changes).',
-            '9) Check Progress: run build/tests/lint when possible; otherwise provide concrete user-run verification steps + expected results.',
-            '10) Review Session (final gate): review like a PR—gaps, correctness, edge cases, error handling, security (injection/permissions/leaks/deps), performance (hot paths/leaks), compatibility; if issues found, go back to Act, then re-run Check Progress and Review.',
-            '11) Learn/Record: when a mistake/error/rollback happens, record_lesson and save_memory (project/global); merge short → long when it becomes stable; update Overview/Walkthrough when architecture/conventions changed.',
-            '12) Ask: before delivery, run check_plan to confirm the Plan is complete; if not, update_plan first. Then deliver ONLY via ask_continue(reason) and wait; reason must include what was done, risks/notes, verification steps/commands, and next steps.',
-            '',
-            'Windsurf Hooks (recommended; can be hard guardrails): if your environment supports hooks.json, configure pre_run_command/pre_write_code to block dangerous commands/sensitive writes, and use post_cascade_response to audit missing ask_continue. Official docs: https://docs.windsurf.com/windsurf/cascade/hooks',
-            '',
-            'Pre-delivery checklist (must satisfy all):',
-            '- Overview (architecture record) reviewed/updated (if applicable)',
-            '- Project/global memory reviewed and layered memory initialized/merged (if applicable)',
-            '- Read target/current state/constraints (user story + acceptance clear)',
-            '- Plan provided (with checklist)',
-            '- Key decisions researched via official sources/Context7 (if applicable)',
-            '- Code tidied: modular/maintainable (no unrelated refactors)',
-            '- Code review completed (gaps/security/perf/leaks/etc)',
-            '- Progress updated and validated',
-            '- Verification completed (build/tests/lint or explicit manual steps)',
-            '- Project tracking + memory updated (record lessons when needed)',
-            '- Walkthrough updated (key changes/decisions captured)',
-            '- End with ask_continue(reason) and wait',
-            ] : [])
+            '? User goal met?'
         ].join('\\n'),
         'sidebar.trackerTitle': 'Project Tracker',
         'sidebar.trackerProject': 'Project',
@@ -2698,7 +2609,7 @@ function defaultPrdTemplate(lang: UiLanguage): string {
             '## Milestones (Sprints / Phases)',
             '## Acceptance Criteria (Release gate)',
             '## Open Questions',
-            '## References (official docs / Context7)',
+            '## References (official docs via resolve_library_docs/get_library_docs)',
             ''
         ].join('\n');
     }
@@ -2734,7 +2645,7 @@ function defaultPrdTemplate(lang: UiLanguage): string {
         '## 里程碑（迭代/阶段）',
         '## 验收标准（发布门禁）',
         '## 未决问题',
-        '## 参考资料（官方文档/Context7）',
+        '## 参考资料（官方文档 - resolve_library_docs/get_library_docs）',
         ''
     ].join('\n');
 }
@@ -3433,6 +3344,13 @@ let extensionContext: vscode.ExtensionContext;
 	    generateUserStoriesCalls: 0,
 	    wamClearCalls: 0,
 	    codeReviewCalls: 0,
+	    indexCodebaseCalls: 0,
+	    sequentialThinkingCalls: 0,
+	    syncOverviewCalls: 0,
+	    resolveLibraryDocsCalls: 0,
+	    getLibraryDocsCalls: 0,
+	    thinkStepCalls: 0,
+	    getThinkingHistoryCalls: 0,
 	    imageUploads: 0,
 	    startTime: Date.now()
 	};
@@ -3926,16 +3844,16 @@ const TOOLS = [
 	    // ==================== Memory Tools ====================
 	    {
 	        name: 'save_memory',
-	        description: 'Save development context/learnings for this project (persists across sessions) / 保存开发上下文/经验（跨会话持久化）',
+	        description: 'Save memory with scope: project=this project, global=all projects (use for research/best-practices cache), both=save to both. Always check memory_search before researching to avoid duplicate work. / 保存记忆：project=当前项目，global=所有项目(用于研究/最佳实践缓存)，both=两者。研究前先用 memory_search 检查避免重复。',
 	        inputSchema: {
 	            type: 'object',
 	            properties: {
 	                rationale: { type: 'string', description: 'Why you are saving this memory (required by hooks) / 为什么保存（hooks 要求）' },
-	                key: { type: 'string', description: 'Memory key identifier / 内存键标识符' },
-	                value: { type: 'string', description: 'Memory value to store / 要存储的内存值' },
-	                scope: { type: 'string', enum: ['project', 'global', 'both'], description: 'Where to store / 保存范围' },
-	                kind: { type: 'string', enum: ['short', 'long', 'lesson'], description: 'Memory kind / 记忆类型' },
-	                tags: { type: 'array', items: { type: 'string' }, description: 'Tags / 标签' },
+	                key: { type: 'string', description: 'Key format: "research:topic" for global research cache, "project:aspect" for project-specific / 键格式：全局研究缓存用"research:主题"，项目专属用"project:方面"' },
+	                value: { type: 'string', description: 'Memory content. Include source links for research. / 记忆内容。研究应包含来源链接。' },
+	                scope: { type: 'string', enum: ['project', 'global', 'both'], description: 'global=reusable research cache (best-practices, patterns), project=context specific to this project / global=可复用研究缓存，project=项目专属上下文' },
+	                kind: { type: 'string', enum: ['short', 'long', 'lesson'], description: 'short=temp notes (7d expiry), long=permanent (research/facts), lesson=learned from mistakes / short=临时(7天过期)，long=永久(研究/事实)，lesson=教训' },
+	                tags: { type: 'array', items: { type: 'string' }, description: 'Tags for search. Use ["research", "<topic>"] for research cache / 搜索标签。研究缓存用["research","主题"]' },
 	                links: { type: 'array', items: { type: 'string' }, description: 'Related keys / 关联键' }
             },
             required: ['rationale', 'key', 'value']
@@ -4019,7 +3937,7 @@ const TOOLS = [
     // ==================== Workflow & Self-Check Tools ====================
     {
         name: 'workflow_status',
-        description: 'Check current workflow state and get guidance on next required step / 检查当前工作流状态并获取下一步指引',
+        description: 'CALL FREQUENTLY. Get think-first workflow status: checks if you followed THINK→RECALL→RESEARCH→PLAN→CODE→VERIFY→LEARN sequence. Shows critical reminders, next steps, and rules. Call after preflight, before planning, and when unsure. / 常调用。获取先思考工作流状态：检查是否遵循思考→回忆→研究→计划→编码→验证→学习序列。显示关键提醒、下一步和规则。预检后、计划前、不确定时调用。',
         inputSchema: {
             type: 'object',
             properties: {
@@ -4109,6 +4027,21 @@ const TOOLS = [
         }
     },
     {
+        name: 'index_codebase',
+        description: 'Deep-index the workspace codebase: analyze structure, key files, patterns, save to memory for future reference. Run on new projects or when codebase context is needed. / 深度索引工作区代码库：分析结构、关键文件、模式，保存到记忆以供后续参考。新项目或需要代码库上下文时运行。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                rationale: { type: 'string', description: 'Why you are indexing (required) / 为什么索引（必填）' },
+                depth: { type: 'string', enum: ['quick', 'standard', 'deep'], description: 'Indexing depth / 索引深度' },
+                saveToMemory: { type: 'boolean', description: 'Save findings to memory (default: true) / 保存发现到记忆（默认: true）' },
+                focus: { type: 'array', items: { type: 'string' }, description: 'Focus areas (e.g. ["api", "tests", "config"]) / 重点区域' },
+                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
+            },
+            required: ['rationale']
+        }
+    },
+    {
         name: 'code_review',
         description: 'Perform code review before completion: check quality, security, gaps, acceptance criteria. Required before ask_continue. / 完成前执行代码审查：检查质量、安全、缺口、验收标准。ask_continue 前必须调用。',
         inputSchema: {
@@ -4143,6 +4076,107 @@ const TOOLS = [
                 summary: { type: 'string', description: 'Review summary / 审查摘要' }
             },
             required: ['summary']
+        }
+    },
+    {
+        name: 'sequential_thinking',
+        description: 'REQUIRED for complex tasks. Break down problems into structured thinking steps: define problem, research, analyze, synthesize, conclude. Tracks thought progression and enables revision. Call BEFORE planning complex features. / 复杂任务必调。将问题分解为结构化思考步骤：定义问题、研究、分析、综合、结论。跟踪思维进展并支持修订。规划复杂功能前必调。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                rationale: { type: 'string', description: 'Why you are thinking through this (required) / 为什么要思考这个问题（必填）' },
+                stage: { 
+                    type: 'string', 
+                    enum: ['problem_definition', 'research', 'analysis', 'synthesis', 'conclusion', 'revision'],
+                    description: 'Current thinking stage / 当前思考阶段'
+                },
+                thought: { type: 'string', description: 'Your current thought content / 当前思考内容' },
+                thoughtNumber: { type: 'number', description: 'Sequence number of this thought (1-based) / 思考序号（1开始）' },
+                totalThoughts: { type: 'number', description: 'Estimated total thoughts needed / 预计总思考数' },
+                nextThoughtNeeded: { type: 'boolean', description: 'Whether another thought step is needed / 是否需要下一步思考' },
+                isRevision: { type: 'boolean', description: 'Whether this revises a previous thought / 是否修订之前的思考' },
+                revisesThought: { type: 'number', description: 'If revision, which thought number it revises / 如果修订，修订哪个思考序号' },
+                branchFromThought: { type: 'number', description: 'If branching, which thought to branch from / 如果分支，从哪个思考分支' },
+                branchId: { type: 'string', description: 'Branch identifier for alternative paths / 分支标识符' },
+                dependencies: { type: 'array', items: { type: 'string' }, description: 'Dependencies identified / 识别的依赖' },
+                assumptions: { type: 'array', items: { type: 'string' }, description: 'Assumptions made / 做出的假设' },
+                uncertainties: { type: 'array', items: { type: 'string' }, description: 'Uncertainties to resolve / 待解决的不确定性' },
+                saveToMemory: { type: 'boolean', description: 'Save thinking session to memory (default: true) / 保存思考会话到记忆（默认: true）' },
+                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
+            },
+            required: ['rationale', 'stage', 'thought', 'thoughtNumber', 'totalThoughts', 'nextThoughtNeeded']
+        }
+    },
+    {
+        name: 'sync_overview',
+        description: 'Regenerate overview if outdated or missing. Call after significant codebase changes or when overview is stale. / 如果概览过时或缺失则重新生成。在代码库发生重大更改后或概览过时时调用。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                rationale: { type: 'string', description: 'Why syncing overview (required) / 为什么同步概览（必填）' },
+                force: { type: 'boolean', description: 'Force regenerate even if overview exists / 强制重新生成即使概览存在' },
+                updateMemory: { type: 'boolean', description: 'Also update memory with changes (default: true) / 同时更新记忆（默认: true）' },
+                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
+            },
+            required: ['rationale']
+        }
+    },
+    // ==================== Documentation Lookup Tools (Context7-style) ====================
+    {
+        name: 'resolve_library_docs',
+        description: 'MUST call before get_library_docs. Resolves a library/framework name to a documentation ID. Checks cached research first, then searches for official docs. Returns matching libraries with doc sources. / get_library_docs 前必调。将库/框架名称解析为文档ID。先检查缓存研究，然后搜索官方文档。返回匹配的库和文档源。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                libraryName: { type: 'string', description: 'Library/framework name to resolve (e.g. "react", "fastapi", "prisma") / 要解析的库/框架名称' },
+                query: { type: 'string', description: 'Context query to rank results by relevance (e.g. "hooks", "authentication") / 用于按相关性排名结果的查询上下文' },
+                version: { type: 'string', description: 'Specific version if needed (e.g. "14", "3.x") / 如需指定版本' }
+            },
+            required: ['libraryName']
+        }
+    },
+    {
+        name: 'get_library_docs',
+        description: 'Fetch up-to-date documentation for a library. Call resolve_library_docs first to get docId, OR provide library name directly if simple. Returns official docs, code examples, and best practices. Caches results globally. / 获取库的最新文档。先调用 resolve_library_docs 获取 docId，或直接提供库名。返回官方文档、代码示例和最佳实践。结果全局缓存。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                docId: { type: 'string', description: 'Documentation ID from resolve_library_docs (e.g. "react:hooks", "fastapi:auth") / resolve_library_docs 返回的文档ID' },
+                libraryName: { type: 'string', description: 'Library name if docId not available / 如果没有 docId 则提供库名' },
+                topic: { type: 'string', description: 'Specific topic to focus on (e.g. "hooks", "routing", "middleware") / 要关注的特定主题' },
+                maxTokens: { type: 'number', description: 'Max tokens of documentation to retrieve (default: 3000) / 要检索的最大文档token数' },
+                includeExamples: { type: 'boolean', description: 'Include code examples (default: true) / 包含代码示例' },
+                cacheResult: { type: 'boolean', description: 'Cache result in global memory (default: true) / 缓存结果到全局记忆' }
+            },
+            required: []
+        }
+    },
+    {
+        name: 'think_step',
+        description: 'Record a single thinking step in a structured problem-solving session. Lighter than sequential_thinking - use for quick thought logging. Auto-tracks history and enables revision. / 在结构化问题解决会话中记录单个思考步骤。比 sequential_thinking 更轻量 - 用于快速思维记录。自动跟踪历史并支持修订。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                thought: { type: 'string', description: 'Your current thought / 当前思考' },
+                stage: { type: 'string', enum: ['define', 'research', 'analyze', 'synthesize', 'conclude', 'revise'], description: 'Thinking stage / 思考阶段' },
+                isRevision: { type: 'boolean', description: 'Revising previous thought / 修订之前的思考' },
+                revisesStep: { type: 'number', description: 'Which step to revise (1-based) / 修订哪个步骤' },
+                needsMoreThinking: { type: 'boolean', description: 'More thinking needed (default: true) / 需要更多思考' },
+                rootPath: { type: 'string', description: 'Optional project root / 可选项目根路径' }
+            },
+            required: ['thought']
+        }
+    },
+    {
+        name: 'get_thinking_history',
+        description: 'Get the current thinking session history. Use to review previous thoughts before planning. / 获取当前思考会话历史。用于在计划前回顾之前的思考。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                rootPath: { type: 'string', description: 'Optional project root / 可选项目根路径' },
+                clearAfter: { type: 'boolean', description: 'Clear history after retrieval (default: false) / 检索后清除历史' }
+            },
+            required: []
         }
     }
 ];
@@ -4571,6 +4605,34 @@ async function handleToolCall(name: string, args: any): Promise<any> {
         case 'code_review':
             stats.codeReviewCalls++;
             result = await handleCodeReview(args);
+            break;
+        case 'index_codebase':
+            stats.indexCodebaseCalls++;
+            result = await handleIndexCodebase(args);
+            break;
+        case 'sequential_thinking':
+            stats.sequentialThinkingCalls++;
+            result = await handleSequentialThinking(args);
+            break;
+        case 'sync_overview':
+            stats.syncOverviewCalls++;
+            result = await handleSyncOverview(args);
+            break;
+        case 'resolve_library_docs':
+            stats.resolveLibraryDocsCalls++;
+            result = await handleResolveLibraryDocs(args);
+            break;
+        case 'get_library_docs':
+            stats.getLibraryDocsCalls++;
+            result = await handleGetLibraryDocs(args);
+            break;
+        case 'think_step':
+            stats.thinkStepCalls++;
+            result = await handleThinkStep(args);
+            break;
+        case 'get_thinking_history':
+            stats.getThinkingHistoryCalls++;
+            result = await handleGetThinkingHistory(args);
             break;
         default:
             {
@@ -6055,6 +6117,7 @@ async function handlePreflight(args: any): Promise<any> {
     const query = typeof args?.query === 'string' ? args.query.trim() : '';
     const ragQuery = typeof args?.ragQuery === 'string' ? args.ragQuery.trim() : '';
     const memoryQuery = typeof args?.memoryQuery === 'string' ? args.memoryQuery.trim() : '';
+    const autoInit = args?.autoInit !== false; // Auto-initialize if overview is empty
 
     const memoryScope: 'project' | 'global' | 'both' =
         args?.memoryScope === 'global' || args?.memoryScope === 'both' ? args.memoryScope : 'both';
@@ -6066,6 +6129,24 @@ async function handlePreflight(args: any): Promise<any> {
     const effectiveMemoryQuery = memoryQuery || baseQuery || (lang === 'en' ? 'plan, rules, lessons' : '计划 规则 经验');
 
     const startedAt = nowIso();
+    let autoInitialized = false;
+
+    // Auto-initialize project if overview is empty
+    if (autoInit) {
+        try {
+            const { project } = resolveProjectTracker(rootPath);
+            const overviewContent = String(project.overview?.content || '').trim();
+            if (!overviewContent) {
+                // Auto-generate overview for new projects
+                await handleGenerateOverview({ rationale: 'Auto-init preflight: project has no overview', rootPath });
+                // Also index codebase and save to memory
+                await handleIndexCodebase({ rationale: 'Auto-init preflight: initial context', depth: 'standard', saveToMemory: true, rootPath });
+                autoInitialized = true;
+            }
+        } catch (e: any) {
+            outputChannel?.appendLine(`Preflight auto-init failed: ${e?.message ?? String(e)}`);
+        }
+    }
 
     const runCheck = async (fn: () => Promise<any>) => {
         try {
@@ -6098,6 +6179,7 @@ async function handlePreflight(args: any): Promise<any> {
         startedAt,
         finishedAt: nowIso(),
         rootPath: rootPath || getWorkspaceRootPath() || '',
+        autoInitialized,
         queries: {
             baseQuery,
             ragQuery: effectiveRagQuery,
@@ -6124,6 +6206,10 @@ async function handlePreflight(args: any): Promise<any> {
     };
 
     const lines: string[] = [];
+    if (autoInitialized) {
+        lines.push(lang === 'en' ? '✨ NEW PROJECT INITIALIZED (auto-generated overview + codebase index)' : '✨ 新项目已初始化（自动生成概览 + 代码库索引）');
+        lines.push('');
+    }
     lines.push(lang === 'en' ? 'Preflight checks:' : '预检检查：');
     const addLine = (name: string, ok: boolean, error?: string) => {
         const badge = ok ? (lang === 'en' ? 'OK' : '通过') : (lang === 'en' ? 'FAIL' : '失败');
@@ -6134,6 +6220,15 @@ async function handlePreflight(args: any): Promise<any> {
     addLine('memory_search', memoryRes.ok, (memoryRes as any).error);
     addLine('rag_search', ragRes.ok, (ragRes as any).error);
     addLine('wam_status', wamRes.ok, (wamRes as any).error);
+    
+    // Add reminder about next steps if no plan
+    const planJson = extractMarkerJson(planRes.out, 'PLAN_STATUS_JSON:');
+    if (planJson && planJson.progress?.total === 0) {
+        lines.push('');
+        lines.push(lang === 'en' 
+            ? '⚠️ NO PLAN EXISTS - Create one with update_plan(items=[...]) before implementing!'
+            : '⚠️ 尚无计划 - 请用 update_plan(items=[...]) 创建计划后再实施！');
+    }
 
     const text = lines.join('\n');
     return { content: [{ type: 'text', text }, { type: 'text', text: `PREFLIGHT_JSON:\n${JSON.stringify(payload, null, 2)}` }] };
@@ -8935,35 +9030,121 @@ async function handleWorkflowStatus(args: any): Promise<any> {
             planProgress: snapshot.progress,
             lastPreflight: (project.stats as any)?.lastPreflightAt,
             lastPlanUpdate: project.stats?.lastPlanUpdateAt,
-            lastWamCommit: (project.stats as any)?.lastWamCommitAt
+            lastWamCommit: (project.stats as any)?.lastWamCommitAt,
+            lastMemorySearch: project.stats?.lastMemorySearchAt,
+            lastRagSearch: project.stats?.lastRagSearchAt,
+            hasIndexed: !!(project.stats as any)?.indexCodebaseCalls && (project.stats as any).indexCodebaseCalls > 0
         };
         
-        // Determine next required step
+        // Determine next required step with think-first workflow
         const nextSteps: string[] = [];
+        const criticalReminders: string[] = [];
+        
+        // Phase 0: Preflight
         if (!checks.lastPreflight) {
-            nextSteps.push(lang === 'en' ? 'Run preflight() first' : '请先运行 preflight()');
+            nextSteps.push(lang === 'en' ? '1. Run preflight() - START HERE' : '1. 运行 preflight() - 从这里开始');
         }
+        
+        // Phase 1: Understand (THINK-FIRST)
         if (!checks.hasOverview) {
-            nextSteps.push(lang === 'en' ? 'Generate overview' : '生成概览');
+            nextSteps.push(lang === 'en' ? '2. Generate overview - understand project context' : '2. 生成概览 - 理解项目上下文');
         }
+        if (!checks.hasIndexed) {
+            nextSteps.push(lang === 'en' ? '3. Run index_codebase() - deep context indexing' : '3. 运行 index_codebase() - 深度上下文索引');
+        }
+        if (!checks.lastMemorySearch) {
+            criticalReminders.push(lang === 'en' 
+                ? '⚠️ RECALL MEMORY: Always search_memory() before planning or coding to check past lessons/research'
+                : '⚠️ 回忆记忆: 在计划或编码前始终 search_memory() 检查过去的经验/研究');
+        }
+        
+        // Phase 2: Research (BEFORE PLANNING)
+        if (!checks.lastRagSearch) {
+            criticalReminders.push(lang === 'en'
+                ? '⚠️ RESEARCH FIRST: Use rag_search() to find existing code patterns before writing new code'
+                : '⚠️ 先研究: 在编写新代码前使用 rag_search() 查找现有代码模式');
+        }
+        
+        // Phase 3: Plan
         if (!checks.hasPlan) {
-            nextSteps.push(lang === 'en' ? 'Create plan with checklist' : '创建带清单的计划');
+            nextSteps.push(lang === 'en' ? '4. Create plan with checklist - NO CODING until plan approved' : '4. 创建带清单的计划 - 计划批准前禁止编码');
         }
         if (checks.hasPlan && checks.planProgress.done < checks.planProgress.total) {
             nextSteps.push(lang === 'en' 
-                ? `Complete plan items (${checks.planProgress.done}/${checks.planProgress.total})` 
-                : `完成计划项 (${checks.planProgress.done}/${checks.planProgress.total})`);
+                ? `5. Execute plan items (${checks.planProgress.done}/${checks.planProgress.total}) - check_plan() after each step` 
+                : `5. 执行计划项 (${checks.planProgress.done}/${checks.planProgress.total}) - 每步后调用 check_plan()`);
         }
         if (checks.planProgress.done === checks.planProgress.total && checks.planProgress.total > 0) {
-            nextSteps.push(lang === 'en' ? 'Call ask_continue() to finish' : '调用 ask_continue() 完成');
+            nextSteps.push(lang === 'en' ? '6. Call ask_continue() to finish' : '6. 调用 ask_continue() 完成');
         }
+        
+        // Think-first workflow summary
+        const thinkFirstWorkflow = lang === 'en' ? {
+            title: 'THINK-FIRST WORKFLOW (MANDATORY)',
+            phases: [
+                '1. PREFLIGHT: preflight() → understand project state',
+                '2. UNDERSTAND: generate_overview() + index_codebase() → deep context',
+                '3. RECALL: search_memory() → check past lessons, cached research',
+                '4. RESEARCH: rag_search() + web search → find best practices, patterns',
+                '5. PLAN: update_plan() → create detailed plan with checklist, get approval',
+                '6. EXECUTE: code → verify_action() → check_plan() → repeat',
+                '7. LEARN: save_memory("research:topic") → cache discoveries globally',
+                '8. COMPLETE: ask_continue() → get next task'
+            ],
+            rules: [
+                '❌ NEVER code without a plan',
+                '❌ NEVER plan without research',
+                '❌ NEVER research without recalling memory',
+                '❌ NEVER assume - always verify with existing code',
+                '✅ ALWAYS check_plan() after completing plan items',
+                '✅ ALWAYS save_memory() for new discoveries (use "research:" prefix for global cache)',
+                '✅ ALWAYS verify_action() after significant changes'
+            ]
+        } : {
+            title: '先思考工作流 (强制)',
+            phases: [
+                '1. 预检: preflight() → 理解项目状态',
+                '2. 理解: generate_overview() + index_codebase() → 深度上下文',
+                '3. 回忆: search_memory() → 检查过去经验、缓存研究',
+                '4. 研究: rag_search() + 网络搜索 → 查找最佳实践、模式',
+                '5. 计划: update_plan() → 创建详细清单计划，获取批准',
+                '6. 执行: 编码 → verify_action() → check_plan() → 重复',
+                '7. 学习: save_memory("research:topic") → 全局缓存发现',
+                '8. 完成: ask_continue() → 获取下个任务'
+            ],
+            rules: [
+                '❌ 禁止无计划编码',
+                '❌ 禁止无研究计划',
+                '❌ 禁止无回忆研究',
+                '❌ 禁止假设 - 始终用现有代码验证',
+                '✅ 始终在完成计划项后调用 check_plan()',
+                '✅ 始终为新发现调用 save_memory() (全局缓存用 "research:" 前缀)',
+                '✅ 始终在重大变更后调用 verify_action()'
+            ]
+        };
+        
+        // Recommended tools for complex problems
+        const recommendedTools = lang === 'en' ? {
+            sequentialThinking: 'Use sequential_thinking() for complex problems - breaks down into stages: DEFINE → RESEARCH → ANALYZE → SYNTHESIZE → CONCLUDE',
+            docLookup: 'For library docs: resolve_library_docs(libraryName) → get_library_docs(docId) - caches results in global memory',
+            thinkStep: 'Quick thinking: think_step(thought, stage) → get_thinking_history() for lighter structured reasoning',
+            syncOverview: 'Use sync_overview() if overview is missing or stale after major changes'
+        } : {
+            sequentialThinking: '复杂问题使用 sequential_thinking() - 分解为阶段: 定义 → 研究 → 分析 → 综合 → 结论',
+            docLookup: '获取库文档: resolve_library_docs(libraryName) → get_library_docs(docId) - 结果缓存到全局记忆',
+            thinkStep: '快速思考: think_step(thought, stage) → get_thinking_history() 轻量级结构化推理',
+            syncOverview: '概览缺失或过时时使用 sync_overview()'
+        };
         
         const status = {
             checks,
             nextSteps,
+            criticalReminders,
+            thinkFirstWorkflow,
+            recommendedTools,
             guidance: lang === 'en'
-                ? 'Workflow: PREFLIGHT → READ → PLAN → ACT → VERIFY → ASK'
-                : '工作流: PREFLIGHT → READ → PLAN → ACT → VERIFY → ASK'
+                ? 'MANDATORY: THINK → RECALL → RESEARCH → PLAN → CODE → VERIFY → LEARN'
+                : '强制: 思考 → 回忆 → 研究 → 计划 → 编码 → 验证 → 学习'
         };
         
         return { content: [{ type: 'text', text: JSON.stringify(status, null, 2) }] };
@@ -9511,6 +9692,816 @@ async function handleCodeReview(args: any): Promise<any> {
             { type: 'text', text: responseText },
             { type: 'text', text: `CODE_REVIEW_JSON:\n${JSON.stringify({ review, checkScore, readyForCompletion }, null, 2)}` }
         ] 
+    };
+}
+
+async function handleIndexCodebase(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const rootPath = typeof args?.rootPath === 'string' ? args.rootPath : (getWorkspaceRootPath() || '');
+    if (!rootPath) {
+        throw new Error(lang === 'en' ? 'Workspace is required for index_codebase.' : 'index_codebase 需要打开工作区。');
+    }
+
+    const depth = args?.depth === 'quick' ? 'quick' : (args?.depth === 'deep' ? 'deep' : 'standard');
+    const saveToMemory = args?.saveToMemory !== false;
+    const focus = Array.isArray(args?.focus) ? args.focus.filter((f: any) => typeof f === 'string') : [];
+
+    // Update project tracker timestamps
+    try {
+        const trackerInfo = resolveProjectTracker(rootPath);
+        trackerInfo.project.stats = normalizeTrackerStats(trackerInfo.project.stats);
+        trackerInfo.project.stats.lastRagSearchAt = nowIso();
+        saveTrackerData(trackerInfo.data);
+    } catch {
+        // ignore
+    }
+
+    // Build comprehensive codebase analysis
+    const analysis: any = {
+        rootPath,
+        indexedAt: nowIso(),
+        depth,
+        structure: {},
+        patterns: [],
+        entryPoints: [],
+        keyFiles: [],
+        dependencies: {},
+        conventions: []
+    };
+
+    // 1. Project signals and stack detection
+    const signals = detectProjectSignals(rootPath);
+    analysis.stack = signals;
+
+    // 2. Key paths detection
+    const keyPaths = detectKeyPaths(rootPath);
+    analysis.keyFiles = keyPaths;
+
+    // 3. Project tree structure
+    const maxDepthLevel = depth === 'quick' ? 3 : (depth === 'deep' ? 6 : 4);
+    const tree = buildProjectTree(rootPath, maxDepthLevel, 100, 2000);
+    analysis.structure.tree = tree;
+
+    // 4. Package.json analysis (if exists)
+    const pkgSummary = readPackageJsonSummary(rootPath);
+    const pkgScripts = readPackageJsonScripts(rootPath);
+    if (pkgSummary) {
+        analysis.dependencies.npm = pkgSummary;
+        analysis.scripts = pkgScripts;
+    }
+
+    // 5. README analysis
+    const readme = readReadmeExcerpt(rootPath);
+    if (readme) {
+        analysis.readme = { path: readme.relPath, excerpt: readme.excerpt.slice(0, 2000) };
+    }
+
+    // 6. Detect entry points
+    const entryPointCandidates = ['src/index.ts', 'src/index.js', 'src/main.ts', 'src/main.js', 'index.ts', 'index.js', 'main.py', 'app.py', 'main.go', 'cmd/main.go', 'src/lib.rs', 'src/main.rs'];
+    for (const ep of entryPointCandidates) {
+        const epPath = path.join(rootPath, ep);
+        if (fs.existsSync(epPath)) {
+            analysis.entryPoints.push(ep);
+        }
+    }
+
+    // 7. Detect patterns and conventions
+    const conventionPatterns: string[] = [];
+    if (fs.existsSync(path.join(rootPath, '.eslintrc.json')) || fs.existsSync(path.join(rootPath, '.eslintrc.js')) || fs.existsSync(path.join(rootPath, 'eslint.config.js'))) {
+        conventionPatterns.push('ESLint for code linting');
+    }
+    if (fs.existsSync(path.join(rootPath, '.prettierrc')) || fs.existsSync(path.join(rootPath, 'prettier.config.js'))) {
+        conventionPatterns.push('Prettier for code formatting');
+    }
+    if (fs.existsSync(path.join(rootPath, 'tsconfig.json'))) {
+        conventionPatterns.push('TypeScript strict mode recommended');
+    }
+    if (fs.existsSync(path.join(rootPath, 'jest.config.js')) || fs.existsSync(path.join(rootPath, 'jest.config.ts'))) {
+        conventionPatterns.push('Jest for testing');
+    }
+    if (fs.existsSync(path.join(rootPath, 'vitest.config.ts')) || fs.existsSync(path.join(rootPath, 'vitest.config.js'))) {
+        conventionPatterns.push('Vitest for testing');
+    }
+    if (fs.existsSync(path.join(rootPath, 'pytest.ini')) || fs.existsSync(path.join(rootPath, 'pyproject.toml'))) {
+        conventionPatterns.push('pytest for Python testing');
+    }
+    analysis.conventions = conventionPatterns;
+
+    // 8. Deep analysis if requested
+    if (depth === 'deep' || depth === 'standard') {
+        // Analyze src directory structure
+        const srcDir = path.join(rootPath, 'src');
+        if (fs.existsSync(srcDir) && fs.statSync(srcDir).isDirectory()) {
+            const srcEntries = fs.readdirSync(srcDir, { withFileTypes: true });
+            const modules = srcEntries
+                .filter(e => e.isDirectory())
+                .map(e => e.name)
+                .slice(0, 20);
+            if (modules.length > 0) {
+                analysis.structure.srcModules = modules;
+            }
+        }
+    }
+
+    // 9. Save to memory if requested
+    if (saveToMemory) {
+        try {
+            const { data: memData, project: memProject } = resolveProjectMemory(rootPath);
+            
+            // Save codebase index as long-term memory
+            const indexKey = 'codebase:index';
+            const indexContent = [
+                `# Codebase Index (${nowIso()})`,
+                ``,
+                `## Stack: ${signals.join(', ') || 'Unknown'}`,
+                ``,
+                `## Entry Points`,
+                analysis.entryPoints.map((ep: string) => `- ${ep}`).join('\n') || '- None detected',
+                ``,
+                `## Key Files`,
+                analysis.keyFiles.slice(0, 15).map((kf: string) => `- ${kf}`).join('\n'),
+                ``,
+                `## Conventions`,
+                analysis.conventions.map((c: string) => `- ${c}`).join('\n') || '- None detected',
+                ``,
+                `## Structure Modules`,
+                (analysis.structure.srcModules || []).map((m: string) => `- src/${m}/`).join('\n') || '- (flat structure)'
+            ].join('\n');
+
+            memProject.memories[indexKey] = {
+                key: indexKey,
+                content: indexContent,
+                kind: 'long',
+                tags: ['codebase', 'index', 'architecture'],
+                updatedAt: nowIso(),
+                createdAt: memProject.memories[indexKey]?.createdAt || nowIso()
+            };
+
+            // Also save stack info globally for cross-project reference
+            if (signals.length > 0) {
+                const globalMem = loadGlobalMemoryData();
+                const stackKey = `research:stack:${signals[0].toLowerCase().replace(/[^a-z0-9]/g, '_')}`;
+                if (!globalMem.memories[stackKey]) {
+                    globalMem.memories[stackKey] = {
+                        key: stackKey,
+                        content: `Stack: ${signals.join(', ')}\nConventions: ${conventionPatterns.join('; ')}\nTypical commands: ${pkgScripts.slice(0, 5).map(s => s.name).join(', ')}`,
+                        kind: 'long',
+                        tags: ['research', 'stack', 'global'],
+                        updatedAt: nowIso(),
+                        createdAt: nowIso()
+                    };
+                    saveGlobalMemoryData(globalMem);
+                }
+            }
+
+            saveMemoryData(memData);
+        } catch (e: any) {
+            outputChannel?.appendLine(`index_codebase memory save failed: ${e?.message ?? String(e)}`);
+        }
+    }
+
+    // Build response
+    const headerText = lang === 'en' 
+        ? `Codebase indexed (${depth} depth)`
+        : `代码库已索引（${depth === 'quick' ? '快速' : depth === 'deep' ? '深度' : '标准'}）`;
+    
+    const summaryLines = [
+        `**Stack:** ${signals.join(', ') || 'Unknown'}`,
+        `**Entry Points:** ${analysis.entryPoints.join(', ') || 'None detected'}`,
+        `**Key Files:** ${analysis.keyFiles.slice(0, 8).join(', ')}${analysis.keyFiles.length > 8 ? '...' : ''}`,
+        `**Conventions:** ${analysis.conventions.join('; ') || 'None detected'}`,
+        saveToMemory ? `✓ Saved to project memory (key: codebase:index)` : ''
+    ].filter(Boolean).join('\n');
+
+    return {
+        content: [
+            { type: 'text', text: headerText },
+            { type: 'text', text: summaryLines },
+            { type: 'text', text: `INDEX_CODEBASE_JSON:\n${JSON.stringify(analysis, null, 2)}` }
+        ]
+    };
+}
+
+// Sequential thinking session storage (per-project)
+const sequentialThinkingSessions = new Map<string, Array<{
+    thoughtNumber: number;
+    stage: string;
+    thought: string;
+    timestamp: string;
+    isRevision?: boolean;
+    revisesThought?: number;
+    branchId?: string;
+    dependencies?: string[];
+    assumptions?: string[];
+    uncertainties?: string[];
+}>>();
+
+async function handleSequentialThinking(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const rootPath = typeof args?.rootPath === 'string' ? args.rootPath : (getWorkspaceRootPath() || 'global');
+    
+    const stage = args?.stage || 'analysis';
+    const thought = String(args?.thought || '');
+    const thoughtNumber = Number(args?.thoughtNumber) || 1;
+    const totalThoughts = Number(args?.totalThoughts) || 5;
+    const nextThoughtNeeded = args?.nextThoughtNeeded !== false;
+    const isRevision = args?.isRevision === true;
+    const revisesThought = Number(args?.revisesThought) || undefined;
+    const branchFromThought = Number(args?.branchFromThought) || undefined;
+    const branchId = String(args?.branchId || '');
+    const dependencies = Array.isArray(args?.dependencies) ? args.dependencies : [];
+    const assumptions = Array.isArray(args?.assumptions) ? args.assumptions : [];
+    const uncertainties = Array.isArray(args?.uncertainties) ? args.uncertainties : [];
+    const saveToMemory = args?.saveToMemory !== false;
+
+    // Get or create session
+    if (!sequentialThinkingSessions.has(rootPath)) {
+        sequentialThinkingSessions.set(rootPath, []);
+    }
+    const session = sequentialThinkingSessions.get(rootPath)!;
+
+    // Record thought
+    const thoughtRecord = {
+        thoughtNumber,
+        stage,
+        thought,
+        timestamp: nowIso(),
+        isRevision,
+        revisesThought,
+        branchId: branchId || undefined,
+        dependencies: dependencies.length > 0 ? dependencies : undefined,
+        assumptions: assumptions.length > 0 ? assumptions : undefined,
+        uncertainties: uncertainties.length > 0 ? uncertainties : undefined
+    };
+    session.push(thoughtRecord);
+
+    // Build progress visualization
+    const stageEmojis: Record<string, string> = {
+        problem_definition: '🎯',
+        research: '🔍',
+        analysis: '📊',
+        synthesis: '🔗',
+        conclusion: '✅',
+        revision: '🔄'
+    };
+    const emoji = stageEmojis[stage] || '💭';
+    
+    const progressBar = `[${'█'.repeat(thoughtNumber)}${'░'.repeat(Math.max(0, totalThoughts - thoughtNumber))}]`;
+    
+    // Build response
+    const lines: string[] = [
+        `${emoji} **Sequential Thinking - Step ${thoughtNumber}/${totalThoughts}**`,
+        `**Stage:** ${stage.replace('_', ' ').toUpperCase()}`,
+        progressBar,
+        '',
+        `**Thought:**`,
+        thought.slice(0, 1000),
+        ''
+    ];
+    
+    if (dependencies.length > 0) {
+        lines.push(`**Dependencies:** ${dependencies.join(', ')}`);
+    }
+    if (assumptions.length > 0) {
+        lines.push(`**Assumptions:** ${assumptions.join(', ')}`);
+    }
+    if (uncertainties.length > 0) {
+        lines.push(`**Uncertainties to resolve:** ${uncertainties.join(', ')}`);
+    }
+    if (isRevision && revisesThought) {
+        lines.push(`🔄 *This revises thought #${revisesThought}*`);
+    }
+    if (branchId) {
+        lines.push(`🌿 *Branch: ${branchId}*`);
+    }
+    
+    // Guidance for next step
+    lines.push('');
+    if (nextThoughtNeeded) {
+        const nextStageHints: Record<string, string> = {
+            problem_definition: lang === 'en' ? 'Next: Research phase - gather data, search memory, check existing code' : '下一步: 研究阶段 - 收集数据、搜索记忆、检查现有代码',
+            research: lang === 'en' ? 'Next: Analysis phase - identify patterns, evaluate options' : '下一步: 分析阶段 - 识别模式、评估选项',
+            analysis: lang === 'en' ? 'Next: Synthesis phase - combine findings, form approach' : '下一步: 综合阶段 - 整合发现、形成方法',
+            synthesis: lang === 'en' ? 'Next: Conclusion phase - finalize decision, create plan' : '下一步: 结论阶段 - 最终决策、创建计划',
+            conclusion: lang === 'en' ? 'Thinking complete - ready to update_plan() with your conclusions' : '思考完成 - 准备用结论调用 update_plan()'
+        };
+        lines.push(nextStageHints[stage] || (lang === 'en' ? 'Continue to next thought...' : '继续下一个思考...'));
+    } else {
+        lines.push(lang === 'en' 
+            ? '✅ Thinking session complete. Now create your plan with update_plan().'
+            : '✅ 思考会话完成。现在用 update_plan() 创建计划。');
+    }
+
+    // Save session summary to memory if requested and at conclusion
+    if (saveToMemory && !nextThoughtNeeded) {
+        try {
+            const { data: memData, project: memProject } = resolveProjectMemory(rootPath !== 'global' ? rootPath : undefined);
+            const sessionKey = `thinking:${Date.now()}`;
+            const sessionSummary = [
+                `# Sequential Thinking Session (${nowIso()})`,
+                '',
+                ...session.map(t => `## Step ${t.thoughtNumber}: ${t.stage}\n${t.thought.slice(0, 500)}`)
+            ].join('\n');
+            
+            memProject.memories[sessionKey] = {
+                key: sessionKey,
+                content: sessionSummary,
+                kind: 'short',
+                tags: ['thinking', 'analysis', stage],
+                updatedAt: nowIso(),
+                createdAt: nowIso()
+            };
+            saveMemoryData(memData);
+            lines.push('');
+            lines.push(lang === 'en' ? `💾 Session saved to memory (${sessionKey})` : `💾 会话已保存到记忆 (${sessionKey})`);
+            
+            // Clear session after saving
+            sequentialThinkingSessions.delete(rootPath);
+        } catch {
+            // ignore memory errors
+        }
+    }
+
+    const result = {
+        thoughtNumber,
+        totalThoughts,
+        stage,
+        nextThoughtNeeded,
+        sessionLength: session.length,
+        guidance: nextThoughtNeeded 
+            ? (lang === 'en' ? 'Continue sequential_thinking with next thought' : '继续调用 sequential_thinking 进行下一步思考')
+            : (lang === 'en' ? 'Ready to create plan' : '准备创建计划')
+    };
+
+    return {
+        content: [
+            { type: 'text', text: lines.join('\n') },
+            { type: 'text', text: `SEQUENTIAL_THINKING_JSON:\n${JSON.stringify(result, null, 2)}` }
+        ]
+    };
+}
+
+async function handleSyncOverview(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const rootPath = typeof args?.rootPath === 'string' ? args.rootPath : undefined;
+    const force = args?.force === true;
+    const updateMemory = args?.updateMemory !== false;
+
+    const { data, project } = resolveProjectTracker(rootPath);
+    const currentOverview = String(project.overview?.content || '').trim();
+    const lastUpdate = project.overview?.updatedAt || '';
+
+    // Check if overview needs regeneration
+    let needsRegeneration = force || !currentOverview;
+    let reason = '';
+
+    if (!currentOverview) {
+        reason = lang === 'en' ? 'Overview is missing' : '概览缺失';
+        needsRegeneration = true;
+    } else if (force) {
+        reason = lang === 'en' ? 'Force regeneration requested' : '强制重新生成';
+    } else {
+        // Check if overview is stale (older than 24 hours of project activity)
+        const lastPlanUpdate = project.stats?.lastPlanUpdateAt || '';
+        if (lastPlanUpdate && lastUpdate && lastPlanUpdate > lastUpdate) {
+            reason = lang === 'en' ? 'Overview is stale (plan updated since last overview)' : '概览已过时（计划在概览之后更新）';
+            needsRegeneration = true;
+        }
+    }
+
+    if (!needsRegeneration) {
+        return {
+            content: [
+                { type: 'text', text: lang === 'en' ? '✓ Overview is up-to-date' : '✓ 概览已是最新' },
+                { type: 'text', text: `SYNC_OVERVIEW_JSON:\n${JSON.stringify({ synced: false, reason: 'already up-to-date', lastUpdate }, null, 2)}` }
+            ]
+        };
+    }
+
+    // Regenerate overview
+    const overviewResult = await handleGenerateOverview({ rationale: `sync_overview: ${reason}`, rootPath });
+
+    // Update memory with key context if requested
+    if (updateMemory) {
+        try {
+            await handleIndexCodebase({ rationale: `sync_overview: refresh codebase context`, depth: 'quick', saveToMemory: true, rootPath });
+        } catch {
+            // ignore indexing errors
+        }
+    }
+
+    return {
+        content: [
+            { type: 'text', text: lang === 'en' ? `✓ Overview regenerated (${reason})` : `✓ 概览已重新生成（${reason}）` },
+            ...(overviewResult?.content || []),
+            { type: 'text', text: `SYNC_OVERVIEW_JSON:\n${JSON.stringify({ synced: true, reason, timestamp: nowIso() }, null, 2)}` }
+        ]
+    };
+}
+
+// ==================== Documentation Lookup Handlers (Context7-style) ====================
+
+// Known library documentation sources
+const LIBRARY_DOC_SOURCES: Record<string, { name: string; docUrl: string; topics: string[] }> = {
+    'react': { name: 'React', docUrl: 'https://react.dev', topics: ['hooks', 'components', 'state', 'effects', 'context', 'refs'] },
+    'next': { name: 'Next.js', docUrl: 'https://nextjs.org/docs', topics: ['routing', 'middleware', 'api', 'rendering', 'caching'] },
+    'nextjs': { name: 'Next.js', docUrl: 'https://nextjs.org/docs', topics: ['routing', 'middleware', 'api', 'rendering', 'caching'] },
+    'vue': { name: 'Vue.js', docUrl: 'https://vuejs.org/guide', topics: ['reactivity', 'components', 'composition', 'directives'] },
+    'angular': { name: 'Angular', docUrl: 'https://angular.io/docs', topics: ['components', 'services', 'routing', 'forms', 'http'] },
+    'express': { name: 'Express', docUrl: 'https://expressjs.com', topics: ['routing', 'middleware', 'error-handling', 'static'] },
+    'fastapi': { name: 'FastAPI', docUrl: 'https://fastapi.tiangolo.com', topics: ['path-operations', 'dependencies', 'security', 'async'] },
+    'prisma': { name: 'Prisma', docUrl: 'https://prisma.io/docs', topics: ['schema', 'client', 'migrations', 'relations'] },
+    'typescript': { name: 'TypeScript', docUrl: 'https://typescriptlang.org/docs', topics: ['types', 'generics', 'decorators', 'modules'] },
+    'tailwind': { name: 'Tailwind CSS', docUrl: 'https://tailwindcss.com/docs', topics: ['utilities', 'responsive', 'customization', 'plugins'] },
+    'zod': { name: 'Zod', docUrl: 'https://zod.dev', topics: ['schemas', 'validation', 'transforms', 'refinements'] },
+    'trpc': { name: 'tRPC', docUrl: 'https://trpc.io/docs', topics: ['routers', 'procedures', 'context', 'middleware'] },
+    'supabase': { name: 'Supabase', docUrl: 'https://supabase.com/docs', topics: ['auth', 'database', 'storage', 'realtime', 'functions'] },
+    'django': { name: 'Django', docUrl: 'https://docs.djangoproject.com', topics: ['models', 'views', 'templates', 'forms', 'admin'] },
+    'flask': { name: 'Flask', docUrl: 'https://flask.palletsprojects.com', topics: ['routing', 'templates', 'blueprints', 'extensions'] },
+    'node': { name: 'Node.js', docUrl: 'https://nodejs.org/docs', topics: ['modules', 'fs', 'http', 'streams', 'events'] },
+    'deno': { name: 'Deno', docUrl: 'https://deno.land/manual', topics: ['modules', 'permissions', 'testing', 'deploy'] },
+    'rust': { name: 'Rust', docUrl: 'https://doc.rust-lang.org/book', topics: ['ownership', 'lifetimes', 'traits', 'async'] },
+    'go': { name: 'Go', docUrl: 'https://go.dev/doc', topics: ['goroutines', 'channels', 'interfaces', 'testing'] },
+    'python': { name: 'Python', docUrl: 'https://docs.python.org/3', topics: ['stdlib', 'async', 'typing', 'dataclasses'] }
+};
+
+async function handleResolveLibraryDocs(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const libraryName = String(args?.libraryName || '').trim().toLowerCase();
+    const query = String(args?.query || '').trim();
+    const version = String(args?.version || '').trim();
+    
+    if (!libraryName) {
+        throw new Error(lang === 'en' ? 'libraryName is required' : 'libraryName 必填');
+    }
+    
+    // Check global memory cache first
+    const globalMem = loadGlobalMemoryData();
+    const cacheKey = `docs:${libraryName}${version ? ':' + version : ''}`;
+    const cached = globalMem.memories[cacheKey];
+    if (cached && cached.content) {
+        return {
+            content: [
+                { type: 'text', text: lang === 'en' ? `✓ Found cached documentation for ${libraryName}` : `✓ 找到 ${libraryName} 的缓存文档` },
+                { type: 'text', text: `RESOLVE_LIBRARY_DOCS_JSON:\n${JSON.stringify({ 
+                    docId: cacheKey, 
+                    libraryName, 
+                    source: 'cache', 
+                    cached: true,
+                    topics: cached.tags || []
+                }, null, 2)}` }
+            ]
+        };
+    }
+    
+    // Check known libraries
+    const knownLib = LIBRARY_DOC_SOURCES[libraryName] || 
+                     LIBRARY_DOC_SOURCES[libraryName.replace(/\.js$/, '')] ||
+                     LIBRARY_DOC_SOURCES[libraryName.replace(/-/g, '')];
+    
+    const matches: Array<{ docId: string; name: string; docUrl: string; relevance: number; topics: string[] }> = [];
+    
+    if (knownLib) {
+        // Calculate relevance based on query match
+        let relevance = 100;
+        if (query) {
+            const queryLower = query.toLowerCase();
+            const topicMatch = knownLib.topics.some(t => t.includes(queryLower) || queryLower.includes(t));
+            relevance = topicMatch ? 95 : 80;
+        }
+        
+        const docId = `${libraryName}${query ? ':' + query.replace(/\s+/g, '-') : ''}${version ? ':v' + version : ''}`;
+        matches.push({
+            docId,
+            name: knownLib.name,
+            docUrl: knownLib.docUrl,
+            relevance,
+            topics: knownLib.topics
+        });
+    }
+    
+    // Also search in project memory for any custom docs
+    try {
+        const memResult = await handleMemorySearch({ query: `${libraryName} docs documentation`, scope: 'global', maxResults: 3 });
+        // Additional matches from memory would be parsed here
+    } catch {
+        // ignore
+    }
+    
+    if (matches.length === 0) {
+        // Return with suggestion to search
+        return {
+            content: [
+                { type: 'text', text: lang === 'en' 
+                    ? `⚠️ Library "${libraryName}" not in known sources. Use get_library_docs with libraryName to search.`
+                    : `⚠️ 库 "${libraryName}" 不在已知源中。使用 get_library_docs 和 libraryName 搜索。` },
+                { type: 'text', text: `RESOLVE_LIBRARY_DOCS_JSON:\n${JSON.stringify({ 
+                    docId: `search:${libraryName}`, 
+                    libraryName, 
+                    source: 'search-required',
+                    suggestion: 'Use get_library_docs with this libraryName to fetch documentation'
+                }, null, 2)}` }
+            ]
+        };
+    }
+    
+    // Sort by relevance
+    matches.sort((a, b) => b.relevance - a.relevance);
+    const best = matches[0];
+    
+    return {
+        content: [
+            { type: 'text', text: lang === 'en' 
+                ? `✓ Resolved ${libraryName} to documentation source: ${best.name}`
+                : `✓ 已解析 ${libraryName} 的文档源: ${best.name}` },
+            { type: 'text', text: `**Documentation URL:** ${best.docUrl}` },
+            { type: 'text', text: `**Topics:** ${best.topics.join(', ')}` },
+            { type: 'text', text: `RESOLVE_LIBRARY_DOCS_JSON:\n${JSON.stringify({ 
+                docId: best.docId, 
+                libraryName: best.name, 
+                docUrl: best.docUrl,
+                topics: best.topics,
+                relevance: best.relevance,
+                allMatches: matches
+            }, null, 2)}` }
+        ]
+    };
+}
+
+async function handleGetLibraryDocs(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const docId = String(args?.docId || '').trim();
+    const libraryName = String(args?.libraryName || '').trim().toLowerCase();
+    const topic = String(args?.topic || '').trim();
+    const maxTokens = Number(args?.maxTokens) || 3000;
+    const includeExamples = args?.includeExamples !== false;
+    const cacheResult = args?.cacheResult !== false;
+    
+    const effectiveLib = docId ? docId.split(':')[0] : libraryName;
+    if (!effectiveLib) {
+        throw new Error(lang === 'en' ? 'docId or libraryName required' : '需要 docId 或 libraryName');
+    }
+    
+    // Check cache first
+    const globalMem = loadGlobalMemoryData();
+    const cacheKey = `docs:${effectiveLib}${topic ? ':' + topic : ''}`;
+    const cached = globalMem.memories[cacheKey];
+    
+    if (cached && cached.content) {
+        const cacheAge = Date.now() - new Date(cached.updatedAt || 0).getTime();
+        const maxAge = 7 * 24 * 60 * 60 * 1000; // 7 days
+        
+        if (cacheAge < maxAge) {
+            return {
+                content: [
+                    { type: 'text', text: lang === 'en' ? `📚 Documentation for ${effectiveLib} (cached)` : `📚 ${effectiveLib} 文档（缓存）` },
+                    { type: 'text', text: cached.content.slice(0, maxTokens * 4) }, // ~4 chars per token
+                    { type: 'text', text: `GET_LIBRARY_DOCS_JSON:\n${JSON.stringify({ 
+                        library: effectiveLib, 
+                        topic, 
+                        source: 'cache',
+                        cachedAt: cached.updatedAt
+                    }, null, 2)}` }
+                ]
+            };
+        }
+    }
+    
+    // Build documentation content from known sources
+    const knownLib = LIBRARY_DOC_SOURCES[effectiveLib] || 
+                     LIBRARY_DOC_SOURCES[effectiveLib.replace(/\.js$/, '')] ||
+                     LIBRARY_DOC_SOURCES[effectiveLib.replace(/-/g, '')];
+    
+    let docContent = '';
+    let docSource = 'generated';
+    
+    if (knownLib) {
+        // Generate documentation guidance
+        const lines: string[] = [
+            `# ${knownLib.name} Documentation`,
+            '',
+            `**Official Docs:** ${knownLib.docUrl}`,
+            '',
+            '## Key Topics',
+            ...knownLib.topics.map(t => `- **${t}**: See ${knownLib.docUrl}/${t.replace(/\s+/g, '-')}`),
+            ''
+        ];
+        
+        if (topic) {
+            lines.push(`## Focus: ${topic}`);
+            lines.push('');
+            lines.push(`For ${topic} documentation, refer to: ${knownLib.docUrl}/${topic.replace(/\s+/g, '-')}`);
+            lines.push('');
+        }
+        
+        if (includeExamples) {
+            lines.push('## Best Practices');
+            lines.push('');
+            lines.push('1. Always check the official docs for the latest API');
+            lines.push('2. Follow the framework\'s recommended patterns');
+            lines.push('3. Use TypeScript for better type safety');
+            lines.push(`4. Search project memory for cached research: search_memory({query: "research:${effectiveLib}"})`);
+            lines.push('');
+        }
+        
+        lines.push('## Quick Reference');
+        lines.push('');
+        lines.push(`To cache research for this library, use:`);
+        lines.push('```');
+        lines.push(`save_memory({`);
+        lines.push(`  key: "research:${effectiveLib}:${topic || 'general'}",`);
+        lines.push(`  value: "Your findings here...",`);
+        lines.push(`  scope: "global",`);
+        lines.push(`  kind: "long",`);
+        lines.push(`  tags: ["research", "${effectiveLib}", "docs"]`);
+        lines.push(`})`);
+        lines.push('```');
+        
+        docContent = lines.join('\n');
+        docSource = knownLib.docUrl;
+    } else {
+        // Generic guidance for unknown libraries
+        docContent = [
+            `# ${effectiveLib} Documentation`,
+            '',
+            `⚠️ This library is not in the known sources database.`,
+            '',
+            '## Recommendations',
+            '',
+            '1. Search for official documentation online',
+            '2. Check npm/pypi/crates.io for package info',
+            '3. Look for README in the repository',
+            '',
+            '## To Cache Your Research',
+            '',
+            'After finding documentation, cache it:',
+            '```',
+            `save_memory({`,
+            `  key: "research:${effectiveLib}",`,
+            `  value: "Documentation summary...",`,
+            `  scope: "global",`,
+            `  kind: "long",`,
+            `  tags: ["research", "${effectiveLib}", "docs"]`,
+            `})`,
+            '```'
+        ].join('\n');
+    }
+    
+    // Cache result if requested
+    if (cacheResult && docContent) {
+        globalMem.memories[cacheKey] = {
+            key: cacheKey,
+            content: docContent,
+            kind: 'long',
+            tags: ['docs', 'research', effectiveLib, topic].filter(Boolean),
+            updatedAt: nowIso(),
+            createdAt: globalMem.memories[cacheKey]?.createdAt || nowIso()
+        };
+        saveGlobalMemoryData(globalMem);
+    }
+    
+    return {
+        content: [
+            { type: 'text', text: lang === 'en' ? `📚 Documentation for ${knownLib?.name || effectiveLib}` : `📚 ${knownLib?.name || effectiveLib} 文档` },
+            { type: 'text', text: docContent.slice(0, maxTokens * 4) },
+            { type: 'text', text: `GET_LIBRARY_DOCS_JSON:\n${JSON.stringify({ 
+                library: effectiveLib, 
+                topic, 
+                source: docSource,
+                cached: cacheResult,
+                cacheKey: cacheResult ? cacheKey : undefined
+            }, null, 2)}` }
+        ]
+    };
+}
+
+// ==================== Thinking Step Handlers ====================
+
+// Thinking history storage per project
+const thinkingHistory = new Map<string, Array<{
+    step: number;
+    stage: string;
+    thought: string;
+    timestamp: string;
+    isRevision?: boolean;
+    revisesStep?: number;
+}>>();
+
+async function handleThinkStep(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const rootPath = typeof args?.rootPath === 'string' ? args.rootPath : (getWorkspaceRootPath() || 'global');
+    
+    const thought = String(args?.thought || '').trim();
+    const stage = args?.stage || 'analyze';
+    const isRevision = args?.isRevision === true;
+    const revisesStep = Number(args?.revisesStep) || undefined;
+    const needsMoreThinking = args?.needsMoreThinking !== false;
+    
+    if (!thought) {
+        throw new Error(lang === 'en' ? 'thought is required' : 'thought 必填');
+    }
+    
+    // Get or create history
+    if (!thinkingHistory.has(rootPath)) {
+        thinkingHistory.set(rootPath, []);
+    }
+    const history = thinkingHistory.get(rootPath)!;
+    
+    // Add step
+    const stepNum = history.length + 1;
+    history.push({
+        step: stepNum,
+        stage,
+        thought,
+        timestamp: nowIso(),
+        isRevision,
+        revisesStep
+    });
+    
+    // Stage emojis
+    const stageEmoji: Record<string, string> = {
+        define: '🎯',
+        research: '🔍', 
+        analyze: '📊',
+        synthesize: '🔗',
+        conclude: '✅',
+        revise: '🔄'
+    };
+    
+    const lines: string[] = [
+        `${stageEmoji[stage] || '💭'} **Think Step ${stepNum}** [${stage.toUpperCase()}]`,
+        '',
+        thought.slice(0, 500),
+        ''
+    ];
+    
+    if (isRevision && revisesStep) {
+        lines.push(`🔄 *Revises step #${revisesStep}*`);
+        lines.push('');
+    }
+    
+    if (needsMoreThinking) {
+        lines.push(lang === 'en' ? '➡️ Continue thinking or call get_thinking_history() to review' : '➡️ 继续思考或调用 get_thinking_history() 回顾');
+    } else {
+        lines.push(lang === 'en' ? '✅ Ready to create plan with update_plan()' : '✅ 准备用 update_plan() 创建计划');
+    }
+    
+    return {
+        content: [
+            { type: 'text', text: lines.join('\n') },
+            { type: 'text', text: `THINK_STEP_JSON:\n${JSON.stringify({ 
+                step: stepNum, 
+                stage, 
+                totalSteps: history.length,
+                needsMoreThinking 
+            }, null, 2)}` }
+        ]
+    };
+}
+
+async function handleGetThinkingHistory(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const rootPath = typeof args?.rootPath === 'string' ? args.rootPath : (getWorkspaceRootPath() || 'global');
+    const clearAfter = args?.clearAfter === true;
+    
+    const history = thinkingHistory.get(rootPath) || [];
+    
+    if (history.length === 0) {
+        return {
+            content: [
+                { type: 'text', text: lang === 'en' ? 'No thinking history yet. Start with think_step().' : '还没有思考历史。用 think_step() 开始。' },
+                { type: 'text', text: `THINKING_HISTORY_JSON:\n${JSON.stringify({ steps: [], count: 0 }, null, 2)}` }
+            ]
+        };
+    }
+    
+    const lines: string[] = [
+        lang === 'en' ? `## Thinking History (${history.length} steps)` : `## 思考历史 (${history.length} 步)`,
+        ''
+    ];
+    
+    for (const h of history) {
+        const revisionNote = h.isRevision && h.revisesStep ? ` [↻ ${h.revisesStep}]` : '';
+        lines.push(`**${h.step}. ${h.stage.toUpperCase()}${revisionNote}**`);
+        lines.push(h.thought.slice(0, 200) + (h.thought.length > 200 ? '...' : ''));
+        lines.push('');
+    }
+    
+    // Clear if requested
+    if (clearAfter) {
+        thinkingHistory.delete(rootPath);
+        lines.push(lang === 'en' ? '*History cleared*' : '*历史已清除*');
+    }
+    
+    return {
+        content: [
+            { type: 'text', text: lines.join('\n') },
+            { type: 'text', text: `THINKING_HISTORY_JSON:\n${JSON.stringify({ 
+                steps: history.map(h => ({ step: h.step, stage: h.stage, excerpt: h.thought.slice(0, 100) })),
+                count: history.length,
+                cleared: clearAfter
+            }, null, 2)}` }
+        ]
     };
 }
 
