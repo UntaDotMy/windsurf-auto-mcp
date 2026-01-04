@@ -5792,14 +5792,31 @@ async function handleRagSearch(args: any): Promise<any> {
 
     candidates.sort((a, b) => (b.score - a.score) || a.path.localeCompare(b.path));
     const top = candidates.slice(0, maxResults);
+    
+    // Check for hook feedback (blocked actions) - surface prominently for smaller LLMs
+    const hookFeedback = getHookFeedbackFromMemory(rootPath);
+    const outputLines: string[] = [];
+    
+    // Surface hook block prominently at the very top
+    if (hookFeedback?.lastBlock) {
+        outputLines.push(lang === 'en' 
+            ? `⛔ HOOK BLOCKED YOUR LAST ACTION: ${hookFeedback.lastBlock}`
+            : `⛔ 钩子阻止了你的上一个操作: ${hookFeedback.lastBlock}`);
+        outputLines.push(lang === 'en'
+            ? 'You MUST address the block reason before retrying.'
+            : '你必须先解决阻止原因才能重试。');
+        outputLines.push('');
+    }
+    
     const header = lang === 'en' ? `RAG results (${top.length})` : `RAG 结果（${top.length}）`;
-    const lines = top.map((r, i) => `${i + 1}. ${r.path}:${r.startLine}\n${r.snippet}`);
+    outputLines.push(header);
+    const resultLines = top.map((r, i) => `${i + 1}. ${r.path}:${r.startLine}\n${r.snippet}`);
 
     return {
         content: [
-            { type: 'text', text: header },
-            { type: 'text', text: lines.join('\n\n') || (lang === 'en' ? 'No matches.' : '无匹配结果。') },
-            { type: 'text', text: `RAG_JSON:\n${JSON.stringify({ query, tokens: searchTokens, results: top.map((r) => ({ path: r.path, startLine: r.startLine, score: r.score })) }, null, 2)}` }
+            { type: 'text', text: outputLines.join('\n') },
+            { type: 'text', text: resultLines.join('\n\n') || (lang === 'en' ? 'No matches.' : '无匹配结果。') },
+            { type: 'text', text: `RAG_JSON:\n${JSON.stringify({ query, tokens: searchTokens, results: top.map((r) => ({ path: r.path, startLine: r.startLine, score: r.score })), hookFeedback: hookFeedback || null }, null, 2)}` }
         ]
     };
 }
@@ -6174,8 +6191,24 @@ async function handleUpdatePlan(args: any): Promise<any> {
     project.updatedAt = nowIso();
     saveTrackerAndNotify(data, project);
     
+    // Check for hook feedback (blocked actions) - surface prominently for smaller LLMs
+    const rootPath = getWorkspaceRootPath() || undefined;
+    const hookFeedback = getHookFeedbackFromMemory(rootPath);
+    
     // Build response with progress info
     const responseLines: string[] = [];
+    
+    // Surface hook block prominently at the very top
+    if (hookFeedback?.lastBlock) {
+        responseLines.push(lang === 'en' 
+            ? `⛔ HOOK BLOCKED YOUR LAST ACTION: ${hookFeedback.lastBlock}`
+            : `⛔ 钩子阻止了你的上一个操作: ${hookFeedback.lastBlock}`);
+        responseLines.push(lang === 'en'
+            ? 'You MUST address the block reason before retrying.'
+            : '你必须先解决阻止原因才能重试。');
+        responseLines.push('');
+    }
+    
     responseLines.push(lang === 'en' ? 'Plan updated.' : '计划已更新。');
     responseLines.push(lang === 'en'
         ? `Progress: ${afterProgress.done}/${afterProgress.total} (${afterProgress.percent}%)`
@@ -6201,7 +6234,8 @@ async function handleUpdatePlan(args: any): Promise<any> {
     }
     
     const text = responseLines.join('\n');
-    return { content: [{ type: 'text', text }, { type: 'text', text: `PLAN_JSON:\n${JSON.stringify(buildTrackerSnapshot(project), null, 2)}` }] };
+    const payload = { ...buildTrackerSnapshot(project), hookFeedback: hookFeedback || null };
+    return { content: [{ type: 'text', text }, { type: 'text', text: `PLAN_JSON:\n${JSON.stringify(payload, null, 2)}` }] };
 }
 
 function calculatePlanProgress(items: TrackerItem[]): { total: number; done: number; percent: number } {
@@ -8745,17 +8779,34 @@ async function handleMemorySearch(args: any): Promise<any> {
     results.sort((a, b) => (b.score - a.score) || (b.updatedAt.localeCompare(a.updatedAt)));
     const top = results.slice(0, maxResults);
 
+    // Check for hook feedback (blocked actions) - surface prominently for smaller LLMs
+    const hookFeedback = getHookFeedbackFromMemory(rootPath);
+    const outputLines: string[] = [];
+    
+    // Surface hook block prominently at the very top
+    if (hookFeedback?.lastBlock) {
+        outputLines.push(lang === 'en' 
+            ? `⛔ HOOK BLOCKED YOUR LAST ACTION: ${hookFeedback.lastBlock}`
+            : `⛔ 钩子阻止了你的上一个操作: ${hookFeedback.lastBlock}`);
+        outputLines.push(lang === 'en'
+            ? 'You MUST address the block reason before retrying.'
+            : '你必须先解决阻止原因才能重试。');
+        outputLines.push('');
+    }
+
     const header = lang === 'en' ? `Memory search results (${top.length})` : `记忆检索结果（${top.length}）`;
-    const lines = top.map((r, i) => {
+    outputLines.push(header);
+    
+    const resultLines = top.map((r, i) => {
         const scopeLabel = r.scope === 'global' ? (lang === 'en' ? 'global' : '全局') : (lang === 'en' ? 'project' : '项目');
         return `${i + 1}. [${scopeLabel}] (${r.kind}) ${r.key} — ${r.snippet}`;
     });
 
     return {
         content: [
-            { type: 'text', text: header },
-            { type: 'text', text: lines.join('\n') || (lang === 'en' ? 'No matches.' : '无匹配结果。') },
-            { type: 'text', text: `MEMORY_SEARCH_JSON:\n${JSON.stringify({ query, scope, kinds, results: top }, null, 2)}` }
+            { type: 'text', text: outputLines.join('\n') },
+            { type: 'text', text: resultLines.join('\n') || (lang === 'en' ? 'No matches.' : '无匹配结果。') },
+            { type: 'text', text: `MEMORY_SEARCH_JSON:\n${JSON.stringify({ query, scope, kinds, results: top, hookFeedback: hookFeedback || null }, null, 2)}` }
         ]
     };
 }
