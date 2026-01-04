@@ -181,15 +181,55 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
 	        'sidebar.promptTitle': '提示语',
 	        'sidebar.promptText': '硬规则：完成任务时必须调用 ask_continue。',
 		        'sidebar.promptCopyText': [
-		            '硬规则：交付时必须 ask_continue(reason)。',
-		            '开始：preflight(userPrompt=...)（一次完成 get_project_status/check_plan/memory_search/rag_search/wam_status）。',
-		            '每次新用户输入：先 preflight(userPrompt=...) 再开始实现/改动。',
-		            '复杂任务：先 set_prd → 用户审批 → update_plan(mode=merge)（Plan+Checklist）。',
-		            'Plan 后（推荐）：ensure_release_gate 自动补齐测试/构建/lint/依赖/安全/性能/最终审查等发布门禁。',
-		            '实现中：按 Plan 小步推进；每步 update_plan；必要时 update_walkthrough；错误用 record_lesson + save_memory。',
-		            'WAM：跟踪/记忆变更后保持 clean（wam_status；可选 wam_diff；再 wam_commit()）。',
-		            'Hooks：若被阻止/报错，先在 Memory 查看 hook:last_block / hook:last_warning / hook:last_error，再修复后重试。',
-		            '完成前：check_plan → 最终 ask_continue(reason) 并等待用户。'
+		            '=== WindsurfAutoMcp ACP 工作流 ===',
+		            '',
+		            '【硬规则 - 不可违背】',
+		            'R1. 完成时必须: code_review() → ask_continue(reason)',
+		            'R2. 新输入必须: preflight(userPrompt=...)',
+		            'R3. 行动前必须: 有Plan含Checklist',
+		            '',
+		            '【ACP循环 - 严格按顺序】',
+		            'STEP 1 - PREFLIGHT:',
+		            '  → preflight(userPrompt="用户输入")',
+		            '  → 读取: 项目状态/Plan/Memory/WAM',
+		            '',
+		            'STEP 2 - PLAN:',
+		            '  → 复杂任务: set_prd → approve_prd',
+		            '  → 所有任务: update_plan(mode=merge, items=[...])',
+		            '  → 必须包含: Checklist项目',
+		            '',
+		            'STEP 3 - ACT [循环]:',
+		            '  DO {',
+		            '    → 小步实现一个任务',
+		            '    → update_plan(标记done)',
+		            '    → verify_action(检查结果)',
+		            '  } WHILE (还有未完成项)',
+		            '',
+		            'STEP 4 - VERIFY:',
+		            '  → 运行: 测试/构建/lint',
+		            '  → 无法运行: 提供手动步骤',
+		            '',
+		            'STEP 5 - REVIEW [必须]:',
+		            '  → code_review(summary="...", qualityChecks={...})',
+		            '  → 如果有缺口: 返回STEP 3',
+		            '',
+		            'STEP 6 - FINISH:',
+		            '  → check_plan() 确认100%',
+		            '  → ask_continue(reason="完成内容+风险+验证步骤+下一步")',
+		            '  → 等待用户决定',
+		            '',
+		            '【质量检查 - 交付前】',
+		            '☐ Overview: 新项目需generate_overview',
+		            '☐ Plan: 进度100%',
+		            '☐ Walkthrough: 决策已记录',
+		            '☐ WAM: wam_status clean',
+		            '☐ 错误: record_lesson',
+		            '',
+		            '【自检 - 每步前】',
+		            '? 信息最新吗?',
+		            '? 代码正确吗?',
+		            '? 安全吗?',
+		            '? 用户想要什么?'
 		        ].join('\\n'),
         'sidebar.trackerTitle': '项目跟踪',
         'sidebar.trackerProject': '项目',
@@ -451,15 +491,55 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
 	        'sidebar.promptTitle': 'Prompt',
 	        'sidebar.promptText': 'Hard rule: when done, you must call ask_continue.',
 		        'sidebar.promptCopyText': [
-		            'Hard rule: final delivery must be ask_continue(reason).',
-		            'Start: preflight(userPrompt=...) (runs get_project_status/check_plan/memory_search/rag_search/wam_status).',
-		            'Each new user prompt: preflight(userPrompt=...) before any edits/runs.',
-		            'Complex work: set_prd → user approval → update_plan(mode=merge) (Plan+Checklist).',
-		            'After Plan (recommended): ensure_release_gate to auto-add tests/build/lint/deps/security/perf/final review gates.',
-		            'During work: follow the Plan; keep update_plan + update_walkthrough current; mistakes → record_lesson + save_memory.',
-		            'WAM: keep tracking/memory clean + rollbackable (wam_status; optional wam_diff; then wam_commit()).',
-		            'Hooks: if blocked/errored, open Memory and read hook:last_block / hook:last_warning / hook:last_error, fix, then retry.',
-		            'Before done: check_plan → finally ask_continue(reason) and wait.',
+		            '=== WindsurfAutoMcp ACP Workflow ===',
+		            '',
+		            '[HARD RULES - Cannot Violate]',
+		            'R1. When DONE: code_review() → ask_continue(reason)',
+		            'R2. New input: preflight(userPrompt=...) FIRST',
+		            'R3. Before action: Must have Plan with Checklist',
+		            '',
+		            '[ACP LOOP - Follow in Order]',
+		            'STEP 1 - PREFLIGHT:',
+		            '  → preflight(userPrompt="user input")',
+		            '  → Reads: project status/Plan/Memory/WAM',
+		            '',
+		            'STEP 2 - PLAN:',
+		            '  → Complex tasks: set_prd → approve_prd',
+		            '  → All tasks: update_plan(mode=merge, items=[...])',
+		            '  → Must include: Checklist items',
+		            '',
+		            'STEP 3 - ACT [LOOP]:',
+		            '  DO {',
+		            '    → Implement one small task',
+		            '    → update_plan(mark done)',
+		            '    → verify_action(check result)',
+		            '  } WHILE (items remain)',
+		            '',
+		            'STEP 4 - VERIFY:',
+		            '  → Run: tests/build/lint',
+		            '  → If cannot run: provide manual steps',
+		            '',
+		            'STEP 5 - REVIEW [REQUIRED]:',
+		            '  → code_review(summary="...", qualityChecks={...})',
+		            '  → If gaps found: GO BACK to STEP 3',
+		            '',
+		            'STEP 6 - FINISH:',
+		            '  → check_plan() verify 100%',
+		            '  → ask_continue(reason="done+risks+verify+next")',
+		            '  → WAIT for user decision',
+		            '',
+		            '[QUALITY CHECKS - Before Delivery]',
+		            '☐ Overview: new project needs generate_overview',
+		            '☐ Plan: progress 100%',
+		            '☐ Walkthrough: decisions recorded',
+		            '☐ WAM: wam_status clean',
+		            '☐ Errors: record_lesson',
+		            '',
+		            '[SELF-CHECK - Before Each Step]',
+		            '? Is info current?',
+		            '? Is code correct?',
+		            '? Is it safe?',
+		            '? What does user want?',
             ...(false ? [
             'Hard rule (highest priority): When you decide a task is done / ready to deliver, do NOT output a normal final response; you MUST call WindsurfAutoMcp ask_continue and put in reason: what was done, risks/notes, verification steps/commands, and next steps.',
             '',
@@ -3274,10 +3354,15 @@ let extensionContext: vscode.ExtensionContext;
 	    wamDiffCalls: 0,
 	    wamVerifyCalls: 0,
 	    wamResetCalls: 0,
-	    wamStashCalls: 0,
+    wamStashCalls: 0,
 	    saveMemoryCalls: 0,
 	    getMemoryCalls: 0,
 	    listMemoryCalls: 0,
+	    workflowStatusCalls: 0,
+	    verifyActionCalls: 0,
+	    generateUserStoriesCalls: 0,
+	    wamClearCalls: 0,
+	    codeReviewCalls: 0,
 	    imageUploads: 0,
 	    startTime: Date.now()
 	};
@@ -3373,6 +3458,18 @@ const TOOLS = [
 	                content: { type: 'string', description: 'PRD content / PRD 内容' }
 	            },
 	            required: ['content']
+	        }
+	    },
+	    {
+	        name: 'approve_prd',
+	        description: 'Open PRD review dialog and set approval status (without rewriting PRD content) / 打开 PRD 审核对话框并设置审批状态（不改写 PRD 内容）',
+	        inputSchema: {
+	            type: 'object',
+	            properties: {
+	                rationale: { type: 'string', description: 'Why you are approving/reviewing PRD (required by hooks) / 为什么审批/审核 PRD（hooks 要求）' },
+	                content: { type: 'string', description: 'Optional PRD content to review (defaults to current PRD) / 可选 PRD 内容（默认使用当前 PRD）' },
+	                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
+	            }
 	        }
 	    },
 		    {
@@ -3793,16 +3890,146 @@ const TOOLS = [
 	    },
 	    {
 	        name: 'generate_walkthrough',
-	        description: 'Alias of update_walkthrough / update_walkthrough 的别名',
+	        description: 'Auto-generate walkthrough summary from project state (PRD, Plan, decisions, progress) / 从项目状态自动生成走查摘要（PRD、计划、决策、进度）',
 	        inputSchema: {
 	            type: 'object',
 	            properties: {
-	                rationale: { type: 'string', description: 'Why you are updating the walkthrough (required by hooks) / 为什么更新走查（hooks 要求）' },
-	                content: { type: 'string', description: 'Walkthrough markdown content / 摘要 Markdown 内容' }
-	            },
-	            required: ['content']
+	                rationale: { type: 'string', description: 'Why you are generating the walkthrough (required by hooks) / 为什么生成走查（hooks 要求）' },
+	                includeDecisions: { type: 'boolean', description: 'Include key decisions / 包含关键决策' },
+	                includeLessons: { type: 'boolean', description: 'Include lessons learned / 包含经验教训' },
+	                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
+	            }
 	        }
-	    }
+	    },
+    // ==================== Workflow & Self-Check Tools ====================
+    {
+        name: 'workflow_status',
+        description: 'Check current workflow state and get guidance on next required step / 检查当前工作流状态并获取下一步指引',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
+            }
+        }
+    },
+    {
+        name: 'verify_action',
+        description: 'Self-verify after completing an action: report what was done, check for errors, confirm success / 完成操作后自检：报告执行内容、检查错误、确认成功',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                action: { type: 'string', description: 'What action was performed / 执行了什么操作' },
+                result: { type: 'string', description: 'Outcome of the action / 操作结果' },
+                errors: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: 'Any errors encountered / 遇到的错误'
+                },
+                nextStep: { type: 'string', description: 'Proposed next step / 建议的下一步' },
+                selfQuestions: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: 'Self-reflection questions asked / 自问自答的问题'
+                }
+            },
+            required: ['action', 'result']
+        }
+    },
+    {
+        name: 'generate_user_stories',
+        description: 'Generate production-ready user stories with Given/When/Then acceptance criteria / 生成带有 Given/When/Then 验收标准的生产就绪用户故事',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                rationale: { type: 'string', description: 'Why you are generating user stories (required by hooks) / 为什么生成用户故事（hooks 要求）' },
+                epic: { type: 'string', description: 'Epic name / 史诗名称' },
+                stories: {
+                    type: 'array',
+                    description: 'User stories to generate / 要生成的用户故事',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            title: { type: 'string', description: 'Story title / 故事标题' },
+                            asA: { type: 'string', description: 'As a [role] / 作为[角色]' },
+                            iWant: { type: 'string', description: 'I want [feature] / 我想要[功能]' },
+                            soThat: { type: 'string', description: 'So that [benefit] / 以便[收益]' },
+                            acceptanceCriteria: {
+                                type: 'array',
+                                description: 'Given/When/Then acceptance criteria / Given/When/Then 验收标准',
+                                items: {
+                                    type: 'object',
+                                    properties: {
+                                        given: { type: 'string', description: 'Given [precondition] / 给定[前置条件]' },
+                                        when: { type: 'string', description: 'When [action] / 当[操作]' },
+                                        then: { type: 'string', description: 'Then [expected result] / 则[期望结果]' }
+                                    },
+                                    required: ['given', 'when', 'then']
+                                }
+                            },
+                            priority: { type: 'string', enum: ['must', 'should', 'could', 'wont'], description: 'MoSCoW priority / MoSCoW 优先级' },
+                            storyPoints: { type: 'number', description: 'Story points estimate / 故事点估算' },
+                            tags: { type: 'array', items: { type: 'string' }, description: 'Tags / 标签' }
+                        },
+                        required: ['title', 'asA', 'iWant', 'soThat', 'acceptanceCriteria']
+                    }
+                },
+                outputFormat: { type: 'string', enum: ['markdown', 'json', 'jira'], description: 'Output format / 输出格式' },
+                savePath: { type: 'string', description: 'Path to save user stories (in .wam folder) / 保存用户故事的路径（在 .wam 文件夹中）' }
+            },
+            required: ['stories']
+        }
+    },
+    {
+        name: 'wam_clear',
+        description: 'Clear/reset all WAM data for the current project (tracker, memory, commits). Requires user confirmation. / 清除/重置当前项目的所有 WAM 数据（跟踪、记忆、提交）。需用户确认。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                rationale: { type: 'string', description: 'Why you are clearing WAM data (required) / 为什么清除 WAM 数据（必填）' },
+                scope: { type: 'string', enum: ['project', 'all'], description: 'Scope: project only or all data / 范围：仅项目或所有数据' },
+                keepMemory: { type: 'boolean', description: 'Keep memory/lessons (default: false) / 保留记忆/经验（默认: false）' },
+                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
+            },
+            required: ['rationale']
+        }
+    },
+    {
+        name: 'code_review',
+        description: 'Perform code review before completion: check quality, security, gaps, acceptance criteria. Required before ask_continue. / 完成前执行代码审查：检查质量、安全、缺口、验收标准。ask_continue 前必须调用。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                rationale: { type: 'string', description: 'Why you are doing code review (required by hooks) / 为什么进行代码审查（hooks 要求）' },
+                filesReviewed: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: 'List of files reviewed / 已审查的文件列表'
+                },
+                qualityChecks: {
+                    type: 'object',
+                    description: 'Quality checks performed / 执行的质量检查',
+                    properties: {
+                        lintPassed: { type: 'boolean', description: 'Lint/format passed / Lint/格式化通过' },
+                        testsPassed: { type: 'boolean', description: 'Tests passed / 测试通过' },
+                        buildPassed: { type: 'boolean', description: 'Build succeeded / 构建成功' },
+                        securityChecked: { type: 'boolean', description: 'Security review done / 安全审查完成' }
+                    }
+                },
+                gaps: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: 'Identified gaps or issues / 识别的缺口或问题'
+                },
+                acceptanceCriteriaMet: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: 'Acceptance criteria verified as met / 已验证满足的验收标准'
+                },
+                summary: { type: 'string', description: 'Review summary / 审查摘要' }
+            },
+            required: ['summary']
+        }
+    }
 ];
 
 // ==================== 扩展激活 ====================
@@ -4081,6 +4308,9 @@ async function handleToolCall(name: string, args: any): Promise<any> {
             stats.setPrdCalls++;
             result = await handleSetPrd(args);
             break;
+        case 'approve_prd':
+            result = await handleApprovePrd(args);
+            break;
         case 'update_overview':
             stats.updateOverviewCalls++;
             result = await handleUpdateOverview(args);
@@ -4199,7 +4429,27 @@ async function handleToolCall(name: string, args: any): Promise<any> {
             break;
         case 'generate_walkthrough':
             stats.updateWalkthroughCalls++;
-            result = await handleUpdateWalkthrough(args);
+            result = await handleGenerateWalkthrough(args);
+            break;
+        case 'workflow_status':
+            stats.workflowStatusCalls++;
+            result = await handleWorkflowStatus(args);
+            break;
+        case 'verify_action':
+            stats.verifyActionCalls++;
+            result = await handleVerifyAction(args);
+            break;
+        case 'generate_user_stories':
+            stats.generateUserStoriesCalls++;
+            result = await handleGenerateUserStories(args);
+            break;
+        case 'wam_clear':
+            stats.wamClearCalls++;
+            result = await handleWamClear(args);
+            break;
+        case 'code_review':
+            stats.codeReviewCalls++;
+            result = await handleCodeReview(args);
             break;
         default:
             {
@@ -4661,6 +4911,46 @@ async function handleSetPrd(args: any): Promise<any> {
     appendWalkthroughEntry(project, lang === 'en' ? 'PRD draft updated.' : 'PRD 草案已更新。', lang);
     project.updatedAt = nowIso();
     saveTrackerAndNotify(data, project);
+
+    const approval = await requestPrdApproval(content, project.name);
+    if (approval.approved) {
+        if (!approval.approver) {
+            approval.approver = lang === 'en' ? 'user' : '用户';
+        }
+        project.prd.status = 'approved';
+        project.prd.approvedBy = approval.approver;
+        project.prd.approvedAt = nowIso();
+        bumpProjectStat(project, 'prdApprovals');
+        appendWalkthroughEntry(project, lang === 'en' ? 'PRD approved.' : 'PRD 已审批。', lang);
+    } else if (approval.note) {
+        project.prd.reviewNote = approval.note;
+    }
+    project.prd.reviewedAt = nowIso();
+    project.updatedAt = nowIso();
+    saveTrackerAndNotify(data, project);
+
+    const text = approval.approved
+        ? (lang === 'en' ? 'PRD approved by user.' : 'PRD 已由用户审批。')
+        : (lang === 'en' ? 'PRD review complete (changes requested).' : 'PRD 审核完成（需修改）。');
+    return {
+        content: [
+            { type: 'text', text },
+            { type: 'text', text: `PRD_JSON:\n${JSON.stringify(buildTrackerSnapshot(project), null, 2)}` }
+        ]
+    };
+}
+
+async function handleApprovePrd(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const rootPath = typeof args?.rootPath === 'string' ? args.rootPath : undefined;
+    const { data, project } = resolveProjectTracker(rootPath);
+
+    const reviewContent = typeof args?.content === 'string' ? args.content.trim() : '';
+    const content = reviewContent || String(project.prd?.content || '').trim();
+    if (!content) {
+        const msg = lang === 'en' ? 'approve_prd requires existing PRD content (or pass content).' : 'approve_prd 需要已有 PRD 内容（或传入 content）。';
+        throw new Error(msg);
+    }
 
     const approval = await requestPrdApproval(content, project.name);
     if (approval.approved) {
@@ -5279,6 +5569,10 @@ async function handleUpdatePlan(args: any): Promise<any> {
         const msg = lang === 'en' ? 'update_plan requires items/text or summary.' : 'update_plan 需要 items/text 或 summary。';
         throw new Error(msg);
     }
+    
+    // Capture progress before update for milestone detection
+    const beforeProgress = calculatePlanProgress(project.plan?.items || []);
+    
     if (summary !== undefined) {
         project.plan.summary = summary;
         bumpProjectStat(project, 'planUpdates');
@@ -5296,13 +5590,83 @@ async function handleUpdatePlan(args: any): Promise<any> {
         }
         bumpProjectStat(project, 'planUpdates');
     }
-    appendWalkthroughEntry(project, lang === 'en' ? 'Plan updated.' : '计划已更新。', lang);
+    
+    // Calculate progress after update
+    const afterProgress = calculatePlanProgress(project.plan?.items || []);
+    
+    // Detect milestones (25%, 50%, 75%, 100%)
+    const milestones = [25, 50, 75, 100];
+    const crossedMilestones: number[] = [];
+    for (const m of milestones) {
+        if (beforeProgress.percent < m && afterProgress.percent >= m) {
+            crossedMilestones.push(m);
+        }
+    }
+    
+    // Build detailed walkthrough entry
+    const walkthroughLines: string[] = [];
+    walkthroughLines.push(lang === 'en' 
+        ? `Plan updated: ${afterProgress.done}/${afterProgress.total} (${afterProgress.percent}%)`
+        : `计划更新: ${afterProgress.done}/${afterProgress.total} (${afterProgress.percent}%)`);
+    
+    if (crossedMilestones.length > 0) {
+        const milestoneStr = crossedMilestones.join(', ');
+        walkthroughLines.push(lang === 'en'
+            ? `🎯 Milestone reached: ${milestoneStr}%`
+            : `🎯 里程碑达成: ${milestoneStr}%`);
+    }
+    
+    // List recently completed items
+    const recentlyDone = items.filter(it => it.status === 'done').slice(0, 3);
+    if (recentlyDone.length > 0) {
+        const doneTexts = recentlyDone.map(it => it.text.slice(0, 50)).join('; ');
+        walkthroughLines.push(lang === 'en'
+            ? `Completed: ${doneTexts}`
+            : `已完成: ${doneTexts}`);
+    }
+    
+    appendWalkthroughEntry(project, walkthroughLines.join(' | '), lang);
     project.stats = normalizeTrackerStats(project.stats);
     project.stats.lastPlanUpdateAt = nowIso();
     project.updatedAt = nowIso();
     saveTrackerAndNotify(data, project);
-    const text = lang === 'en' ? 'Plan updated.' : '计划已更新。';
+    
+    // Build response with progress info
+    const responseLines: string[] = [];
+    responseLines.push(lang === 'en' ? 'Plan updated.' : '计划已更新。');
+    responseLines.push(lang === 'en'
+        ? `Progress: ${afterProgress.done}/${afterProgress.total} (${afterProgress.percent}%)`
+        : `进度: ${afterProgress.done}/${afterProgress.total} (${afterProgress.percent}%)`);
+    
+    if (crossedMilestones.length > 0) {
+        responseLines.push(lang === 'en'
+            ? `🎯 Milestone: ${crossedMilestones.join(', ')}% reached!`
+            : `🎯 里程碑: ${crossedMilestones.join(', ')}% 已达成!`);
+    }
+    
+    if (afterProgress.percent === 100) {
+        responseLines.push(lang === 'en'
+            ? '✅ All items complete! Call ask_continue() to finish.'
+            : '✅ 所有项目已完成！调用 ask_continue() 完成交付。');
+    } else {
+        const nextTodo = project.plan.items?.find(it => it.status === 'todo' || it.status === 'doing');
+        if (nextTodo) {
+            responseLines.push(lang === 'en'
+                ? `Next: ${nextTodo.text.slice(0, 60)}`
+                : `下一项: ${nextTodo.text.slice(0, 60)}`);
+        }
+    }
+    
+    const text = responseLines.join('\n');
     return { content: [{ type: 'text', text }, { type: 'text', text: `PLAN_JSON:\n${JSON.stringify(buildTrackerSnapshot(project), null, 2)}` }] };
+}
+
+function calculatePlanProgress(items: TrackerItem[]): { total: number; done: number; percent: number } {
+    const validItems = items.filter(it => it && it.text);
+    const total = validItems.length;
+    const done = validItems.filter(it => it.status === 'done').length;
+    const percent = total > 0 ? Math.round((done / total) * 100) : 0;
+    return { total, done, percent };
 }
 
 async function handleGetProjectStatus(args: any): Promise<any> {
@@ -7987,6 +8351,345 @@ async function handleUpdateWalkthrough(args: any): Promise<any> {
     return { content: [{ type: 'text', text }] };
 }
 
+async function handleGenerateWalkthrough(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const rootPath = typeof args?.rootPath === 'string' ? args.rootPath : undefined;
+    const includeDecisions = args?.includeDecisions !== false;
+    const includeLessons = args?.includeLessons !== false;
+    
+    const { data, project } = resolveProjectTracker(rootPath);
+    const snapshot = buildTrackerSnapshot(project);
+    
+    // Build auto-generated walkthrough content
+    const lines: string[] = [];
+    
+    // Header
+    lines.push(lang === 'en' ? '# Project Walkthrough' : '# 项目走查');
+    lines.push(`*${lang === 'en' ? 'Auto-generated' : '自动生成'}: ${nowIso()}*`);
+    lines.push('');
+    
+    // Project Overview
+    if (project.overview?.content) {
+        lines.push(lang === 'en' ? '## Overview' : '## 概览');
+        lines.push(project.overview.content.slice(0, 500));
+        if (project.overview.content.length > 500) lines.push('...');
+        lines.push('');
+    }
+    
+    // PRD Summary
+    if (project.prd?.content) {
+        lines.push(lang === 'en' ? '## PRD Summary' : '## PRD 摘要');
+        const prdLines = project.prd.content.split('\n').slice(0, 10);
+        lines.push(prdLines.join('\n').slice(0, 400));
+        if (project.prd.content.length > 400) lines.push('...');
+        lines.push(`*${lang === 'en' ? 'Status' : '状态'}: ${project.prd.status === 'approved' ? '✅ Approved' : '⏳ Pending'}*`);
+        lines.push('');
+    }
+    
+    // Plan Progress
+    lines.push(lang === 'en' ? '## Plan Progress' : '## 计划进度');
+    const progress = snapshot.progress;
+    lines.push(`**${lang === 'en' ? 'Progress' : '进度'}:** ${progress.done}/${progress.total} (${progress.percent}%)`);
+    if (project.plan?.summary) {
+        lines.push(`**${lang === 'en' ? 'Summary' : '摘要'}:** ${project.plan.summary.slice(0, 200)}`);
+    }
+    
+    // Show plan items
+    if (project.plan?.items?.length) {
+        lines.push('');
+        const doneItems = project.plan.items.filter(it => it.status === 'done').slice(-5);
+        const doingItems = project.plan.items.filter(it => it.status === 'doing');
+        const todoItems = project.plan.items.filter(it => it.status === 'todo').slice(0, 3);
+        
+        if (doneItems.length > 0) {
+            lines.push(lang === 'en' ? '### Recently Completed' : '### 最近完成');
+            doneItems.forEach(it => lines.push(`- [x] ${it.text.slice(0, 60)}`));
+        }
+        if (doingItems.length > 0) {
+            lines.push(lang === 'en' ? '### In Progress' : '### 进行中');
+            doingItems.forEach(it => lines.push(`- [~] ${it.text.slice(0, 60)}`));
+        }
+        if (todoItems.length > 0) {
+            lines.push(lang === 'en' ? '### Next Up' : '### 待处理');
+            todoItems.forEach(it => lines.push(`- [ ] ${it.text.slice(0, 60)}`));
+        }
+    }
+    lines.push('');
+    
+    // Key Decisions (from existing walkthrough)
+    if (includeDecisions && project.walkthrough?.content) {
+        const existingContent = project.walkthrough.content;
+        // Extract decision-like entries
+        const decisionPatterns = ['decision', 'chose', 'decided', 'selected', '决定', '选择', '采用'];
+        const existingLines = existingContent.split('\n');
+        const decisions = existingLines.filter(line => 
+            decisionPatterns.some(p => line.toLowerCase().includes(p))
+        ).slice(-5);
+        
+        if (decisions.length > 0) {
+            lines.push(lang === 'en' ? '## Key Decisions' : '## 关键决策');
+            decisions.forEach(d => lines.push(`- ${d.slice(0, 100)}`));
+            lines.push('');
+        }
+    }
+    
+    // Lessons Learned
+    if (includeLessons) {
+        try {
+            const { project: memoryStore } = resolveProjectMemory(rootPath);
+            const memories = memoryStore.memories || {};
+            const lessons = Object.entries(memories)
+                .filter(([k, v]) => k.startsWith('lesson:') || v.kind === 'lesson')
+                .slice(-3);
+            
+            if (lessons.length > 0) {
+                lines.push(lang === 'en' ? '## Lessons Learned' : '## 经验教训');
+                for (const [key, entry] of lessons) {
+                    const title = key.replace('lesson:', '').slice(0, 50);
+                    lines.push(`- **${title}**: ${(entry.content || '').slice(0, 80)}...`);
+                }
+                lines.push('');
+            }
+        } catch {
+            // ignore memory errors
+        }
+    }
+    
+    // Stats
+    lines.push(lang === 'en' ? '## Session Stats' : '## 会话统计');
+    const stats = project.stats || {};
+    lines.push(`- ${lang === 'en' ? 'Plan Updates' : '计划更新'}: ${stats.planUpdates || 0}`);
+    lines.push(`- ${lang === 'en' ? 'Overview Updates' : '概览更新'}: ${stats.overviewUpdates || 0}`);
+    lines.push(`- ${lang === 'en' ? 'Walkthrough Updates' : '走查更新'}: ${stats.walkthroughUpdates || 0}`);
+    lines.push(`- ${lang === 'en' ? 'Last Preflight' : '上次预检'}: ${(stats as any).lastPreflightAt || 'N/A'}`);
+    
+    const content = lines.join('\n');
+    
+    // Update walkthrough
+    project.walkthrough = {
+        content,
+        updatedAt: nowIso()
+    };
+    bumpProjectStat(project, 'walkthroughUpdates');
+    project.stats = normalizeTrackerStats(project.stats);
+    project.stats.lastWalkthroughUpdateAt = nowIso();
+    project.updatedAt = nowIso();
+    saveTrackerAndNotify(data, project);
+    
+    const text = lang === 'en' ? 'Walkthrough auto-generated.' : '走查已自动生成。';
+    return { content: [{ type: 'text', text }, { type: 'text', text: `WALKTHROUGH_JSON:\n${JSON.stringify({ content }, null, 2)}` }] };
+}
+
+// ==================== Workflow & Self-Check Handlers ====================
+
+async function handleWorkflowStatus(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    try {
+        const { project } = resolveProjectTracker();
+        const snapshot = buildTrackerSnapshot(project);
+        
+        // Determine workflow state based on tracker state
+        const checks = {
+            hasOverview: !!project.overview?.content,
+            hasPlan: !!project.plan?.summary || (project.plan?.items?.length || 0) > 0,
+            hasPrd: !!project.prd?.content,
+            hasWalkthrough: !!project.walkthrough?.content,
+            planProgress: snapshot.progress,
+            lastPreflight: (project.stats as any)?.lastPreflightAt,
+            lastPlanUpdate: project.stats?.lastPlanUpdateAt,
+            lastWamCommit: (project.stats as any)?.lastWamCommitAt
+        };
+        
+        // Determine next required step
+        const nextSteps: string[] = [];
+        if (!checks.lastPreflight) {
+            nextSteps.push(lang === 'en' ? 'Run preflight() first' : '请先运行 preflight()');
+        }
+        if (!checks.hasOverview) {
+            nextSteps.push(lang === 'en' ? 'Generate overview' : '生成概览');
+        }
+        if (!checks.hasPlan) {
+            nextSteps.push(lang === 'en' ? 'Create plan with checklist' : '创建带清单的计划');
+        }
+        if (checks.hasPlan && checks.planProgress.done < checks.planProgress.total) {
+            nextSteps.push(lang === 'en' 
+                ? `Complete plan items (${checks.planProgress.done}/${checks.planProgress.total})` 
+                : `完成计划项 (${checks.planProgress.done}/${checks.planProgress.total})`);
+        }
+        if (checks.planProgress.done === checks.planProgress.total && checks.planProgress.total > 0) {
+            nextSteps.push(lang === 'en' ? 'Call ask_continue() to finish' : '调用 ask_continue() 完成');
+        }
+        
+        const status = {
+            checks,
+            nextSteps,
+            guidance: lang === 'en'
+                ? 'Workflow: PREFLIGHT → READ → PLAN → ACT → VERIFY → ASK'
+                : '工作流: PREFLIGHT → READ → PLAN → ACT → VERIFY → ASK'
+        };
+        
+        return { content: [{ type: 'text', text: JSON.stringify(status, null, 2) }] };
+    } catch (e: any) {
+        const msg = lang === 'en' 
+            ? `workflow_status error: ${e?.message}` 
+            : `workflow_status 错误: ${e?.message}`;
+        return { content: [{ type: 'text', text: msg }] };
+    }
+}
+
+async function handleVerifyAction(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const { action, result, errors, nextStep, selfQuestions } = args;
+    
+    const verification = {
+        action: action || '',
+        result: result || '',
+        errors: Array.isArray(errors) ? errors : [],
+        nextStep: nextStep || '',
+        selfQuestions: Array.isArray(selfQuestions) ? selfQuestions : [],
+        timestamp: nowIso(),
+        hasErrors: Array.isArray(errors) && errors.length > 0
+    };
+    
+    // Log to walkthrough for audit trail
+    try {
+        const { data, project } = resolveProjectTracker();
+        const entry = lang === 'en'
+            ? `[Verify] ${action}: ${verification.hasErrors ? 'ERRORS' : 'OK'} - ${result.slice(0, 100)}`
+            : `[验证] ${action}: ${verification.hasErrors ? '错误' : '成功'} - ${result.slice(0, 100)}`;
+        appendWalkthroughEntry(project, entry, lang);
+        project.updatedAt = nowIso();
+        saveTrackerAndNotify(data, project);
+    } catch {
+        // best-effort
+    }
+    
+    // Build response with guidance
+    const guidance: string[] = [];
+    if (verification.hasErrors) {
+        guidance.push(lang === 'en' 
+            ? '⚠️ Errors detected. Review and fix before proceeding.'
+            : '⚠️ 检测到错误。继续之前请检查并修复。');
+    } else {
+        guidance.push(lang === 'en' 
+            ? '✓ Action verified successfully.'
+            : '✓ 操作验证成功。');
+    }
+    if (nextStep) {
+        guidance.push(lang === 'en' 
+            ? `Next: ${nextStep}`
+            : `下一步: ${nextStep}`);
+    }
+    
+    return { 
+        content: [{ 
+            type: 'text', 
+            text: JSON.stringify({ verification, guidance }, null, 2) 
+        }] 
+    };
+}
+
+async function handleGenerateUserStories(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const { epic, stories, outputFormat = 'markdown', savePath } = args;
+    
+    if (!Array.isArray(stories) || stories.length === 0) {
+        const msg = lang === 'en' 
+            ? 'generate_user_stories requires at least one story.'
+            : 'generate_user_stories 需要至少一个用户故事。';
+        throw new Error(msg);
+    }
+    
+    // Format stories
+    const formattedStories = stories.map((story: any, idx: number) => {
+        const ac = Array.isArray(story.acceptanceCriteria) ? story.acceptanceCriteria : [];
+        return {
+            id: `US-${String(idx + 1).padStart(3, '0')}`,
+            title: story.title || '',
+            asA: story.asA || '',
+            iWant: story.iWant || '',
+            soThat: story.soThat || '',
+            acceptanceCriteria: ac.map((criteria: any, cIdx: number) => ({
+                id: `AC-${idx + 1}.${cIdx + 1}`,
+                given: criteria.given || '',
+                when: criteria.when || '',
+                then: criteria.then || ''
+            })),
+            priority: story.priority || 'should',
+            storyPoints: story.storyPoints || 0,
+            tags: Array.isArray(story.tags) ? story.tags : []
+        };
+    });
+    
+    let output = '';
+    
+    if (outputFormat === 'json') {
+        output = JSON.stringify({ epic, stories: formattedStories }, null, 2);
+    } else if (outputFormat === 'jira') {
+        // JIRA-compatible format
+        const jiraStories = formattedStories.map((s: any) => ({
+            summary: s.title,
+            description: `*As a* ${s.asA}\n*I want* ${s.iWant}\n*So that* ${s.soThat}\n\nh3. Acceptance Criteria\n${s.acceptanceCriteria.map((ac: any) => 
+                `* *Given* ${ac.given}\n  *When* ${ac.when}\n  *Then* ${ac.then}`
+            ).join('\n')}`,
+            priority: s.priority === 'must' ? 'Highest' : s.priority === 'should' ? 'High' : s.priority === 'could' ? 'Medium' : 'Low',
+            storyPoints: s.storyPoints,
+            labels: s.tags
+        }));
+        output = JSON.stringify({ epic, stories: jiraStories }, null, 2);
+    } else {
+        // Markdown format
+        const lines: string[] = [];
+        if (epic) lines.push(`# Epic: ${epic}\n`);
+        
+        for (const s of formattedStories) {
+            lines.push(`## ${s.id}: ${s.title}`);
+            lines.push(`**Priority:** ${s.priority.toUpperCase()} | **Story Points:** ${s.storyPoints}`);
+            if (s.tags.length) lines.push(`**Tags:** ${s.tags.join(', ')}`);
+            lines.push('');
+            lines.push(`> **As a** ${s.asA}`);
+            lines.push(`> **I want** ${s.iWant}`);
+            lines.push(`> **So that** ${s.soThat}`);
+            lines.push('');
+            lines.push('### Acceptance Criteria');
+            for (const ac of s.acceptanceCriteria) {
+                lines.push(`#### ${ac.id}`);
+                lines.push(`- **Given** ${ac.given}`);
+                lines.push(`- **When** ${ac.when}`);
+                lines.push(`- **Then** ${ac.then}`);
+                lines.push('');
+            }
+            lines.push('---\n');
+        }
+        output = lines.join('\n');
+    }
+    
+    // Save to .wam folder if path provided
+    if (savePath) {
+        try {
+            const rootPath = getWorkspaceRootPath() || '';
+            const wamDir = path.join(rootPath, '.wam');
+            const fullPath = path.join(wamDir, savePath);
+            const dir = path.dirname(fullPath);
+            if (!fs.existsSync(dir)) {
+                fs.mkdirSync(dir, { recursive: true });
+            }
+            fs.writeFileSync(fullPath, output, 'utf-8');
+            const savedMsg = lang === 'en' 
+                ? `User stories saved to: ${fullPath}`
+                : `用户故事已保存到: ${fullPath}`;
+            return { content: [{ type: 'text', text: `${savedMsg}\n\n${output}` }] };
+        } catch (e: any) {
+            const errMsg = lang === 'en'
+                ? `Failed to save: ${e?.message}`
+                : `保存失败: ${e?.message}`;
+            return { content: [{ type: 'text', text: `${errMsg}\n\n${output}` }] };
+        }
+    }
+    
+    return { content: [{ type: 'text', text: output }] };
+}
+
 async function handleAskQuestion(args: any): Promise<any> {
     const { title, message, allowImage } = args;
     const lang = getUiLanguage();
@@ -8101,10 +8804,21 @@ async function handleAskContinue(args: any): Promise<any> {
     const { reason } = args;
     const lang = getUiLanguage();
     let resolvedReason = String(reason || '').trim() || getDefaultReason(lang);
+    
+    // Build project context for final output
+    let projectContext: any = null;
     try {
         const { data, project } = resolveProjectTracker();
         const snapshot = buildTrackerSnapshot(project);
         const progress = snapshot.progress;
+        
+        projectContext = {
+            project,
+            snapshot,
+            progress,
+            data
+        };
+        
         if (progress.total > 0) {
             const prefix = lang === 'en' ? '[Auto]' : '【自动】';
             const progLine =
@@ -8151,7 +8865,8 @@ async function handleAskContinue(args: any): Promise<any> {
         pendingRequests.set(requestId, {
             resolve: (value: any) => {
                 pendingRequests.delete(requestId);
-                // 格式化为 MCP 协议要求的响应格式
+                
+                // User wants to continue
                 if (value && value.continue) {
                     const content: any[] = [];
                     let text = tr('tool.userContinue', {}, lang);
@@ -8159,21 +8874,19 @@ async function handleAskContinue(args: any): Promise<any> {
                         text += tr('tool.newInstruction', { instruction: value.instruction }, lang);
                     }
                     content.push({ type: 'text', text });
-                    // 处理图片（如果有）
+                    // Handle images
                     const images: any[] = Array.isArray(value.images)
                         ? value.images
                         : (value.image ? [value.image] : []);
                     for (const img of images) {
                         if (!img) continue;
                         const imgStr = String(img);
-                        // 从 data URL 中提取纯 base64 数据
                         const base64Match = imgStr.match(/^data:image\/([^;]+);base64,(.+)$/);
                         if (base64Match) {
                             const mimeType = `image/${base64Match[1]}`;
                             const base64Data = base64Match[2];
                             content.push({ type: 'image', data: base64Data, mimeType });
                         } else {
-                            // 如果不是 data URL 格式，直接使用
                             content.push({ type: 'image', data: imgStr, mimeType: 'image/png' });
                         }
                     }
@@ -8182,18 +8895,266 @@ async function handleAskContinue(args: any): Promise<any> {
                     }
                     resolve({ content });
                 } else {
-                    resolve({ content: [{ type: 'text', text: tr('tool.userEnd', {}, lang) }] });
+                    // User ended - generate FINAL OUTPUT
+                    const finalOutput = generateFinalOutput(projectContext, lang, resolvedReason);
+                    resolve({ content: [{ type: 'text', text: finalOutput }] });
                 }
             },
             reject: () => {
                 pendingRequests.delete(requestId);
-                resolve({ content: [{ type: 'text', text: tr('tool.userEnd', {}, lang) }] });
+                // User cancelled - also generate final output
+                const finalOutput = generateFinalOutput(projectContext, lang, resolvedReason);
+                resolve({ content: [{ type: 'text', text: finalOutput }] });
             },
             timestamp: Date.now()
         });
-
-        // 无限制等待，直到用户响应
     });
+}
+
+async function handleWamClear(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const rootPath = typeof args?.rootPath === 'string' ? args.rootPath : undefined;
+    const scope = args?.scope === 'all' ? 'all' : 'project';
+    const keepMemory = args?.keepMemory === true;
+    
+    // Require user confirmation
+    const confirmMsg = lang === 'en'
+        ? `⚠️ WARNING: This will permanently delete all WAM data for this project!\n\nScope: ${scope}\nKeep Memory: ${keepMemory}\n\nAre you sure you want to proceed?`
+        : `⚠️ 警告：这将永久删除此项目的所有 WAM 数据！\n\n范围: ${scope}\n保留记忆: ${keepMemory}\n\n确定要继续吗？`;
+    
+    const confirmed = await requestConfirmation(confirmMsg, lang === 'en' ? 'Clear WAM Data' : '清除 WAM 数据');
+    if (!confirmed) {
+        const text = lang === 'en' ? 'WAM clear canceled.' : 'WAM 清除已取消。';
+        return { content: [{ type: 'text', text }] };
+    }
+    
+    try {
+        const { data, project, rootPath: resolvedRoot } = resolveProjectTracker(rootPath);
+        
+        // Clear project tracker data
+        project.plan = { summary: '', items: [] };
+        project.prd = { content: '', status: 'draft' };
+        project.overview = { content: '', updatedAt: nowIso() };
+        project.walkthrough = { content: '', updatedAt: nowIso() };
+        project.stats = normalizeTrackerStats({});
+        project.updatedAt = nowIso();
+        
+        // Clear memory unless keepMemory is true
+        if (!keepMemory) {
+            try {
+                const { data: memData, project: memProject } = resolveProjectMemory(resolvedRoot);
+                memProject.memories = {};
+                memProject.timeline = [];
+                saveMemoryData(memData);
+            } catch {
+                // ignore memory errors
+            }
+        }
+        
+        // Clear WAM commits directory
+        if (project.projectId) {
+            try {
+                const wamDir = resolveProjectWamDir(project.projectId);
+                if (wamDir && fs.existsSync(wamDir)) {
+                    fs.rmSync(wamDir, { recursive: true, force: true });
+                }
+            } catch {
+                // ignore
+            }
+        }
+        
+        saveTrackerAndNotify(data, project);
+        
+        const text = lang === 'en' 
+            ? `✅ WAM data cleared for project. ${keepMemory ? 'Memory preserved.' : 'Memory also cleared.'}`
+            : `✅ 项目 WAM 数据已清除。${keepMemory ? '记忆已保留。' : '记忆也已清除。'}`;
+        return { content: [{ type: 'text', text }] };
+    } catch (e: any) {
+        const msg = lang === 'en' 
+            ? `WAM clear failed: ${e?.message}`
+            : `WAM 清除失败: ${e?.message}`;
+        throw new Error(msg);
+    }
+}
+
+async function handleCodeReview(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const { filesReviewed, qualityChecks, gaps, acceptanceCriteriaMet, summary } = args;
+    
+    if (!summary) {
+        const msg = lang === 'en' ? 'code_review requires summary.' : 'code_review 需要 summary。';
+        throw new Error(msg);
+    }
+    
+    const review = {
+        timestamp: nowIso(),
+        filesReviewed: Array.isArray(filesReviewed) ? filesReviewed : [],
+        qualityChecks: qualityChecks || {},
+        gaps: Array.isArray(gaps) ? gaps : [],
+        acceptanceCriteriaMet: Array.isArray(acceptanceCriteriaMet) ? acceptanceCriteriaMet : [],
+        summary: summary || ''
+    };
+    
+    // Calculate review score
+    const checks = review.qualityChecks;
+    const passedChecks = [checks.lintPassed, checks.testsPassed, checks.buildPassed, checks.securityChecked].filter(Boolean).length;
+    const totalChecks = 4;
+    const checkScore = Math.round((passedChecks / totalChecks) * 100);
+    
+    // Determine if ready for completion
+    const hasGaps = review.gaps.length > 0;
+    const allChecksPassed = passedChecks === totalChecks;
+    const readyForCompletion = allChecksPassed && !hasGaps;
+    
+    // Log to walkthrough
+    try {
+        const { data, project } = resolveProjectTracker();
+        const entry = lang === 'en'
+            ? `[Code Review] Score: ${checkScore}% | Gaps: ${review.gaps.length} | Ready: ${readyForCompletion ? 'Yes' : 'No'}`
+            : `[代码审查] 得分: ${checkScore}% | 缺口: ${review.gaps.length} | 就绪: ${readyForCompletion ? '是' : '否'}`;
+        appendWalkthroughEntry(project, entry, lang);
+        project.updatedAt = nowIso();
+        saveTrackerAndNotify(data, project);
+    } catch {
+        // best-effort
+    }
+    
+    // Build response
+    const lines: string[] = [];
+    lines.push(lang === 'en' ? '## Code Review Results' : '## 代码审查结果');
+    lines.push('');
+    lines.push(`**${lang === 'en' ? 'Summary' : '摘要'}:** ${summary}`);
+    lines.push(`**${lang === 'en' ? 'Quality Score' : '质量得分'}:** ${checkScore}%`);
+    lines.push('');
+    
+    lines.push(lang === 'en' ? '### Quality Checks' : '### 质量检查');
+    lines.push(`- Lint/Format: ${checks.lintPassed ? '✅' : '❌'}`);
+    lines.push(`- Tests: ${checks.testsPassed ? '✅' : '❌'}`);
+    lines.push(`- Build: ${checks.buildPassed ? '✅' : '❌'}`);
+    lines.push(`- Security: ${checks.securityChecked ? '✅' : '❌'}`);
+    lines.push('');
+    
+    if (review.gaps.length > 0) {
+        lines.push(lang === 'en' ? '### ⚠️ Identified Gaps' : '### ⚠️ 识别的缺口');
+        review.gaps.forEach(gap => lines.push(`- ${gap}`));
+        lines.push('');
+    }
+    
+    if (review.acceptanceCriteriaMet.length > 0) {
+        lines.push(lang === 'en' ? '### ✅ Acceptance Criteria Met' : '### ✅ 已满足的验收标准');
+        review.acceptanceCriteriaMet.forEach(ac => lines.push(`- ${ac}`));
+        lines.push('');
+    }
+    
+    if (review.filesReviewed.length > 0) {
+        lines.push(lang === 'en' ? '### Files Reviewed' : '### 已审查文件');
+        review.filesReviewed.slice(0, 10).forEach(f => lines.push(`- ${f}`));
+        if (review.filesReviewed.length > 10) {
+            lines.push(`... ${lang === 'en' ? 'and' : '及'} ${review.filesReviewed.length - 10} ${lang === 'en' ? 'more' : '更多'}`);
+        }
+        lines.push('');
+    }
+    
+    // Verdict
+    lines.push('---');
+    if (readyForCompletion) {
+        lines.push(lang === 'en' 
+            ? '✅ **READY FOR COMPLETION** - You may now call ask_continue()'
+            : '✅ **已就绪** - 现在可以调用 ask_continue()');
+    } else {
+        lines.push(lang === 'en'
+            ? '❌ **NOT READY** - Fix gaps and ensure all checks pass before calling ask_continue()'
+            : '❌ **未就绪** - 请修复缺口并确保所有检查通过后再调用 ask_continue()');
+    }
+    
+    const responseText = lines.join('\n');
+    return { 
+        content: [
+            { type: 'text', text: responseText },
+            { type: 'text', text: `CODE_REVIEW_JSON:\n${JSON.stringify({ review, checkScore, readyForCompletion }, null, 2)}` }
+        ] 
+    };
+}
+
+function generateFinalOutput(projectContext: any, lang: UiLanguage, reason: string): string {
+    const lines: string[] = [];
+    
+    // Header
+    lines.push('=' .repeat(60));
+    lines.push(lang === 'en' ? '🎯 FINAL OUTPUT - TASK COMPLETED' : '🎯 最终输出 - 任务完成');
+    lines.push('='.repeat(60));
+    lines.push('');
+    
+    // Completion reason
+    lines.push(lang === 'en' ? '## Completion Summary' : '## 完成摘要');
+    lines.push(reason.slice(0, 500));
+    lines.push('');
+    
+    if (projectContext) {
+        const { project, progress } = projectContext;
+        
+        // Progress
+        lines.push(lang === 'en' ? '## Plan Progress' : '## 计划进度');
+        lines.push(`**${lang === 'en' ? 'Status' : '状态'}:** ${progress.done}/${progress.total} (${progress.percent}%)`);
+        if (progress.percent === 100) {
+            lines.push(lang === 'en' ? '✅ All plan items completed!' : '✅ 所有计划项已完成！');
+        } else {
+            lines.push(lang === 'en' ? '⚠️ Some items remain incomplete' : '⚠️ 部分项目未完成');
+        }
+        lines.push('');
+        
+        // Completed items
+        const doneItems = (project.plan?.items || []).filter((it: any) => it.status === 'done');
+        if (doneItems.length > 0) {
+            lines.push(lang === 'en' ? '## Completed Items' : '## 已完成项目');
+            doneItems.slice(-10).forEach((it: any) => {
+                lines.push(`✓ ${it.text.slice(0, 80)}`);
+            });
+            if (doneItems.length > 10) {
+                lines.push(`... ${lang === 'en' ? 'and' : '及'} ${doneItems.length - 10} ${lang === 'en' ? 'more' : '项'}`);
+            }
+            lines.push('');
+        }
+        
+        // Remaining items (if any)
+        const remainingItems = (project.plan?.items || []).filter((it: any) => it.status !== 'done');
+        if (remainingItems.length > 0) {
+            lines.push(lang === 'en' ? '## Remaining Items (if continuing later)' : '## 剩余项目（待后续处理）');
+            remainingItems.slice(0, 5).forEach((it: any) => {
+                const status = it.status === 'doing' ? '🔄' : '○';
+                lines.push(`${status} ${it.text.slice(0, 80)}`);
+            });
+            if (remainingItems.length > 5) {
+                lines.push(`... ${lang === 'en' ? 'and' : '及'} ${remainingItems.length - 5} ${lang === 'en' ? 'more' : '项'}`);
+            }
+            lines.push('');
+        }
+        
+        // Key deliverables
+        lines.push(lang === 'en' ? '## Key Deliverables' : '## 主要交付物');
+        if (project.overview?.content) {
+            lines.push(`✓ ${lang === 'en' ? 'Project Overview' : '项目概览'}`);
+        }
+        if (project.prd?.content) {
+            lines.push(`✓ ${lang === 'en' ? 'PRD Document' : 'PRD 文档'} (${project.prd.status === 'approved' ? '✅ Approved' : '⏳ Draft'})`);
+        }
+        if (project.plan?.items?.length) {
+            lines.push(`✓ ${lang === 'en' ? 'Plan with' : '计划包含'} ${project.plan.items.length} ${lang === 'en' ? 'items' : '项'}`);
+        }
+        if (project.walkthrough?.content) {
+            lines.push(`✓ ${lang === 'en' ? 'Walkthrough Documentation' : '走查文档'}`);
+        }
+        lines.push('');
+    }
+    
+    // Footer
+    lines.push('='.repeat(60));
+    lines.push(lang === 'en' 
+        ? '👋 Session ended. Use "Continue" button to resume with new instructions.'
+        : '👋 会话已结束。点击"继续"按钮可输入新指令继续。');
+    lines.push('='.repeat(60));
+    
+    return lines.join('\n');
 }
 
 async function handleCheckPlan(args: any): Promise<any> {

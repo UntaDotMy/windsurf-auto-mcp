@@ -22,6 +22,37 @@ AUDIT_MAX_LINES = 260
 
 MAX_WRITES_WITHOUT_PLAN_UPDATE = 3
 
+# Workflow State Machine
+# States: IDLE -> PREFLIGHT_DONE -> PLAN_EXISTS -> ACTING -> VERIFYING -> READY_TO_ASK
+WORKFLOW_STATES = {
+    "IDLE": 0,           # Initial state, no work started
+    "PREFLIGHT_DONE": 1, # preflight() completed
+    "PLAN_EXISTS": 2,    # Plan with checklist exists
+    "ACTING": 3,         # Implementing (write_code/run_command allowed)
+    "VERIFYING": 4,      # Running verification (tests/build/lint)
+    "READY_TO_ASK": 5,   # Ready to call ask_continue
+}
+
+# Tools that advance workflow state
+WORKFLOW_ADVANCE_TOOLS = {
+    "preflight": "PREFLIGHT_DONE",
+    "get_project_status": "PREFLIGHT_DONE",  # Alternative to preflight
+    "update_plan": "PLAN_EXISTS",
+    "check_plan": "READY_TO_ASK",
+}
+
+# Tools that require minimum workflow state
+WORKFLOW_REQUIREMENTS = {
+    "set_prd": "PREFLIGHT_DONE",
+    "update_plan": "PREFLIGHT_DONE",
+    "update_overview": "PREFLIGHT_DONE",
+    "generate_overview": "PREFLIGHT_DONE",
+    "update_walkthrough": "PLAN_EXISTS",
+    "save_memory": "PREFLIGHT_DONE",
+    "record_lesson": "PREFLIGHT_DONE",
+    "wam_commit": "PREFLIGHT_DONE",
+}
+
 REQUIRE_RATIONALE_TOOLS = {
     # Tracking/PRD/Plan/Walkthrough
     "set_prd",
@@ -157,29 +188,136 @@ def looks_dangerous_command(command_line):
     return any(p in cmd for p in patterns)
 
 
-def looks_sensitive_write_path(file_path):
+def looks_sensitive_write_path(file_path, workspace_root=None):
+    """Check if path is sensitive and should be blocked.
+    
+    Args:
+        file_path: The path being written to
+        workspace_root: Optional workspace root to enforce containment
+    
+    Returns:
+        True if path should be blocked, False otherwise
+    """
     p = normalize_path(file_path)
     if not p:
         return False
-    blocked = [
+    
+    # === Blocked patterns (credentials, secrets, version control) ===
+    blocked_patterns = [
+        # Version control
         "/.git/",
+        "/.svn/",
+        "/.hg/",
+        # SSH and keys
         "/.ssh/",
         "/id_rsa",
         "/id_ed25519",
+        "/id_ecdsa",
+        "/id_dsa",
+        "/.pem",
+        "/private.key",
+        "/server.key",
+        # Environment and secrets
         "/.env",
+        "/.env.local",
+        "/.env.production",
+        "/.env.development",
         "/.npmrc",
+        "/.pypirc",
+        "/.netrc",
+        "/.docker/config.json",
         "/credentials",
         "/secrets",
+        "/secret.",
+        "/.aws/",
+        "/.azure/",
+        "/.gcloud/",
+        "/.kube/",
+        # Database files
+        "/database.yml",
+        "/db.sqlite",
+        "/production.sqlite",
+        # Config files with potential secrets
+        "/wp-config.php",
+        "/config/secrets",
+        "/config/credentials",
+        "/.htpasswd",
+        "/passwd",
+        "/shadow",
     ]
-    if any(b in p for b in blocked):
+    if any(b in p for b in blocked_patterns):
         return True
-    if p.startswith("c:/windows/"):
-        return True
-    if p.startswith("c:/program files/"):
-        return True
-    if p.startswith("c:/program files (x86)/"):
-        return True
+    
+    # === Blocked file extensions ===
+    blocked_extensions = [
+        ".pem", ".key", ".p12", ".pfx", ".keystore",
+        ".jks", ".crt", ".cer", ".der",
+    ]
+    for ext in blocked_extensions:
+        if p.endswith(ext):
+            return True
+    
+    # === System paths (Windows) ===
+    windows_system_paths = [
+        "c:/windows/",
+        "c:/program files/",
+        "c:/program files (x86)/",
+        "c:/users/default/",
+        "c:/recovery/",
+        "c:/system volume information/",
+        "c:/\\$recycle.bin/",
+    ]
+    for sys_path in windows_system_paths:
+        if p.startswith(sys_path):
+            return True
+    
+    # === System paths (Unix/Linux) ===
+    unix_system_paths = [
+        "/etc/",
+        "/usr/",
+        "/bin/",
+        "/sbin/",
+        "/lib/",
+        "/lib64/",
+        "/var/",
+        "/boot/",
+        "/root/",
+        "/sys/",
+        "/proc/",
+        "/dev/",
+    ]
+    # Only block if it's a pure Unix path (not Windows with drive letter)
+    if not p.startswith("c:") and not p.startswith("d:"):
+        for sys_path in unix_system_paths:
+            if p.startswith(sys_path):
+                return True
+    
+    # === Workspace containment check ===
+    if workspace_root:
+        ws_norm = normalize_path(workspace_root)
+        if ws_norm and not p.startswith(ws_norm):
+            # Allow writes to .wam folders and ~/.codeium
+            if "/.wam/" not in p and "/.codeium/" not in p:
+                return True
+    
     return False
+
+
+def is_path_outside_workspace(file_path, workspace_root):
+    """Check if a path is outside the workspace (not .wam or .codeium)."""
+    if not workspace_root:
+        return False
+    p = normalize_path(file_path)
+    ws = normalize_path(workspace_root)
+    if not p or not ws:
+        return False
+    # Inside workspace is OK
+    if p.startswith(ws):
+        return False
+    # .wam and .codeium folders are always OK
+    if "/.wam/" in p or "/.codeium/" in p:
+        return False
+    return True
 
 
 def looks_internal_wam_write_path(file_path):
@@ -211,13 +349,46 @@ def append_log(log_file, payload):
 
 
 def get_mcp_config_paths(home_dir):
-    base_dirs = [".codeium"]
-    variants = ["windsurf", "windsurf-next"]
+    """Return candidate mcp_config.json paths.
+
+    Important: hooks may run under a different OS/user home than where Windsurf stores
+    its user-level config (e.g. WSL running hooks while configs live under /mnt/c/...).
+
+    We therefore include:
+      1) A path derived from this guard script's install location (preferred).
+      2) Conventional locations under the current user's home.
+    """
+
     paths = []
+
+    # 1) Prefer resolving from the installed guard location:
+    #    ~/.codeium/<variant>/hooks/windsurf-auto-mcp/windsurf-auto-mcp-guard.py
+    # -> ~/.codeium/<variant>/mcp_config.json
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        variant_root = os.path.dirname(os.path.dirname(script_dir))
+        if os.path.isdir(variant_root):
+            paths.append(os.path.join(variant_root, "mcp_config.json"))
+    except Exception:
+        pass
+
+    # 2) Conventional home-based locations.
+    base_dirs = [".codeium", ".windsurf"]
+    variants = ["windsurf", "windsurf-next"]
     for base in base_dirs:
         for variant in variants:
             paths.append(os.path.join(home_dir, base, variant, "mcp_config.json"))
-    return paths
+
+    # De-dupe while preserving order.
+    unique = []
+    seen = set()
+    for p in paths:
+        key = normalize_path(p)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        unique.append(p)
+    return unique
 
 
 def try_read_json(path):
@@ -323,6 +494,71 @@ def _get_project_state(state, project_id):
         ps = {}
         projects[project_id] = ps
     return state, ps
+
+
+def get_workflow_state(state, project_id):
+    """Get the current workflow state for a project."""
+    if not project_id:
+        return "IDLE"
+    state, ps = _get_project_state(state, project_id)
+    if not ps:
+        return "IDLE"
+    return str(ps.get("workflowState") or "IDLE")
+
+
+def set_workflow_state(state, project_id, new_state):
+    """Set the workflow state for a project."""
+    if not project_id or new_state not in WORKFLOW_STATES:
+        return state
+    state, ps = _get_project_state(state, project_id)
+    if ps is None:
+        return state
+    ps["workflowState"] = new_state
+    ps["workflowStateAt"] = _iso_now()
+    return state
+
+
+def advance_workflow_state(state, project_id, tool_name):
+    """Advance workflow state based on tool called."""
+    if not project_id or tool_name not in WORKFLOW_ADVANCE_TOOLS:
+        return state, None
+    target_state = WORKFLOW_ADVANCE_TOOLS[tool_name]
+    current = get_workflow_state(state, project_id)
+    current_level = WORKFLOW_STATES.get(current, 0)
+    target_level = WORKFLOW_STATES.get(target_state, 0)
+    # Only advance, never go backwards
+    if target_level > current_level:
+        state = set_workflow_state(state, project_id, target_state)
+        return state, target_state
+    return state, None
+
+
+def check_workflow_requirement(state, project_id, tool_name):
+    """Check if workflow state meets tool requirement."""
+    if tool_name not in WORKFLOW_REQUIREMENTS:
+        return None  # No requirement
+    required_state = WORKFLOW_REQUIREMENTS[tool_name]
+    current = get_workflow_state(state, project_id)
+    current_level = WORKFLOW_STATES.get(current, 0)
+    required_level = WORKFLOW_STATES.get(required_state, 0)
+    if current_level < required_level:
+        return (
+            f"Blocked: Tool '{tool_name}' requires workflow state '{required_state}' but current state is '{current}'.\n"
+            f"Required: Run preflight(userPrompt=...) first to initialize workflow state."
+        )
+    return None
+
+
+def reset_workflow_state(state, project_id):
+    """Reset workflow state to IDLE (on new user prompt)."""
+    if not project_id:
+        return state
+    state, ps = _get_project_state(state, project_id)
+    if ps is None:
+        return state
+    ps["workflowState"] = "IDLE"
+    ps["workflowStateAt"] = _iso_now()
+    return state
 
 
 def _iso_now():
@@ -1583,6 +1819,8 @@ def main():
                     state = load_guard_state()
                     state, ps = _get_project_state(state, project_id)
                     ps["lastUserPromptAt"] = _iso_now()
+                    # Reset workflow state on new user prompt to enforce fresh preflight
+                    state = reset_workflow_state(state, project_id)
                     save_guard_state(state)
             except Exception:
                 pass
@@ -1748,6 +1986,25 @@ def main():
         ).strip()
         cwd_hint = root_hint or _extract_workspace_root_hint(payload, tool_info)
         project = select_project(tracker, cwd=cwd_hint)
+
+        # Workflow state machine enforcement
+        if project:
+            try:
+                project_id = str(project.get("projectId") or "").strip()
+                if project_id:
+                    state = load_guard_state()
+                    # Check workflow requirement for this tool
+                    requirement_error = check_workflow_requirement(state, project_id, tool_name)
+                    if requirement_error:
+                        persist_hook_feedback(server_url, project, "pre_mcp_tool_use", "block", requirement_error)
+                        print(requirement_error, file=sys.stderr)
+                        return 2
+                    # Advance workflow state based on tool called
+                    state, new_state = advance_workflow_state(state, project_id, tool_name)
+                    if new_state:
+                        save_guard_state(state)
+            except Exception:
+                pass
 
         if tool_name in REQUIRE_RATIONALE_TOOLS:
             rationale = str(tool_args.get("rationale") or "").strip()
