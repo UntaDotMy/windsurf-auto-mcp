@@ -595,19 +595,20 @@ def print_block_prominent(msg, fix_hint=None):
     """
     Print block message to BOTH stdout and stderr for maximum AI visibility.
     Many LLMs don't reliably read stderr, so we output to both streams.
+    Uses ASCII only to avoid Windows encoding issues.
     """
     block_count = _get_block_count()
     separator = "=" * 60
     
-    # Escalate urgency based on consecutive blocks
+    # Escalate urgency based on consecutive blocks (ASCII only)
     if block_count >= 5:
-        urgency = "🚨🚨🚨 CRITICAL: {} CONSECUTIVE BLOCKS! 🚨🚨🚨".format(block_count)
-        extra = "\n\n🛑 STOP! You've been blocked {} times in a row!\nDo NOT retry the same action. READ the fix hint and do that FIRST!".format(block_count)
+        urgency = "*** CRITICAL: {} CONSECUTIVE BLOCKS! ***".format(block_count)
+        extra = "\n\n[STOP] You've been blocked {} times in a row!\nDo NOT retry the same action. READ the fix hint and do that FIRST!".format(block_count)
     elif block_count >= 3:
-        urgency = "⚠️ WARNING: {} consecutive blocks!".format(block_count)
-        extra = "\n\n🔴 You've been blocked {} times. STOP retrying and fix the issue first!".format(block_count)
+        urgency = "[WARNING] {} consecutive blocks!".format(block_count)
+        extra = "\n\n[!] You've been blocked {} times. STOP retrying and fix the issue first!".format(block_count)
     else:
-        urgency = "⛔ HOOK BLOCKED - AI MUST READ THIS:"
+        urgency = "[BLOCKED] HOOK BLOCKED - AI MUST READ THIS:"
         extra = ""
     
     print("\n" + separator, file=sys.stdout)
@@ -615,7 +616,7 @@ def print_block_prominent(msg, fix_hint=None):
     print(separator, file=sys.stdout)
     print(msg, file=sys.stdout)
     if fix_hint:
-        print("\n🔧 FIX: " + fix_hint, file=sys.stdout)
+        print("\n[FIX] " + fix_hint, file=sys.stdout)
     if extra:
         print(extra, file=sys.stdout)
     print(separator + "\n", file=sys.stdout)
@@ -982,7 +983,7 @@ def record_command_failure_lesson(server_url, project, cmd, cwd, exit_code, stdo
     )
     prevention = (
         "Before running build/lint/test, verify prerequisites (deps installed, correct working directory, correct commands for the repo).\n"
-        "When an error happens: record the exact failing command + error snippet into lessons, then follow a fix→rerun loop."
+        "When an error happens: record the exact failing command + error snippet into lessons, then follow a fix->rerun loop."
     )
     maybe_record_lesson(
         server_url,
@@ -1020,11 +1021,11 @@ def record_mcp_tool_error_lesson(server_url, project, server_name, tool_name, to
     )
     fix = (
         "Read the error message and correct the MCP tool arguments (types/required fields/rootPath), then retry.\n"
-        "If the tool is blocked by hooks, follow the hook instructions (e.g., update_plan/save_memory → wam_commit → retry)."
+        "If the tool is blocked by hooks, follow the hook instructions (e.g., update_plan/save_memory -> wam_commit -> retry)."
     )
     prevention = (
         "Before calling MCP tools that change state, include a rationale and validate arguments.\n"
-        "After state changes, keep WAM clean (wam_status → wam_commit) before write_code/run_command."
+        "After state changes, keep WAM clean (wam_status -> wam_commit) before write_code/run_command."
     )
     maybe_record_lesson(
         server_url,
@@ -1085,7 +1086,7 @@ def _check_prompt_preflight(server_url, project):
 
         msg = (
             "\n" + "="*60 + "\n"
-            "BLOCKED: RECALL → THINK → ACT WORKFLOW REQUIRED\n"
+            "BLOCKED: RECALL -> THINK -> ACT WORKFLOW REQUIRED\n"
             "="*60 + "\n\n"
             "Before ANY action, you MUST:\n"
             "1. RECALL - What do I already know?\n"
@@ -1099,7 +1100,7 @@ def _check_prompt_preflight(server_url, project):
             "4. get_project_status - Understand current state\n"
             "5. check_plan - Review plan progress\n"
             "6. wam_status - Check if history is clean\n\n"
-            f"⚠️ MISSING: {', '.join(missing)}\n\n"
+            f"[!] MISSING: {', '.join(missing)}\n\n"
             "THEN: Create/update plan with update_plan(items=[...]) before coding.\n"
             + "="*60
         )
@@ -1144,11 +1145,11 @@ def _check_research_save_required(server_url, project):
         
         # Research was done but not saved!
         msg = (
-            "\n" + "═"*60 + "\n"
-            "⛔ BLOCKED: UNSAVED RESEARCH DETECTED\n"
-            "═"*60 + "\n\n"
+            "\n" + "="*60 + "\n"
+            "[BLOCKED] UNSAVED RESEARCH DETECTED\n"
+            "="*60 + "\n\n"
             "You used get_library_docs or resolve_library_docs but did NOT save your findings!\n\n"
-            "⚠️ Research is USELESS if not saved to memory.\n\n"
+            "[!] Research is USELESS if not saved to memory.\n\n"
             "REQUIRED: Save your research NOW:\n"
             "  save_memory({\n"
             "    key: 'research:<library>:<topic>',\n"
@@ -1160,7 +1161,7 @@ def _check_research_save_required(server_url, project):
             "OR use record_lesson() if you learned something important.\n\n"
             f"Research at: {last_research}\n"
             f"Last save:   {last_save or '(never)'}\n"
-            + "═"*60
+            + "="*60
         )
         maybe_record_lesson(
             server_url,
@@ -1617,14 +1618,14 @@ def _check_wam_clean(project, memory_data, server_url):
         msg = (
             "Blocked: WAM history is missing (no .wam/HEAD.json).\n"
             "Required: keep a git-like history for tracker+memory.\n"
-            "Fix: call wam_status → wam_diff (optional) → wam_commit(), then retry."
+            "Fix: call wam_status -> wam_diff (optional) -> wam_commit(), then retry."
         )
         maybe_record_lesson(
             server_url,
             project,
             "wam_missing_head",
             "WAM history is missing: .wam/HEAD.json not found.",
-            "Initialize WAM history via wam_status → wam_commit(), then retry the action.",
+            "Initialize WAM history via wam_status -> wam_commit(), then retry the action.",
             "Ensure every tracker/memory change is followed by an explicit wam_commit so WAM stays clean.",
             title="WAM missing HEAD.json",
             tags=["wam", "history", "block"],
@@ -1675,14 +1676,14 @@ def _check_wam_clean(project, memory_data, server_url):
         msg = (
             "Blocked: WAM history is out-of-date (dirty state).\n"
             "Required: before writing code, tracker+memory must be committed so history stays consistent.\n"
-            "Fix: call wam_status → wam_diff (optional) → wam_commit(), then retry."
+            "Fix: call wam_status -> wam_diff (optional) -> wam_commit(), then retry."
         )
         maybe_record_lesson(
             server_url,
             project,
             "wam_dirty_state",
             "WAM is dirty (HEAD digest != current tracker+memory digest).",
-            "Run wam_status → (optional) wam_diff → wam_commit(), then retry write/run. This is required to keep history consistent.",
+            "Run wam_status -> (optional) wam_diff -> wam_commit(), then retry write/run. This is required to keep history consistent.",
             "After any tracker/memory change (plan/prd/overview/walkthrough/memory/lesson), explicitly run wam_commit before write_code/run_command.",
             title="WAM dirty state blocks actions",
             tags=["wam", "history", "block"],
@@ -1701,7 +1702,7 @@ def check_project_gates(project, memory_data=None, server_url=None):
             project,
             "missing_overview",
             "Architecture record (Overview) is missing, but code/run actions were attempted.",
-            "Call get_project_status → generate_overview/update_overview to establish the architecture baseline before implementing.",
+            "Call get_project_status -> generate_overview/update_overview to establish the architecture baseline before implementing.",
             "Always read target state first; keep an up-to-date Overview with folder map, key flows, commands, and conventions.",
             title="Missing Overview blocks implementation",
             tags=["overview", "architecture", "block"],
@@ -1749,7 +1750,7 @@ def check_project_gates(project, memory_data=None, server_url=None):
             project,
             "prd_not_approved",
             "PRD exists (non-empty) but was not approved before implementation.",
-            "Run the PRD approval flow (set_prd → user approval) before implementing Plan items.",
+            "Run the PRD approval flow (set_prd -> user approval) before implementing Plan items.",
             "For complex work, enforce PRD approval before planning/implementation to avoid scope drift.",
             title="PRD must be approved",
             tags=["prd", "approval", "block"],
@@ -1757,7 +1758,7 @@ def check_project_gates(project, memory_data=None, server_url=None):
         )
         return (
             "Blocked: PRD is not approved.\n"
-            "Required flow: draft PRD → user approve → then Plan → then implement."
+            "Required flow: draft PRD -> user approve -> then Plan -> then implement."
         )
     plan = project.get("plan") or {}
     plan_items = plan.get("items") or []
