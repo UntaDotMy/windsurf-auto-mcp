@@ -109,7 +109,7 @@ WindsurfAutoMcp standardizes task completion with MCP: when the AI finishes a ta
 
 【Before you start】Read the user story/target/current state/constraints first. If key inputs are missing, ask questions via ask_question as needed (single-choice, any number of options + optional extra text) and loop until acceptance criteria are clear.
 
-【Each new user prompt (required)】Before any implementation/write_code/run_command, run a preflight so you don’t skip existing plan/memory/WAM: get_project_status → check_plan → memory_search → rag_search → wam_status. Then think hard and merge new requirements into the existing Plan (update_plan(mode=merge)) before acting.
+【Each new user prompt (required)】Before any implementation/write_code/run_command, run a preflight so you don’t skip existing plan/memory/WAM: prefer `preflight(userPrompt=...)` (runs get_project_status/check_plan/memory_search/rag_search/wam_status). Then think hard and merge new requirements into the existing Plan (default `update_plan(mode=merge)`). If you truly must replace the whole Plan, use `plan_change_request` to force an explicit user choice before replacement.
 
 【Architecture record / baseline (required)】Call get_project_status to read Overview/PRD/Plan/Walkthrough. Treat Overview as the architecture record (module boundaries, folder map, key flows, build/test commands, conventions). If Overview is empty or clearly outdated, call generate_overview (and update_overview if needed) before planning/implementation.
 
@@ -232,7 +232,9 @@ The sidebar **Maintenance** card lets you:
   - macOS/Linux: `~/.codeium/windsurf/hooks.json`
 - Workspace-level: `.windsurf/hooks.json`
 
-> Official docs only mention `windsurf` paths. windsurf-next MCP config is `%USERPROFILE%\.codeium\windsurf-next\mcp_config.json`. This extension also writes user-level hooks into `%USERPROFILE%\.codeium\windsurf-next\hooks.json` (inferred support).
+> Official docs only mention `windsurf` paths. This extension supports **both** `windsurf` and `windsurf-next` user-level configs:
+> - MCP config: `%USERPROFILE%\.codeium\windsurf\mcp_config.json` and `%USERPROFILE%\.codeium\windsurf-next\mcp_config.json`
+> - Hooks: `%USERPROFILE%\.codeium\windsurf\hooks.json` and `%USERPROFILE%\.codeium\windsurf-next\hooks.json`
 
 ### Auto-install behavior
 
@@ -240,13 +242,14 @@ The sidebar **Maintenance** card lets you:
 - If hooks are already installed, it only fills missing entries (auto-update)
 - It never overwrites your existing hooks
 - Installed events: `pre_user_prompt`, `pre_run_command`, `post_run_command`, `pre_write_code`, `post_write_code`, `pre_mcp_tool_use`, `post_mcp_tool_use`, `post_cascade_response`
-- Strict mode: requires a real Plan checklist (items) and the Plan must include verification (tests/build/lint) + a code review gate (recommended: run `ensure_release_gate` to auto-add); requires `memory_search` + `rag_search` after Plan updates; requires WAM clean (`wam_commit()`); blocks direct writes to tracker/memory/.wam; enforces `rationale` for state-changing MCP tools; and blocks after 3 `write_code` calls without `update_plan`
-- After every new user prompt (`pre_user_prompt`): before any `write_code` / `run_command`, you must complete the preflight: `get_project_status` + `check_plan` + `memory_search` + `rag_search` + `wam_status`
+- Strict mode: requires a real Plan checklist (items) and the Plan must include verification (tests/build/lint) + dependency/security scan (npm audit + OSV/Dependabot) + a code review gate (recommended: run `ensure_release_gate` to auto-add); requires `memory_search` + `rag_search` after Plan updates; requires WAM clean (`wam_commit()`); blocks direct writes to tracker/memory/.wam; enforces `rationale` for state-changing MCP tools; and blocks after 3 `write_code` calls without `update_plan`
+- After every new user prompt (`pre_user_prompt`): before any `write_code` / `run_command`, you must run `preflight(userPrompt=...)` (recommended) OR complete: `get_project_status` + `check_plan` + `memory_search` + `rag_search` + `wam_status`
 - Hook guard script runs via Python (Windows: `python`, macOS/Linux: `python3`) — install Python 3 or disable hooks
 - When a hook blocks or warns, the reason is persisted into Memory:
   - `hook:last_block` (blocked actions)
   - `hook:last_warning` (soft warnings/audits)
   - `hook:last_error` (run_command/MCP tool error summary)
+- A rolling redacted audit log is also written: `audit.jsonl` (open the **Audit** panel from the sidebar)
 - On “command failure / MCP tool error / critical gate block”, hooks automatically call `record_lesson(scope=both)` to store learnings in **project + global** memory (to avoid repeating mistakes)
 - **Restart Windsurf after hooks.json updates** to apply hooks
 
@@ -270,17 +273,21 @@ The sidebar **Maintenance** card lets you:
 | `update_overview` | Set/update Overview (Markdown) |
 | `rag_search` | RAG search workspace context (returns relevant snippets) |
 | `memory_search` | Search project/global memory |
+| `memory_hygiene` | Memory hygiene: promote short→long / dedupe near-duplicates / auto-link lessons (optional apply) |
 | `record_lesson` | Record lessons learned (project/global) |
 | `set_prd` | Create/update PRD draft |
-| `update_plan` | Update Plan checklist (defaults to merge; use `mode=replace` only when you truly need a full rewrite) |
+| `update_plan` | Update Plan checklist (merge by default; `mode=replace` is blocked) |
+| `plan_change_request` | Plan change request (forces user choice: merge / replace / cancel) |
 | `check_plan` | Check Plan progress + remaining items |
 | `ensure_release_gate` | Ensure Plan contains a release gate checklist |
 | `update_walkthrough` | Update Walkthrough summary |
 | `get_project_status` | Get current project tracking status |
+| `preflight` | Run required preflight checks (status/plan/memory/rag/wam) with structured output |
 | `wam_status` | WAM status (clean/dirty + HEAD) |
 | `wam_commit` | Create a WAM commit (snapshots tracking+memory) |
 | `wam_log` | List WAM commit history |
 | `wam_show` | Show a WAM commit by hash |
+| `wam_verify` | Verify WAM integrity (hash chain + snapshot digests + optional signatures) |
 | `wam_checkout` | Restore from a WAM commit (rollback) |
 | `wam_merge` | Merge another commit into current state (3-way merge + conflicts) |
 | `wam_branch` | Branches (refs/heads): list/create/delete |
@@ -304,6 +311,7 @@ The sidebar **Maintenance** card lets you:
 | `mcpService.mode` | http | MCP server mode |
 | `mcpService.autoInstallHooks` | true | Auto-install/update user-level hooks.json |
 | `mcpService.userHomeOverride` | empty | Force the Windows user home (e.g. `C:\Users\HP`) if auto-detection writes to the wrong profile |
+| `mcpService.wamSigning` | false | Enable WAM commit signing (HMAC-SHA256) to make history harder to forge |
 
 ## Build VSIX (for dev)
 
@@ -319,6 +327,13 @@ npm run package
 - Useful to validate install behavior without packaging locally
 - Download: GitHub → Actions → open the workflow run → Artifacts → download `windsurf-auto-mcp-vsix` → unzip to get the `.vsix` → install and restart Windsurf
 
+## Security / dependency scanning (CI)
+
+- `.github/workflows/security.yml` runs:
+  - `npm audit --audit-level=high`
+  - OSV Scanner (recursive scan)
+- `dependabot.yml` checks npm + GitHub Actions updates weekly (recommended)
+
 ## FAQ
 
 **Q: Hooks are not working?**
@@ -329,6 +344,10 @@ npm run package
 **Q: windsurf-next not working?**
 - Check `%USERPROFILE%\.codeium\windsurf-next\mcp_config.json` and `hooks.json`
 - If you're in WSL/Remote or multi-user causes a wrong target: set `mcpService.userHomeOverride = C:\Users\<you>` and retry
+
+**Q: Configure Windsurf fails / invalid JSON in mcp_config.json?**
+- Newer versions back up and rewrite invalid `mcp_config.json` automatically (creates `mcp_config.json.invalid.<timestamp>.bak`)
+- Review the backup and merge any other MCP server entries if needed
 
 **Q: PRD or stats leaking across projects?**
 - They are per workspace root. Verify you opened the correct workspace.

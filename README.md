@@ -109,7 +109,7 @@ WindsurfAutoMcp 通过 MCP 协议标准化交互：AI 完成任务后必须 `ask
 
 【开始前必须做】先读“目标/现状/约束”。在做任何修改前，必须先阅读目标文件/相关代码/配置/日志；不确定点必须用 ask_question 按需提问（单选，选项数量不限，可附补充信息）。
 
-【每次新用户输入（必须）】在任何实现/写代码/运行命令前，必须先完成一次“预检查”（让你不会跳过现有计划/记忆/WAM）：get_project_status → check_plan → memory_search → rag_search → wam_status。然后再“想清楚”是否需要把新需求合并进现有 Plan（update_plan(mode=merge)），再开始实现。
+【每次新用户输入（必须）】在任何实现/写代码/运行命令前，必须先完成一次“预检查”（让你不会跳过现有计划/记忆/WAM）：优先使用 preflight(userPrompt=...)（一次完成 get_project_status/check_plan/memory_search/rag_search/wam_status）。然后再“想清楚”是否需要把新需求合并进现有 Plan（默认 update_plan(mode=merge)）；若确需整体替换，必须使用 plan_change_request 让用户明确选择后再替换。
 
 【架构记录/项目基线（必须）】先用 get_project_status 读取 Overview/PRD/Plan/Walkthrough；把 Overview 视为“架构记录/项目概览”（模块边界、目录结构、关键流程、构建/测试命令、约定）。如已存在内容必须先阅读并在计划/实现中引用；为空则说明为空。若 Overview 为空或明显过时：先 generate_overview（必要时 update_overview 修订）再继续。
 
@@ -240,13 +240,14 @@ WindsurfAutoMcp 通过 MCP 协议标准化交互：AI 完成任务后必须 `ask
 - 已安装但缺失项会自动补齐（相当于更新到最新）
 - 不覆盖你已有 hooks，仅追加缺失项
 - 安装的事件：`pre_user_prompt`、`pre_run_command`、`post_run_command`、`pre_write_code`、`post_write_code`、`pre_mcp_tool_use`、`post_mcp_tool_use`、`post_cascade_response`
-- 严格模式：必须有 Plan Checklist（items），且 Plan 必须包含“验证/测试/构建/lint”与“代码审查”门禁（推荐先 `ensure_release_gate` 自动补齐）；Plan 更新后必须 `memory_search` + `rag_search`；WAM 必须 clean（`wam_commit()`）；禁止直接写 tracker/memory/.wam；对会修改状态的 MCP 工具强制要求 `rationale`；且连续 3 次 `write_code` 未 `update_plan` 会被阻止
-- 每次新用户输入后（`pre_user_prompt`）：在 `write_code` / `run_command` 前必须先完成“预检查”：`get_project_status` + `check_plan` + `memory_search` + `rag_search` + `wam_status`
+- 严格模式：必须有 Plan Checklist（items），且 Plan 必须包含“验证/测试/构建/lint”“依赖/安全扫描（npm audit + OSV/Dependabot）”与“代码审查”门禁（推荐先 `ensure_release_gate` 自动补齐）；Plan 更新后必须 `memory_search` + `rag_search`；WAM 必须 clean（`wam_commit()`）；禁止直接写 tracker/memory/.wam；对会修改状态的 MCP 工具强制要求 `rationale`；且连续 3 次 `write_code` 未 `update_plan` 会被阻止
+- 每次新用户输入后（`pre_user_prompt`）：在 `write_code` / `run_command` 前必须先 `preflight(userPrompt=...)`（推荐；一次完成预检），或手动完成：`get_project_status` + `check_plan` + `memory_search` + `rag_search` + `wam_status`
 - Hooks 护栏脚本使用 Python 执行（Windows：`python`；macOS/Linux：`python3`）— 请确保已安装 Python 3 或关闭 hooks
 - 当 hooks 阻止/警告时，原因会写入 Memory（便于回看与复盘）：
   - `hook:last_block`（阻止原因）
   - `hook:last_warning`（软警告/审计）
   - `hook:last_error`（命令/MCP 工具错误摘要）
+- 同时会写入滚动审计日志（脱敏）：`audit.jsonl`（可在侧边栏打开 **Audit** 面板查看）
 - 当遇到“命令失败 / MCP 工具报错 / 关键门禁阻止”时，hooks 会自动 `record_lesson(scope=both)` 记录到 **项目 + 全局** 记忆（用于避免重复犯错）
 - **更新 hooks.json 后需重启 Windsurf 才会生效**
 
@@ -269,18 +270,22 @@ WindsurfAutoMcp 通过 MCP 协议标准化交互：AI 完成任务后必须 `ask
 | `generate_overview` | 从工作区自动生成 Overview（项目概览/架构/上下文） |
 | `update_overview` | 设置/更新 Overview（Markdown） |
 | `set_prd` | 创建/更新 PRD 草案 |
-| `update_plan` | 更新 Plan Checklist（默认合并；确需整体重写才用 `mode=replace`） |
+| `update_plan` | 更新 Plan Checklist（默认合并；不允许 `mode=replace`） |
+| `plan_change_request` | 计划变更请求（强制用户选择：合并 / 替换 / 取消） |
 | `rag_search` | RAG 搜索工作区上下文（返回相关片段） |
 | `memory_search` | 搜索项目/全局记忆 |
+| `memory_hygiene` | 记忆整理：short→long 提升/近重复去重/经验自动链接（可选应用） |
 | `record_lesson` | 记录错误经验（项目/全局） |
 | `check_plan` | 检查 Plan 进度与未完成项 |
 | `ensure_release_gate` | 确保 Plan 包含发布门禁清单 |
 | `update_walkthrough` | 更新 Walkthrough 总结 |
 | `get_project_status` | 获取当前项目跟踪状态 |
+| `preflight` | 运行必需预检（状态/计划/记忆/RAG/WAM）并输出结构化结果 |
 | `wam_status` | 查看 WAM 状态（clean/dirty + HEAD） |
 | `wam_commit` | 创建 WAM 提交（快照：跟踪+记忆） |
 | `wam_log` | 查看 WAM 提交历史 |
 | `wam_show` | 查看指定 hash 的 WAM 提交 |
+| `wam_verify` | 校验 WAM 完整性（hash 链 + 快照 digest + 可选签名） |
 | `wam_checkout` | 从指定 WAM 提交恢复（回滚） |
 | `wam_merge` | 合并另一提交到当前状态（三方合并 + 冲突记录） |
 | `wam_branch` | 分支（refs/heads）：list/create/delete |
@@ -304,6 +309,7 @@ WindsurfAutoMcp 通过 MCP 协议标准化交互：AI 完成任务后必须 `ask
 | `mcpService.mode` | http | MCP 服务器模式 |
 | `mcpService.autoInstallHooks` | true | 自动安装/更新用户级 hooks.json |
 | `mcpService.userHomeOverride` | 空 | 强制指定 Windows 用户目录（例如 `C:\Users\HP`），用于修复写入到错误用户目录的问题 |
+| `mcpService.wamSigning` | false | 启用 WAM 提交签名（HMAC-SHA256，用于增强历史可信度） |
 
 ## 构建 VSIX（开发者）
 
@@ -319,6 +325,13 @@ npm run package
 - 适合在不本地打包的情况下先验证安装效果
 - 下载方式：GitHub → Actions → 选择对应的 workflow run → Artifacts → 下载 `windsurf-auto-mcp-vsix` → 解压得到 `.vsix` → 安装并重启 Windsurf
 
+## 安全/依赖扫描（CI）
+
+- `.github/workflows/security.yml` 会运行：
+  - `npm audit --audit-level=high`
+  - OSV Scanner（递归扫描仓库依赖/锁文件）
+- `dependabot.yml` 会定期检查 npm/GitHub Actions 依赖更新并创建 PR（建议开启）
+
 ## 常见问题
 
 **Q: Hooks 没生效？**
@@ -329,6 +342,10 @@ npm run package
 **Q: windsurf-next 不生效？**
 - 检查 `%USERPROFILE%\.codeium\windsurf-next\mcp_config.json` 与 `hooks.json`
 - 如果你是 WSL/Remote 环境或多用户目录导致写入错位：设置 `mcpService.userHomeOverride = C:\Users\<你>` 后重试
+
+**Q: 写入 mcp_config.json 失败/提示 JSON 无效？**
+- 新版本会自动备份并重写无效的 `mcp_config.json`（同目录会生成 `mcp_config.json.invalid.<timestamp>.bak`）
+- 建议检查备份文件内容，确认是否需要手动合并其它 MCP 配置
 
 **Q: 统计或 PRD 混用？**
 - 不会混用，按项目根目录区分；请确认当前打开的工作区

@@ -182,8 +182,8 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
 	        'sidebar.promptText': '硬规则：完成任务时必须调用 ask_continue。',
 		        'sidebar.promptCopyText': [
 		            '硬规则：交付时必须 ask_continue(reason)。',
-		            '开始：get_project_status → memory_search → rag_search。',
-		            '每次新用户输入：get_project_status → check_plan → memory_search → rag_search → wam_status。',
+		            '开始：preflight(userPrompt=...)（一次完成 get_project_status/check_plan/memory_search/rag_search/wam_status）。',
+		            '每次新用户输入：先 preflight(userPrompt=...) 再开始实现/改动。',
 		            '复杂任务：先 set_prd → 用户审批 → update_plan(mode=merge)（Plan+Checklist）。',
 		            'Plan 后（推荐）：ensure_release_gate 自动补齐测试/构建/lint/依赖/安全/性能/最终审查等发布门禁。',
 		            '实现中：按 Plan 小步推进；每步 update_plan；必要时 update_walkthrough；错误用 record_lesson + save_memory。',
@@ -216,14 +216,17 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'sidebar.statUpdateOverview': 'update_overview',
         'sidebar.statGenerateOverview': 'generate_overview',
         'sidebar.statUpdatePlan': 'update_plan',
+        'sidebar.statPlanChangeRequest': 'plan_change_request',
         'sidebar.statUpdateWalkthrough': 'update_walkthrough',
         'sidebar.statRagSearch': 'rag_search',
         'sidebar.statMemorySearch': 'memory_search',
+        'sidebar.statMemoryHygiene': 'memory_hygiene',
         'sidebar.statRecordLesson': 'record_lesson',
         'sidebar.statGetProjectStatus': 'get_project_status',
         'sidebar.statSaveMemory': 'save_memory',
         'sidebar.statGetMemory': 'get_memory',
         'sidebar.statListMemory': 'list_memories',
+        'sidebar.statPreflight': 'preflight',
         'sidebar.copy': '复制',
         'sidebar.windsurfConfigTitle': 'Windsurf 配置',
         'sidebar.writeConfig': '写入 Windsurf 配置',
@@ -244,6 +247,7 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'sidebar.panelPlan': 'Plan（计划）',
         'sidebar.panelMemory': 'Memory（记忆）',
         'sidebar.panelWam': 'WAM（历史）',
+        'sidebar.panelAudit': 'Audit（审计）',
         'sidebar.panelWalkthrough': 'Walkthrough',
         'sidebar.panelStats': '统计',
         'sidebar.systemTitle': '系统控制',
@@ -254,11 +258,13 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'sidebar.clearPlan': '清空 Plan',
         'sidebar.clearWalkthrough': '清空 Walkthrough',
         'sidebar.clearTracking': '重置项目数据',
+        'sidebar.clearAudit': '清空 Audit',
         'sidebar.clearOverviewConfirm': '确定要清空当前项目的“项目概览”吗？',
         'sidebar.clearPrdConfirm': '确定要清空当前项目的 PRD 吗？',
         'sidebar.clearPlanConfirm': '确定要清空当前项目的 Plan 吗？',
         'sidebar.clearWalkthroughConfirm': '确定要清空当前项目的 Walkthrough 吗？',
         'sidebar.clearTrackingConfirm': '确定要重置当前项目的 PRD/Plan/Walkthrough/统计吗？',
+        'sidebar.clearAuditConfirm': '确定要清空当前项目的 Audit 日志吗？',
         'sidebar.configureWindsurf': '写入 Windsurf 配置',
         'sidebar.installHooks': '安装/更新 Hooks',
         'sidebar.openDialogShort': '对话确认',
@@ -345,6 +351,7 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'panel.reviewNoteLabel': '审核备注',
         'panel.planTitle': 'Plan（计划）',
         'panel.memoryTitle': 'Memory（记忆）',
+        'panel.auditTitle': 'Audit（审计）',
         'panel.wamTitle': 'WAM（历史）',
         'panel.memoryProjectTitle': '项目记忆',
         'panel.memoryGlobalTitle': '全局记忆',
@@ -445,8 +452,8 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
 	        'sidebar.promptText': 'Hard rule: when done, you must call ask_continue.',
 		        'sidebar.promptCopyText': [
 		            'Hard rule: final delivery must be ask_continue(reason).',
-		            'Start: get_project_status → memory_search → rag_search.',
-		            'Each new user prompt: get_project_status → check_plan → memory_search → rag_search → wam_status.',
+		            'Start: preflight(userPrompt=...) (runs get_project_status/check_plan/memory_search/rag_search/wam_status).',
+		            'Each new user prompt: preflight(userPrompt=...) before any edits/runs.',
 		            'Complex work: set_prd → user approval → update_plan(mode=merge) (Plan+Checklist).',
 		            'After Plan (recommended): ensure_release_gate to auto-add tests/build/lint/deps/security/perf/final review gates.',
 		            'During work: follow the Plan; keep update_plan + update_walkthrough current; mistakes → record_lesson + save_memory.',
@@ -568,14 +575,17 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'sidebar.statUpdateOverview': 'update_overview',
         'sidebar.statGenerateOverview': 'generate_overview',
         'sidebar.statUpdatePlan': 'update_plan',
+        'sidebar.statPlanChangeRequest': 'plan_change_request',
         'sidebar.statUpdateWalkthrough': 'update_walkthrough',
         'sidebar.statRagSearch': 'rag_search',
         'sidebar.statMemorySearch': 'memory_search',
+        'sidebar.statMemoryHygiene': 'memory_hygiene',
         'sidebar.statRecordLesson': 'record_lesson',
         'sidebar.statGetProjectStatus': 'get_project_status',
         'sidebar.statSaveMemory': 'save_memory',
         'sidebar.statGetMemory': 'get_memory',
         'sidebar.statListMemory': 'list_memories',
+        'sidebar.statPreflight': 'preflight',
         'sidebar.copy': 'Copy',
         'sidebar.windsurfConfigTitle': 'Windsurf Config',
         'sidebar.writeConfig': 'Write Windsurf config',
@@ -596,6 +606,7 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'sidebar.panelPlan': 'Plan',
         'sidebar.panelMemory': 'Memory',
         'sidebar.panelWam': 'WAM',
+        'sidebar.panelAudit': 'Audit',
         'sidebar.panelWalkthrough': 'Walkthrough',
         'sidebar.panelStats': 'Stats',
         'sidebar.systemTitle': 'System',
@@ -606,11 +617,13 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'sidebar.clearPlan': 'Clear Plan',
         'sidebar.clearWalkthrough': 'Clear Walkthrough',
         'sidebar.clearTracking': 'Reset Project',
+        'sidebar.clearAudit': 'Clear Audit',
         'sidebar.clearOverviewConfirm': 'Clear project overview for the current project?',
         'sidebar.clearPrdConfirm': 'Clear PRD for the current project?',
         'sidebar.clearPlanConfirm': 'Clear Plan for the current project?',
         'sidebar.clearWalkthroughConfirm': 'Clear Walkthrough for the current project?',
         'sidebar.clearTrackingConfirm': 'Reset PRD/Plan/Walkthrough/stats for the current project?',
+        'sidebar.clearAuditConfirm': 'Clear Audit log for the current project?',
         'sidebar.configureWindsurf': 'Write Windsurf Config',
         'sidebar.installHooks': 'Install/Update Hooks',
         'sidebar.openDialogShort': 'Confirm Dialog',
@@ -697,6 +710,7 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
         'panel.reviewNoteLabel': 'Review note',
         'panel.planTitle': 'Plan',
         'panel.memoryTitle': 'Memory',
+        'panel.auditTitle': 'Audit',
         'panel.wamTitle': 'WAM',
         'panel.memoryProjectTitle': 'Project Memory',
         'panel.memoryGlobalTitle': 'Global Memory',
@@ -1206,6 +1220,7 @@ const MEMORY_FILE_NAME = 'windsurf-auto-mcp-memories.json';
 const GLOBAL_MEMORY_FILE_NAME = 'windsurf-auto-mcp-global-memories.json';
 const ARTIFACT_ROOT_DIR = 'windsurf-auto-mcp';
 const ARTIFACT_BRAIN_DIR = 'brain';
+const AUDIT_FILE_NAME = 'audit.jsonl';
 const INDEX_DIR_NAME = 'index';
 const RAG_INDEX_FILE_NAME = 'rag-index.json';
 const WAM_DIR_NAME = '.wam';
@@ -1216,6 +1231,7 @@ const WAM_REFS_HEADS_DIR = 'heads';
 const WAM_REFS_TAGS_DIR = 'tags';
 const WAM_HEAD_TEXT_FILE = 'HEAD';
 const WAM_HEAD_FILE = 'HEAD.json';
+const WAM_SIGNING_KEY_FILE = 'SIGNING_KEY.json';
 const WAM_GLOBAL_ID = 'global';
 const WAM_STASH_DIR = 'stash';
 const WAM_DEFAULT_BRANCH = 'main';
@@ -1255,8 +1271,19 @@ type WamCommit = {
     rootPath?: string;
     digest: string;
     snapshots: Record<string, string>;
+    signature?: string;
+    signatureAlg?: 'hmac-sha256';
+    signatureKeyId?: string;
     conflicts?: string[];
     changes?: any;
+};
+
+type WamSigningKeyFile = {
+    schemaVersion: 1;
+    keyId: string;
+    alg: 'hmac-sha256';
+    key: string; // base64
+    createdAt: string;
 };
 
 function nowIso(): string {
@@ -1768,6 +1795,107 @@ function writeJsonFileSafe(filePath: string, data: unknown): void {
     fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
 }
 
+function isWamSigningEnabled(): boolean {
+    try {
+        const cfg = vscode.workspace.getConfiguration('mcpService');
+        return cfg.get<boolean>('wamSigning', false) === true;
+    } catch {
+        return false;
+    }
+}
+
+function listWamSigningKeyPaths(homeDirs: string[] = getWriteHomeDirs()): string[] {
+    const dirs = getGlobalWamDirs(homeDirs);
+    const paths: string[] = [];
+    const seen = new Set<string>();
+    for (const { dir } of dirs) {
+        const p = path.join(dir, WAM_SIGNING_KEY_FILE);
+        const key = normalizePathForCompare(p);
+        if (!seen.has(key)) {
+            seen.add(key);
+            paths.push(p);
+        }
+    }
+    return paths;
+}
+
+function parseWamSigningKeyFile(raw: any): { keyId: string; keyBytes: Buffer; alg: 'hmac-sha256' } | null {
+    try {
+        if (!raw || typeof raw !== 'object') return null;
+        const alg = String((raw as any).alg || 'hmac-sha256') as 'hmac-sha256';
+        if (alg !== 'hmac-sha256') return null;
+        const keyId = String((raw as any).keyId || '').trim() || 'default';
+        const key = String((raw as any).key || '').trim();
+        if (!key) return null;
+        const keyBytes = Buffer.from(key, 'base64');
+        if (!keyBytes || keyBytes.length < 24) return null;
+        return { keyId, keyBytes, alg };
+    } catch {
+        return null;
+    }
+}
+
+function loadWamSigningKey(readonlyMode = true): { keyId: string; keyBytes: Buffer; alg: 'hmac-sha256' } | null {
+    const paths = listWamSigningKeyPaths(readonlyMode ? getReadHomeDirs() : getWriteHomeDirs());
+    for (const p of paths) {
+        const data = readJsonFileSafe<WamSigningKeyFile>(p);
+        const parsed = parseWamSigningKeyFile(data);
+        if (parsed) return parsed;
+    }
+    return null;
+}
+
+function ensureWamSigningKey(): { keyId: string; keyBytes: Buffer; alg: 'hmac-sha256' } | null {
+    if (!isWamSigningEnabled()) return null;
+
+    const existing = loadWamSigningKey(false);
+    if (existing) {
+        // Best-effort: replicate to any missing dirs so both windsurf/windsurf-next stay consistent.
+        try {
+            const paths = listWamSigningKeyPaths(getWriteHomeDirs());
+            const payload: WamSigningKeyFile = {
+                schemaVersion: 1,
+                keyId: existing.keyId,
+                alg: existing.alg,
+                key: existing.keyBytes.toString('base64'),
+                createdAt: nowIsoNano()
+            };
+            for (const p of paths) {
+                if (!fs.existsSync(p)) {
+                    writeJsonFileSafe(p, payload);
+                }
+            }
+        } catch {
+            // ignore replication failures
+        }
+        return existing;
+    }
+
+    const keyBytes = crypto.randomBytes(32);
+    const payload: WamSigningKeyFile = {
+        schemaVersion: 1,
+        keyId: 'default',
+        alg: 'hmac-sha256',
+        key: keyBytes.toString('base64'),
+        createdAt: nowIsoNano()
+    };
+
+    const paths = listWamSigningKeyPaths(getWriteHomeDirs());
+    for (const p of paths) {
+        try {
+            writeJsonFileSafe(p, payload);
+        } catch {
+            // ignore
+        }
+    }
+
+    return { keyId: payload.keyId, keyBytes, alg: payload.alg };
+}
+
+function signWamHash(hash: string, signingKey: Buffer): string {
+    return crypto.createHmac('sha256', signingKey).update(String(hash || '')).digest('hex');
+}
+
 /**
  * WAM (WindsurfAutoMcp) history: a lightweight, git-like snapshot log for project tracking + memory.
  * Stored under ~/.codeium/<variant>/windsurf-auto-mcp/.wam/<projectId>/.
@@ -2114,6 +2242,14 @@ function commitProjectWam(
             changes
         };
 
+        // Optional commit signing to make WAM history harder to forge.
+        const signing = ensureWamSigningKey();
+        if (signing) {
+            commit.signatureAlg = signing.alg;
+            commit.signatureKeyId = signing.keyId;
+            commit.signature = signWamHash(hash, signing.keyBytes);
+        }
+
         for (const { dir } of dirs) {
             try {
                 // Ensure refs are consistent across variants.
@@ -2244,6 +2380,14 @@ function autoWamCommitGlobal(
             },
             changes
         };
+
+        // Optional commit signing to make WAM history harder to forge.
+        const signing = ensureWamSigningKey();
+        if (signing) {
+            commit.signatureAlg = signing.alg;
+            commit.signatureKeyId = signing.keyId;
+            commit.signature = signWamHash(hash, signing.keyBytes);
+        }
 
         for (const { dir } of dirs) {
             try {
@@ -3105,13 +3249,16 @@ let extensionContext: vscode.ExtensionContext;
 		    askUserCalls: 0,
 		    askQuestionCalls: 0,
 		    askContinueCalls: 0,
+		    preflightCalls: 0,
 		    setPrdCalls: 0,
 		    updateOverviewCalls: 0,
 		    generateOverviewCalls: 0,
 		    updatePlanCalls: 0,
+		    planChangeRequestCalls: 0,
 		    updateWalkthroughCalls: 0,
 		    ragSearchCalls: 0,
 		    memorySearchCalls: 0,
+		    memoryHygieneCalls: 0,
 		    recordLessonCalls: 0,
 		    getProjectStatusCalls: 0,
 		    checkPlanCalls: 0,
@@ -3125,6 +3272,7 @@ let extensionContext: vscode.ExtensionContext;
 	    wamBranchCalls: 0,
 	    wamTagCalls: 0,
 	    wamDiffCalls: 0,
+	    wamVerifyCalls: 0,
 	    wamResetCalls: 0,
 	    wamStashCalls: 0,
 	    saveMemoryCalls: 0,
@@ -3249,9 +3397,33 @@ const TOOLS = [
 	                    }
 	                },
 	                text: { type: 'string', description: 'Plan text lines (supports [x]/[~]/[ ]) / 计划文本（支持 [x]/[~]/[ ]）' }
-	            }
-	        }
-	    },
+		            }
+		        }
+		    },
+		    {
+		        name: 'plan_change_request',
+		        description: 'Request a plan change with explicit merge/replace approval / 申请变更计划并显式选择 merge/replace',
+		        inputSchema: {
+		            type: 'object',
+		            properties: {
+		                rationale: { type: 'string', description: 'Why you are changing the plan (required by hooks) / 为什么变更计划（hooks 要求）' },
+		                summary: { type: 'string', description: 'Plan summary / 计划摘要' },
+		                items: {
+		                    type: 'array',
+		                    description: 'Proposed Plan items / 计划条目（提案）',
+		                    items: {
+		                        type: 'object',
+		                        properties: {
+		                            text: { type: 'string' },
+		                            status: { type: 'string', enum: ['todo', 'doing', 'done'] }
+		                        },
+		                        required: ['text']
+		                    }
+		                },
+		                text: { type: 'string', description: 'Proposed plan text (supports [x]/[~]/[ ]) / 计划文本（支持 [x]/[~]/[ ]）' }
+		            }
+		        }
+		    },
 	    {
 	        name: 'update_overview',
 	        description: 'Set/update project overview (architecture/context) / 设置或更新项目概览（架构/上下文）',
@@ -3304,6 +3476,23 @@ const TOOLS = [
             required: ['query']
         }
     },
+    {
+        name: 'memory_hygiene',
+        description: 'Review/apply memory hygiene (promote/dedupe/auto-link lessons) / 记忆整理（提升/去重/自动链接经验）',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                rationale: { type: 'string', description: 'Why you are running memory hygiene (required by hooks) / 为什么整理记忆（hooks 要求）' },
+                scope: { type: 'string', enum: ['project', 'global', 'both'], description: 'Which memory scope to process / 处理范围' },
+                apply: { type: 'boolean', description: 'If true, ask user confirmation and apply changes / 若为 true，将请求用户确认并应用变更' },
+                promote: { type: 'boolean', description: 'Promote eligible short→long / 提升符合条件的 short→long' },
+                dedupe: { type: 'boolean', description: 'Dedupe near-duplicates / 近重复去重' },
+                autoLinkLessons: { type: 'boolean', description: 'Auto-link lessons to files/commands / 自动为经验添加文件/命令链接' },
+                similarity: { type: 'number', description: 'Duplicate similarity threshold (0-1) / 去重相似度阈值（0-1）' },
+                maxEntries: { type: 'number', description: 'Max entries to consider for dedupe / 去重最大处理条目数' }
+            }
+        }
+    },
 	    {
 	        name: 'record_lesson',
 	        description: 'Record a lesson learned from a mistake (human-like learning) / 记录错误经验（类人学习）',
@@ -3328,6 +3517,23 @@ const TOOLS = [
 	            type: 'object',
 	            properties: {
 	                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
+	            }
+	        }
+	    },
+	    {
+	        name: 'preflight',
+	        description: 'Run required preflight checks (status/plan/memory/rag/wam) / 运行必需预检（状态/计划/记忆/RAG/WAM）',
+	        inputSchema: {
+	            type: 'object',
+	            properties: {
+	                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' },
+	                userPrompt: { type: 'string', description: 'Current user prompt (used as search query) / 当前用户提示（用作检索 query）' },
+	                query: { type: 'string', description: 'Fallback query for memory/rag search / 记忆/RAG 检索的兜底 query' },
+	                ragQuery: { type: 'string', description: 'Override query for rag_search / rag_search 专用 query' },
+	                memoryQuery: { type: 'string', description: 'Override query for memory_search / memory_search 专用 query' },
+	                ragMaxResults: { type: 'number', description: 'Max rag_search results / rag_search 最大返回数量' },
+	                memoryMaxResults: { type: 'number', description: 'Max memory_search results / memory_search 最大返回数量' },
+	                memoryScope: { type: 'string', enum: ['project', 'global', 'both'], description: 'Memory search scope / 记忆检索范围' }
 	            }
 	        }
 	    },
@@ -3412,6 +3618,21 @@ const TOOLS = [
                 rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
             },
             required: ['hash']
+        }
+    },
+    {
+        name: 'wam_verify',
+        description: 'Verify WAM integrity (hash chain + snapshot digest) / 校验 WAM 完整性（hash 链 + 快照 digest）',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                scope: { type: 'string', enum: ['project', 'global'], description: 'Scope: project or global / 范围：项目或全局' },
+                target: { type: 'string', description: 'Commit/ref specifier (hash/HEAD/branch/tag) / 目标（hash/HEAD/分支/tag）' },
+                maxCommits: { type: 'number', description: 'Max commits to verify / 最大校验提交数' },
+                verifySnapshots: { type: 'boolean', description: 'Verify snapshot files + digest / 校验快照文件与 digest' },
+                verifySignature: { type: 'boolean', description: 'Verify optional WAM commit signatures (if present) / 校验可选的 WAM 提交签名（若存在）' },
+                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
+            }
         }
     },
 		    {
@@ -3872,6 +4093,10 @@ async function handleToolCall(name: string, args: any): Promise<any> {
             stats.updatePlanCalls++;
             result = await handleUpdatePlan(args);
             break;
+        case 'plan_change_request':
+            stats.planChangeRequestCalls++;
+            result = await handlePlanChangeRequest(args);
+            break;
         case 'rag_search':
             stats.ragSearchCalls++;
             result = await handleRagSearch(args);
@@ -3880,6 +4105,10 @@ async function handleToolCall(name: string, args: any): Promise<any> {
             stats.memorySearchCalls++;
             result = await handleMemorySearch(args);
             break;
+        case 'memory_hygiene':
+            stats.memoryHygieneCalls++;
+            result = await handleMemoryHygiene(args);
+            break;
         case 'record_lesson':
             stats.recordLessonCalls++;
             result = await handleRecordLesson(args);
@@ -3887,6 +4116,10 @@ async function handleToolCall(name: string, args: any): Promise<any> {
         case 'get_project_status':
             stats.getProjectStatusCalls++;
             result = await handleGetProjectStatus(args);
+            break;
+        case 'preflight':
+            stats.preflightCalls++;
+            result = await handlePreflight(args);
             break;
         case 'wam_status':
             stats.wamStatusCalls++;
@@ -3903,6 +4136,10 @@ async function handleToolCall(name: string, args: any): Promise<any> {
         case 'wam_show':
             stats.wamShowCalls++;
             result = await handleWamShow(args);
+            break;
+        case 'wam_verify':
+            stats.wamVerifyCalls++;
+            result = await handleWamVerify(args);
             break;
         case 'wam_checkout':
             stats.wamCheckoutCalls++;
@@ -4295,6 +4532,30 @@ async function clearProjectWalkthrough() {
     bumpProjectStat(project, 'walkthroughUpdates');
     project.updatedAt = nowIso();
     removeProjectArtifacts(project, ['walkthrough.md']);
+    saveTrackerAndNotify(data, project);
+}
+
+async function clearProjectAudit() {
+    const lang = getUiLanguage();
+    const confirmed = await requestConfirmation(tr('sidebar.clearAuditConfirm', {}, lang), tr('sidebar.clearTitle', {}, lang));
+    if (!confirmed) return;
+    const { data, project } = resolveProjectTracker();
+    if (!project.projectId) {
+        project.projectId = createProjectId();
+        project.updatedAt = nowIso();
+        saveTrackerData(data);
+    }
+    const dirs = getProjectBrainDirs(getWriteHomeDirs(), project.projectId);
+    for (const { dir } of dirs) {
+        const p = path.join(dir, AUDIT_FILE_NAME);
+        try {
+            if (fs.existsSync(p)) fs.unlinkSync(p);
+        } catch {
+            // ignore
+        }
+    }
+    appendWalkthroughEntry(project, lang === 'en' ? 'Audit log cleared by user.' : 'Audit 日志已被用户清空。', lang);
+    project.updatedAt = nowIso();
     saveTrackerAndNotify(data, project);
 }
 
@@ -4869,6 +5130,145 @@ function mergePlanItems(existing: TrackerItem[], incoming: TrackerItem[]): Track
     return out;
 }
 
+function countPlanStatuses(items: TrackerItem[]): { total: number; todo: number; doing: number; done: number } {
+    const out = { total: 0, todo: 0, doing: 0, done: 0 };
+    for (const it of items || []) {
+        if (!it || !it.text) continue;
+        out.total += 1;
+        if (it.status === 'done') out.done += 1;
+        else if (it.status === 'doing') out.doing += 1;
+        else out.todo += 1;
+    }
+    return out;
+}
+
+async function handlePlanChangeRequest(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const { data, project } = resolveProjectTracker();
+    const items = extractItemsFromArgs(args);
+    const summary = extractSummaryFromArgs(args);
+
+    if (items.length === 0 && !summary) {
+        const msg = lang === 'en' ? 'plan_change_request requires items/text or summary.' : 'plan_change_request 需要 items/text 或 summary。';
+        throw new Error(msg);
+    }
+
+    const existingItems = Array.isArray(project.plan.items) ? project.plan.items : [];
+    const existingSummary = String(project.plan.summary || '').trim();
+    const existingCounts = countPlanStatuses(existingItems);
+    const incomingCounts = countPlanStatuses(items);
+
+    let added = 0;
+    let updated = 0;
+    try {
+        const existingIndex = new Map<string, TrackerItem>();
+        for (const it of existingItems) {
+            const key = normalizePlanItemKey(it?.text || '');
+            if (!key) continue;
+            if (!existingIndex.has(key)) existingIndex.set(key, it);
+        }
+        for (const inc of items) {
+            const key = normalizePlanItemKey(inc?.text || '');
+            if (!key) continue;
+            const cur = existingIndex.get(key);
+            if (!cur) {
+                added += 1;
+                continue;
+            }
+            const curRank = statusRank(cur.status);
+            const incRank = statusRank(inc.status);
+            if (incRank > curRank || String(inc.text || '').trim() !== String(cur.text || '').trim()) {
+                updated += 1;
+            }
+        }
+    } catch {
+        // ignore preview failures
+    }
+
+    const maxPreviewItems = 18;
+    const proposedPreview = items.slice(0, maxPreviewItems).map((it) => `- [${it.status === 'done' ? 'x' : it.status === 'doing' ? '~' : ' '}] ${it.text}`);
+    if (items.length > maxPreviewItems) proposedPreview.push(`- … (${items.length - maxPreviewItems} more)`);
+
+    const summaryLine =
+        summary && summary.trim()
+            ? (lang === 'en' ? `Proposed summary: ${summary.trim()}` : `提案摘要：${summary.trim()}`)
+            : (lang === 'en' ? 'Proposed summary: (no change)' : '提案摘要：（不变）');
+
+    const previewLines: string[] = [];
+    previewLines.push(lang === 'en' ? 'Plan change request' : '计划变更请求');
+    previewLines.push('');
+    previewLines.push(lang === 'en' ? `Current items: ${existingCounts.total} (todo=${existingCounts.todo}, doing=${existingCounts.doing}, done=${existingCounts.done})` : `当前条目：${existingCounts.total}（todo=${existingCounts.todo}, doing=${existingCounts.doing}, done=${existingCounts.done}）`);
+    previewLines.push(summaryLine);
+    if (items.length > 0) {
+        previewLines.push('');
+        previewLines.push(lang === 'en' ? `Proposed items: ${incomingCounts.total} (adds=${added}, updates=${updated})` : `提案条目：${incomingCounts.total}（新增=${added}，更新=${updated}）`);
+        previewLines.push(...proposedPreview);
+    }
+    previewLines.push('');
+    previewLines.push(lang === 'en' ? 'Choose how to apply:' : '请选择应用方式：');
+
+    const options =
+        lang === 'en'
+            ? ['Merge into current Plan (recommended)', 'Replace the Plan (dangerous)', 'Cancel']
+            : ['合并到现有 Plan（推荐）', '替换整个 Plan（危险）', '取消'];
+
+    const choiceRes = await handleAskQuestion({
+        title: lang === 'en' ? 'Plan change request' : '计划变更请求',
+        message: previewLines.join('\n'),
+        options,
+        allowText: false,
+        allowImage: false
+    });
+
+    const choicePayload = extractMarkerJson(choiceRes, 'CHOICE_JSON:') || {};
+    const selectedText = String(choicePayload?.choices?.[0]?.choiceText || '').trim();
+    if (!selectedText || selectedText.toLowerCase().includes('cancel') || selectedText.includes('取消')) {
+        const text = lang === 'en' ? 'Plan change canceled.' : '已取消计划变更。';
+        return { content: [{ type: 'text', text }, { type: 'text', text: `PLAN_CHANGE_REQUEST_JSON:\n${JSON.stringify({ applied: false, mode: 'cancel' }, null, 2)}` }] };
+    }
+
+    const mode: 'merge' | 'replace' =
+        selectedText.toLowerCase().includes('replace') || selectedText.includes('替换') ? 'replace' : 'merge';
+
+    if (summary !== undefined) {
+        project.plan.summary = summary;
+        bumpProjectStat(project, 'planUpdates');
+    }
+    if (items.length > 0) {
+        project.plan.items = mode === 'replace' ? items : mergePlanItems(project.plan.items, items);
+        const hasDoing = project.plan.items.some((it) => it && it.status === 'doing');
+        if (!hasDoing) {
+            const firstTodo = project.plan.items.find((it) => it && it.status === 'todo');
+            if (firstTodo) {
+                firstTodo.status = 'doing';
+                firstTodo.updatedAt = nowIso();
+            }
+        }
+        bumpProjectStat(project, 'planUpdates');
+    }
+
+    appendWalkthroughEntry(
+        project,
+        mode === 'replace'
+            ? (lang === 'en' ? 'Plan replaced via plan_change_request.' : '通过 plan_change_request 替换了计划。')
+            : (lang === 'en' ? 'Plan merged via plan_change_request.' : '通过 plan_change_request 合并了计划。'),
+        lang
+    );
+    project.stats = normalizeTrackerStats(project.stats);
+    project.stats.lastPlanUpdateAt = nowIso();
+    project.updatedAt = nowIso();
+    saveTrackerAndNotify(data, project);
+
+    const text = lang === 'en' ? `Plan updated (${mode}).` : `计划已更新（${mode === 'replace' ? '替换' : '合并'}）。`;
+    return {
+        content: [
+            { type: 'text', text },
+            { type: 'text', text: `PLAN_JSON:\n${JSON.stringify(buildTrackerSnapshot(project), null, 2)}` },
+            { type: 'text', text: `PLAN_CHANGE_REQUEST_JSON:\n${JSON.stringify({ applied: true, mode, added, updated }, null, 2)}` }
+        ]
+    };
+}
+
 async function handleUpdatePlan(args: any): Promise<any> {
     const lang = getUiLanguage();
     const { data, project } = resolveProjectTracker();
@@ -4926,6 +5326,106 @@ async function handleGetProjectStatus(args: any): Promise<any> {
     const snapshot = buildTrackerSnapshot(project);
     const text = lang === 'en' ? 'Project status:' : '项目状态：';
     return { content: [{ type: 'text', text }, { type: 'text', text: `STATUS_JSON:\n${JSON.stringify(snapshot, null, 2)}` }] };
+}
+
+function extractMarkerJson(result: any, markerPrefix: string): any | null {
+    try {
+        const content = Array.isArray(result?.content) ? result.content : [];
+        for (const item of content) {
+            if (!item || item.type !== 'text') continue;
+            const text = typeof item.text === 'string' ? item.text : '';
+            if (!text.startsWith(markerPrefix)) continue;
+            const idx = text.indexOf('\n');
+            const jsonText = idx >= 0 ? text.slice(idx + 1).trim() : '';
+            if (!jsonText) return null;
+            return JSON.parse(jsonText);
+        }
+        return null;
+    } catch {
+        return null;
+    }
+}
+
+async function handlePreflight(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const rootPath = typeof args?.rootPath === 'string' ? args.rootPath : undefined;
+
+    const userPrompt = typeof args?.userPrompt === 'string' ? args.userPrompt.trim() : '';
+    const query = typeof args?.query === 'string' ? args.query.trim() : '';
+    const ragQuery = typeof args?.ragQuery === 'string' ? args.ragQuery.trim() : '';
+    const memoryQuery = typeof args?.memoryQuery === 'string' ? args.memoryQuery.trim() : '';
+
+    const memoryScope: 'project' | 'global' | 'both' =
+        args?.memoryScope === 'global' || args?.memoryScope === 'both' ? args.memoryScope : 'both';
+    const ragMaxResults = clampNumber(args?.ragMaxResults, 1, 10, 6);
+    const memoryMaxResults = clampNumber(args?.memoryMaxResults, 1, 20, 8);
+
+    const baseQuery = userPrompt || query || '';
+    const effectiveRagQuery = ragQuery || baseQuery || (lang === 'en' ? 'project structure' : '项目结构');
+    const effectiveMemoryQuery = memoryQuery || baseQuery || (lang === 'en' ? 'plan, rules, lessons' : '计划 规则 经验');
+
+    const startedAt = nowIso();
+
+    const runCheck = async (fn: () => Promise<any>) => {
+        try {
+            const out = await fn();
+            return { ok: true as const, out };
+        } catch (e: any) {
+            return { ok: false as const, error: e?.message ?? String(e) };
+        }
+    };
+
+    const statusRes = await runCheck(() => handleGetProjectStatus({ rootPath }));
+    const planRes = await runCheck(() => handleCheckPlan({ rootPath }));
+    const memoryRes = await runCheck(() =>
+        handleMemorySearch({ query: effectiveMemoryQuery, scope: memoryScope, maxResults: memoryMaxResults })
+    );
+    const ragRes = await runCheck(() => handleRagSearch({ query: effectiveRagQuery, maxResults: ragMaxResults }));
+    const wamRes = await runCheck(() => handleWamStatus({ scope: 'project', rootPath }));
+
+    const payload: any = {
+        startedAt,
+        finishedAt: nowIso(),
+        rootPath: rootPath || getWorkspaceRootPath() || '',
+        queries: {
+            baseQuery,
+            ragQuery: effectiveRagQuery,
+            memoryQuery: effectiveMemoryQuery,
+            memoryScope,
+            ragMaxResults,
+            memoryMaxResults
+        },
+        checks: {
+            project_status: statusRes.ok
+                ? { ok: true, status: extractMarkerJson(statusRes.out, 'STATUS_JSON:') }
+                : { ok: false, error: statusRes.error },
+            check_plan: planRes.ok
+                ? { ok: true, plan: extractMarkerJson(planRes.out, 'PLAN_STATUS_JSON:') }
+                : { ok: false, error: planRes.error },
+            memory_search: memoryRes.ok
+                ? { ok: true, memory: extractMarkerJson(memoryRes.out, 'MEMORY_SEARCH_JSON:') }
+                : { ok: false, error: memoryRes.error },
+            rag_search: ragRes.ok ? { ok: true, rag: extractMarkerJson(ragRes.out, 'RAG_JSON:') } : { ok: false, error: ragRes.error },
+            wam_status: wamRes.ok
+                ? { ok: true, wam: extractMarkerJson(wamRes.out, 'WAM_STATUS_JSON:') }
+                : { ok: false, error: wamRes.error }
+        }
+    };
+
+    const lines: string[] = [];
+    lines.push(lang === 'en' ? 'Preflight checks:' : '预检检查：');
+    const addLine = (name: string, ok: boolean, error?: string) => {
+        const badge = ok ? (lang === 'en' ? 'OK' : '通过') : (lang === 'en' ? 'FAIL' : '失败');
+        lines.push(`- ${name}: ${badge}${!ok && error ? ` — ${error}` : ''}`);
+    };
+    addLine('get_project_status', statusRes.ok, (statusRes as any).error);
+    addLine('check_plan', planRes.ok, (planRes as any).error);
+    addLine('memory_search', memoryRes.ok, (memoryRes as any).error);
+    addLine('rag_search', ragRes.ok, (ragRes as any).error);
+    addLine('wam_status', wamRes.ok, (wamRes as any).error);
+
+    const text = lines.join('\n');
+    return { content: [{ type: 'text', text }, { type: 'text', text: `PREFLIGHT_JSON:\n${JSON.stringify(payload, null, 2)}` }] };
 }
 
 function parseWamScope(args: any): 'project' | 'global' {
@@ -5114,6 +5614,166 @@ async function handleWamShow(args: any): Promise<any> {
     }
     const text = lang === 'en' ? `WAM commit: ${hash}` : `WAM 提交：${hash}`;
     return { content: [{ type: 'text', text }, { type: 'text', text: `WAM_COMMIT_JSON:\n${JSON.stringify(commit, null, 2)}` }] };
+}
+
+function verifyWamIntegrity(
+    dir: string,
+    scope: 'project' | 'global',
+    targetHash: string,
+    options?: { maxCommits?: number; verifySnapshots?: boolean; verifySignature?: boolean; signingKey?: Buffer | null }
+): { ok: boolean; checked: number; issues: string[] } {
+    const maxCommits = options?.maxCommits ? Math.max(1, Math.min(800, Math.floor(options.maxCommits))) : 200;
+    const verifySnapshots = options?.verifySnapshots !== false;
+    const verifySignature = options?.verifySignature === true;
+    const signingKey = options?.signingKey || null;
+    const issues: string[] = [];
+    const queue: string[] = [];
+    const seen = new Set<string>();
+
+    const pushIssue = (msg: string) => {
+        if (issues.length >= 60) return;
+        issues.push(msg);
+    };
+
+    const normalizeHash = (h: any) => (typeof h === 'string' ? h.trim() : '');
+    const expectedHash = (commit: WamCommit): string => {
+        const createdAt = String(commit.createdAt || '');
+        const parents = Array.isArray(commit.parents) ? commit.parents : [];
+        const message = String(commit.message || '');
+        const digest = String(commit.digest || '');
+        return sha256Hex(`${createdAt}\n${parents.join(',')}\n${message}\n${digest}`);
+    };
+
+    queue.push(targetHash);
+
+    while (queue.length > 0 && seen.size < maxCommits) {
+        const hash = normalizeHash(queue.shift());
+        if (!hash) continue;
+        if (seen.has(hash)) continue;
+        seen.add(hash);
+
+        const commit = readWamCommit(dir, hash);
+        if (!commit) {
+            pushIssue(`Missing commit object: ${hash}`);
+            continue;
+        }
+        if (commit.hash !== hash) {
+            pushIssue(`Commit hash mismatch (file=${hash}, commit.hash=${commit.hash})`);
+        }
+        const exp = expectedHash(commit);
+        if (exp !== commit.hash) {
+            pushIssue(`Commit content hash mismatch: ${commit.hash} (expected ${exp})`);
+        }
+
+        const hasSignature = typeof (commit as any).signature === 'string' && String((commit as any).signature).trim().length > 0;
+        if ((verifySignature || hasSignature) && !signingKey) {
+            pushIssue(`Cannot verify signature (missing signing key): ${hash}`);
+        }
+        if (signingKey && (verifySignature || hasSignature)) {
+            const sigAlg = String((commit as any).signatureAlg || 'hmac-sha256');
+            if (sigAlg !== 'hmac-sha256') {
+                pushIssue(`Unknown signature algorithm: ${hash} (${sigAlg})`);
+            } else if (!hasSignature) {
+                pushIssue(`Missing signature: ${hash}`);
+            } else {
+                const sig = String((commit as any).signature || '').trim();
+                const expectedSig = signWamHash(hash, signingKey);
+                if (sig !== expectedSig) {
+                    pushIssue(`Signature mismatch: ${hash}`);
+                }
+            }
+        }
+
+        if (verifySnapshots) {
+            if (scope === 'global') {
+                const snap = readWamSnapshot(dir, hash, 'global_memory');
+                const gm = snap?.globalMemory;
+                if (!gm) {
+                    pushIssue(`Missing global snapshot: ${hash}`);
+                } else {
+                    const dig = computeGlobalWamDigest(gm);
+                    if (dig !== commit.digest) {
+                        pushIssue(`Digest mismatch (global): ${hash}`);
+                    }
+                }
+            } else {
+                const trackerSnap = readWamSnapshot(dir, hash, 'tracker');
+                const memorySnap = readWamSnapshot(dir, hash, 'memory');
+                const tracker = trackerSnap?.tracker as any;
+                const memory = memorySnap?.memory as any;
+                if (!tracker || !memory) {
+                    pushIssue(`Missing project snapshots (tracker/memory): ${hash}`);
+                } else {
+                    const dig = computeProjectWamDigest(tracker as ProjectTracker, memory as ProjectMemoryStore);
+                    if (dig !== commit.digest) {
+                        pushIssue(`Digest mismatch (project): ${hash}`);
+                    }
+                }
+            }
+        }
+
+        const parents = Array.isArray(commit.parents) ? commit.parents : [];
+        for (const p of parents) {
+            const ph = normalizeHash(p);
+            if (!ph) continue;
+            if (!readWamCommit(dir, ph)) {
+                pushIssue(`Missing parent commit: ${commit.hash} -> ${ph}`);
+                continue;
+            }
+            queue.push(ph);
+        }
+    }
+
+    return { ok: issues.length === 0, checked: seen.size, issues };
+}
+
+async function handleWamVerify(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const scope = parseWamScope(args);
+    const verifySnapshots = args?.verifySnapshots !== false;
+    const verifySignature = args?.verifySignature === true;
+    const maxCommits = clampNumber(args?.maxCommits, 1, 800, 200);
+    const targetSpec = typeof args?.target === 'string' ? args.target.trim() : 'HEAD';
+
+    let dir: string | null = null;
+    if (scope === 'global') {
+        dir = resolveGlobalWamDir();
+    } else {
+        const rootPath = typeof args?.rootPath === 'string' ? args.rootPath : undefined;
+        dir = buildCurrentProjectWamState(rootPath).wamDir;
+    }
+
+    if (!dir) {
+        const text = lang === 'en' ? 'WAM: no history directory found yet.' : 'WAM：尚未找到历史目录。';
+        return { content: [{ type: 'text', text }] };
+    }
+
+    ensureWamRepoLayout(dir);
+    const resolvedHash = resolveWamHashFromSpecifier(dir, targetSpec);
+    if (!resolvedHash) {
+        const text = lang === 'en' ? `WAM: cannot resolve target: ${targetSpec}` : `WAM：无法解析目标：${targetSpec}`;
+        return { content: [{ type: 'text', text }] };
+    }
+
+    const signing = loadWamSigningKey(true);
+    const result = verifyWamIntegrity(dir, scope, resolvedHash, {
+        maxCommits,
+        verifySnapshots,
+        verifySignature,
+        signingKey: signing?.keyBytes || null
+    });
+    const text =
+        lang === 'en'
+            ? `WAM verify (${scope}): ${result.ok ? 'OK' : 'FAIL'} (checked=${result.checked}, issues=${result.issues.length})`
+            : `WAM 校验（${scope === 'global' ? '全局' : '项目'}）：${result.ok ? '通过' : '失败'}（检查=${result.checked}，问题=${result.issues.length}）`;
+
+    return {
+        content: [
+            { type: 'text', text },
+            { type: 'text', text: result.issues.length ? result.issues.map((l) => `- ${l}`).join('\n') : (lang === 'en' ? '(no issues)' : '（无问题）') },
+            { type: 'text', text: `WAM_VERIFY_JSON:\n${JSON.stringify({ scope, target: targetSpec, resolvedHash, ...result, verifySnapshots, verifySignature, maxCommits, signatureKeyPresent: !!signing }, null, 2)}` }
+        ]
+    };
 }
 
 async function handleWamCheckout(args: any): Promise<any> {
@@ -6732,6 +7392,73 @@ function pruneShortMemories(store: ProjectMemoryStore | GlobalMemoryData, maxAge
     }
 }
 
+function uniqStrings(items: string[], maxItems = 24): string[] {
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const raw of items || []) {
+        const v = String(raw || '').trim();
+        if (!v) continue;
+        const key = v.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(v);
+        if (out.length >= maxItems) break;
+    }
+    return out;
+}
+
+function extractAutoLinksFromText(text: string, maxLinks = 12): string[] {
+    const src = String(text || '');
+    const found: string[] = [];
+
+    const push = (v: string) => {
+        const s = String(v || '').trim();
+        if (!s) return;
+        if (s.length > 260) return;
+        found.push(s);
+    };
+
+    // File paths (best-effort, avoid spaces).
+    const patterns: RegExp[] = [
+        /[A-Za-z]:\\[^\s"'<>]+/g,
+        /(\.{1,2}\/[^\s"'<>]+)+/g,
+        /(\/[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+)/g
+    ];
+    for (const re of patterns) {
+        const matches = src.match(re);
+        if (!matches) continue;
+        for (const m of matches.slice(0, 20)) {
+            push(`file:${m}`);
+        }
+    }
+
+    // Commands (common guard/lesson formats).
+    const lines = src.replace(/\r\n/g, '\n').split('\n');
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        const m1 = line.match(/^Command:\s*(.+)$/i);
+        if (m1 && m1[1]) {
+            push(`cmd:${m1[1].trim()}`);
+            continue;
+        }
+        if (/^Command:\s*$/i.test(line) && i + 1 < lines.length) {
+            const next = lines[i + 1].trim();
+            if (next) push(`cmd:${next}`);
+        }
+        const m2 = line.match(/^Blocked(?: write)?(?: to)? sensitive path:\s*(.+)$/i);
+        if (m2 && m2[1]) {
+            push(`file:${m2[1].trim()}`);
+        }
+        const m3 = line.match(/^MCP tool (?:failed|error):\s*([A-Za-z0-9_.-]+)\\.([A-Za-z0-9_.-]+).*$/i);
+        if (m3) {
+            push(`mcp:${m3[1]}.${m3[2]}`);
+        }
+    }
+
+    return uniqStrings(found, maxLinks);
+}
+
 async function handleSaveMemory(args: any): Promise<any> {
     const lang = getUiLanguage();
     const key = typeof args?.key === 'string' ? args.key.trim() : '';
@@ -6773,6 +7500,7 @@ async function handleSaveMemory(args: any): Promise<any> {
             const trackerInfo = resolveProjectTracker(rootPath);
             saveTrackerData(trackerInfo.data);
             syncMemoryArtifacts(trackerInfo.project, project);
+            refreshOpenPanels(trackerInfo.project);
 	        } catch (e: any) {
 	            outputChannel?.appendLine(`Memory artifact sync failed: ${e?.message ?? String(e)}`);
 	        }
@@ -6795,6 +7523,13 @@ async function handleSaveMemory(args: any): Promise<any> {
 	        pruneShortMemories(global);
 	        saveGlobalMemoryData(global);
 	    }
+    try {
+        // Best-effort: refresh panels so global memory changes show up when Memory panel is open.
+        const trackerInfo = resolveProjectTracker(rootPath);
+        refreshOpenPanels(trackerInfo.project);
+    } catch {
+        // ignore
+    }
 
     const where =
         scope === 'both'
@@ -6914,6 +7649,286 @@ async function handleMemorySearch(args: any): Promise<any> {
     };
 }
 
+async function handleMemoryHygiene(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const scope: 'project' | 'global' | 'both' = args?.scope === 'global' || args?.scope === 'both' ? args.scope : 'project';
+    const apply = args?.apply === true;
+    const promote = args?.promote !== false;
+    const dedupe = args?.dedupe !== false;
+    const autoLinkLessons = args?.autoLinkLessons !== false;
+    const similarityRaw = Number(args?.similarity);
+    const similarity = Number.isFinite(similarityRaw) ? Math.max(0.75, Math.min(0.98, similarityRaw)) : 0.9;
+    const maxEntries = clampNumber(args?.maxEntries, 40, 220, 120);
+
+    const shouldIgnoreKey = (key: string): boolean => {
+        const k = String(key || '').trim().toLowerCase();
+        if (!k) return true;
+        if (k.startsWith('hook:')) return true;
+        if (k.startsWith('temp:') || k.startsWith('scratch:')) return true;
+        return false;
+    };
+
+    const buildTokens = (text: string): Set<string> => {
+        const tokens = tokenizeForSearch(String(text || ''));
+        const out = new Set<string>();
+        for (const t of tokens.slice(0, 180)) {
+            const v = String(t || '').trim().toLowerCase();
+            if (!v) continue;
+            if (v.length < 3) continue;
+            out.add(v);
+            if (out.size >= 160) break;
+        }
+        return out;
+    };
+
+    const jaccard = (a: Set<string>, b: Set<string>): number => {
+        if (!a.size || !b.size) return 0;
+        let inter = 0;
+        const [small, big] = a.size < b.size ? [a, b] : [b, a];
+        for (const t of small) {
+            if (big.has(t)) inter += 1;
+        }
+        const union = a.size + b.size - inter;
+        return union > 0 ? inter / union : 0;
+    };
+
+    type OpPromote = { op: 'promote'; scope: 'project' | 'global'; key: string; from: string; to: string; reason: string };
+    type OpLink = { op: 'add_links'; scope: 'project' | 'global'; key: string; add: string[] };
+    type OpDedupe = { op: 'dedupe'; scope: 'project' | 'global'; keep: string; drop: string[]; similarity: number };
+    const ops: { promote: OpPromote[]; links: OpLink[]; dedupe: OpDedupe[] } = { promote: [], links: [], dedupe: [] };
+
+    const analyzeStore = (scopeName: 'project' | 'global', store: Record<string, MemoryEntry>) => {
+        const entries = Object.entries(store || {})
+            .map(([key, entry]) => ({ key, entry }))
+            .filter((it) => it.entry && typeof it.entry === 'object' && !shouldIgnoreKey(it.key));
+
+        if (autoLinkLessons) {
+            for (const { key, entry } of entries) {
+                const kind = normalizeMemoryKind(entry.kind);
+                if (kind !== 'lesson') continue;
+                const extracted = extractAutoLinksFromText(entry.content || '', 12);
+                if (extracted.length === 0) continue;
+                const merged = uniqStrings([...(entry.links || []), ...extracted], 24);
+                const add = merged.filter((v) => !(entry.links || []).includes(v));
+                if (add.length > 0) {
+                    ops.links.push({ op: 'add_links', scope: scopeName, key, add });
+                }
+            }
+        }
+
+        if (promote) {
+            const promoteTags = new Set(['decision', 'architecture', 'arch', 'rule', 'policy', 'important', 'security', 'design']);
+            for (const { key, entry } of entries) {
+                const kind = normalizeMemoryKind(entry.kind);
+                if (kind !== 'short') continue;
+                const content = String(entry.content || '');
+                if (content.length < 220) continue;
+                const tags = (entry.tags || []).map((t) => String(t || '').toLowerCase());
+                const tagHit = tags.some((t) => promoteTags.has(t));
+                const keyHit = /decision|arch|rule|policy|security|design/i.test(key);
+                if (!tagHit && !keyHit) continue;
+                ops.promote.push({
+                    op: 'promote',
+                    scope: scopeName,
+                    key,
+                    from: 'short',
+                    to: 'long',
+                    reason: tagHit ? 'tag' : 'key'
+                });
+            }
+        }
+
+        if (dedupe) {
+            const candidates = entries
+                .filter((it) => String(it.entry.content || '').trim().length >= 80)
+                .sort((a, b) => String(b.entry.updatedAt || '').localeCompare(String(a.entry.updatedAt || '')))
+                .slice(0, maxEntries);
+
+            if (candidates.length < 2) return;
+
+            const tokens = candidates.map((c) => buildTokens(`${c.key}\n${c.entry.content || ''}`));
+            const parent = Array.from({ length: candidates.length }, (_, i) => i);
+            const find = (i: number): number => {
+                while (parent[i] !== i) {
+                    parent[i] = parent[parent[i]];
+                    i = parent[i];
+                }
+                return i;
+            };
+            const union = (a: number, b: number) => {
+                const ra = find(a);
+                const rb = find(b);
+                if (ra !== rb) parent[rb] = ra;
+            };
+
+            for (let i = 0; i < candidates.length; i++) {
+                for (let j = i + 1; j < candidates.length; j++) {
+                    const sim = jaccard(tokens[i], tokens[j]);
+                    if (sim >= similarity) {
+                        union(i, j);
+                    }
+                }
+            }
+
+            const groups = new Map<number, number[]>();
+            for (let i = 0; i < candidates.length; i++) {
+                const r = find(i);
+                const arr = groups.get(r) || [];
+                arr.push(i);
+                groups.set(r, arr);
+            }
+
+            const kindRank = (k: string) => (k === 'lesson' ? 3 : k === 'long' ? 2 : 1);
+            for (const idxs of groups.values()) {
+                if (idxs.length < 2) continue;
+                idxs.sort((a, b) => {
+                    const ka = kindRank(normalizeMemoryKind(candidates[a].entry.kind));
+                    const kb = kindRank(normalizeMemoryKind(candidates[b].entry.kind));
+                    if (ka !== kb) return kb - ka;
+                    return String(candidates[b].entry.updatedAt || '').localeCompare(String(candidates[a].entry.updatedAt || ''));
+                });
+                const keep = candidates[idxs[0]].key;
+                const drop = idxs.slice(1).map((i) => candidates[i].key).filter((k) => k !== keep);
+                if (drop.length > 0) {
+                    ops.dedupe.push({ op: 'dedupe', scope: scopeName, keep, drop, similarity });
+                }
+            }
+        }
+    };
+
+    let trackerInfo: { data: TrackerData; project: ProjectTracker } | null = null;
+    try {
+        trackerInfo = resolveProjectTracker();
+    } catch {
+        trackerInfo = null;
+    }
+
+    let projectMemory: { data: MemoryData; project: ProjectMemoryStore; rootPath: string } | null = null;
+    if (scope === 'project' || scope === 'both') {
+        projectMemory = resolveProjectMemory();
+        analyzeStore('project', projectMemory.project.memories || {});
+    }
+    let globalMemory: GlobalMemoryData | null = null;
+    if (scope === 'global' || scope === 'both') {
+        globalMemory = loadGlobalMemoryData();
+        analyzeStore('global', globalMemory.memories || {});
+    }
+
+    const summary = {
+        scope,
+        promote: ops.promote.length,
+        addLinks: ops.links.length,
+        dedupeGroups: ops.dedupe.length,
+        similarity,
+        maxEntries
+    };
+
+    if (!apply) {
+        const text = lang === 'en' ? 'Memory hygiene suggestions generated.' : '已生成记忆整理建议。';
+        return { content: [{ type: 'text', text }, { type: 'text', text: `MEMORY_HYGIENE_JSON:\n${JSON.stringify({ summary, ops }, null, 2)}` }] };
+    }
+
+    const confirmMsg =
+        lang === 'en'
+            ? `Apply memory hygiene?\n- promote: ${ops.promote.length}\n- dedupe groups: ${ops.dedupe.length}\n- add lesson links: ${ops.links.length}\n\nThis may delete duplicate memory keys.`
+            : `是否应用记忆整理？\n- 提升：${ops.promote.length}\n- 去重组：${ops.dedupe.length}\n- 为经验添加链接：${ops.links.length}\n\n这可能会删除重复的记忆键。`;
+    const confirmed = await requestConfirmation(confirmMsg, lang === 'en' ? 'Memory hygiene' : '记忆整理');
+    if (!confirmed) {
+        const text = lang === 'en' ? 'Memory hygiene canceled.' : '已取消记忆整理。';
+        return { content: [{ type: 'text', text }, { type: 'text', text: `MEMORY_HYGIENE_JSON:\n${JSON.stringify({ summary, ops, applied: false }, null, 2)}` }] };
+    }
+
+    const now = nowIso();
+    const applyToStore = (scopeName: 'project' | 'global', store: Record<string, MemoryEntry>, timeline?: any[]) => {
+        const byKey = store || {};
+
+        for (const op of ops.dedupe.filter((o) => o.scope === scopeName)) {
+            const keep = byKey[op.keep];
+            if (!keep) continue;
+            const mergedTags: string[] = [];
+            const mergedLinks: string[] = [];
+            for (const k of [op.keep, ...op.drop]) {
+                const e = byKey[k];
+                if (!e) continue;
+                mergedTags.push(...(e.tags || []));
+                mergedLinks.push(...(e.links || []));
+            }
+            keep.tags = uniqStrings(mergedTags, 36);
+            keep.links = uniqStrings([...mergedLinks, ...op.drop.map((k) => `memory:${k}`)], 48);
+            keep.updatedAt = now;
+            byKey[op.keep] = keep;
+            for (const k of op.drop) {
+                if (k !== op.keep) delete byKey[k];
+            }
+            if (Array.isArray(timeline)) {
+                pushTimelineEntry(timeline, { kind: normalizeMemoryKind(keep.kind), key: op.keep, content: keep.content || '' });
+            }
+        }
+
+        for (const op of ops.promote.filter((o) => o.scope === scopeName)) {
+            const e = byKey[op.key];
+            if (!e) continue;
+            if (normalizeMemoryKind(e.kind) !== 'short') continue;
+            e.kind = 'long';
+            e.updatedAt = now;
+            byKey[op.key] = e;
+            if (Array.isArray(timeline)) {
+                pushTimelineEntry(timeline, { kind: 'long', key: op.key, content: e.content || '' });
+            }
+        }
+
+        for (const op of ops.links.filter((o) => o.scope === scopeName)) {
+            const e = byKey[op.key];
+            if (!e) continue;
+            const next = uniqStrings([...(e.links || []), ...op.add], 48);
+            e.links = next;
+            e.updatedAt = now;
+            byKey[op.key] = e;
+            if (Array.isArray(timeline)) {
+                pushTimelineEntry(timeline, { kind: normalizeMemoryKind(e.kind), key: op.key, content: e.content || '' });
+            }
+        }
+    };
+
+    if (projectMemory) {
+        if (!Array.isArray(projectMemory.project.timeline)) projectMemory.project.timeline = [];
+        applyToStore('project', projectMemory.project.memories || {}, projectMemory.project.timeline);
+        pruneShortMemories(projectMemory.project);
+        saveMemoryAndNotify(projectMemory.data);
+        if (trackerInfo) {
+            try {
+                syncMemoryArtifacts(trackerInfo.project, projectMemory.project);
+            } catch (e: any) {
+                outputChannel?.appendLine(`Memory artifact sync failed (hygiene): ${e?.message ?? String(e)}`);
+            }
+        }
+    }
+
+    if (globalMemory) {
+        if (!Array.isArray(globalMemory.timeline)) globalMemory.timeline = [];
+        applyToStore('global', globalMemory.memories || {}, globalMemory.timeline);
+        pruneShortMemories(globalMemory);
+        saveGlobalMemoryData(globalMemory);
+    }
+
+    if (trackerInfo && (ops.promote.length || ops.dedupe.length || ops.links.length)) {
+        appendWalkthroughEntry(
+            trackerInfo.project,
+            lang === 'en'
+                ? `Memory hygiene applied: promote=${ops.promote.length}, dedupe=${ops.dedupe.length}, links=${ops.links.length}.`
+                : `记忆整理已应用：提升=${ops.promote.length}，去重=${ops.dedupe.length}，链接=${ops.links.length}。`,
+            lang
+        );
+        trackerInfo.project.updatedAt = nowIso();
+        saveTrackerAndNotify(trackerInfo.data, trackerInfo.project);
+    } else if (trackerInfo) {
+        refreshOpenPanels(trackerInfo.project);
+    }
+
+    const text = lang === 'en' ? 'Memory hygiene applied.' : '记忆整理已应用。';
+    return { content: [{ type: 'text', text }, { type: 'text', text: `MEMORY_HYGIENE_JSON:\n${JSON.stringify({ summary, ops, applied: true }, null, 2)}` }] };
+}
+
 async function handleRecordLesson(args: any): Promise<any> {
     const lang = getUiLanguage();
     const title = typeof args?.title === 'string' ? args.title.trim() : '';
@@ -6942,7 +7957,8 @@ async function handleRecordLesson(args: any): Promise<any> {
         tags.length ? `\n## Tags\n- ${tags.join('\n- ')}` : ''
     ].join('\n');
 
-    await handleSaveMemory({ key, value: content, kind: 'lesson', scope, tags });
+    const autoLinks = extractAutoLinksFromText([mistake, fix, prevention].filter(Boolean).join('\n'), 12);
+    await handleSaveMemory({ key, value: content, kind: 'lesson', scope, tags, links: autoLinks });
     const text = lang === 'en' ? `Lesson recorded: ${key}` : `经验已记录: ${key}`;
     return { content: [{ type: 'text', text }] };
 }
@@ -7227,7 +8243,9 @@ async function handleEnsureReleaseGate(args: any): Promise<any> {
         lang === 'en' ? 'Run build / compile' : '运行 build / compile',
         lang === 'en' ? 'Run tests (unit/integration) and verify locally' : '运行测试（单元/集成）并本地验证',
         lang === 'en' ? 'Run lint/format and fix warnings' : '运行 lint/format 并修复警告',
-        lang === 'en' ? 'Dependency check: outdated/vulnerable packages (prefer official docs)' : '依赖检查：过时/漏洞包（以官方文档为准）',
+        lang === 'en'
+            ? 'Dependency/security scan: outdated + vulnerable packages (npm audit + OSV/Dependabot or stack equivalent)'
+            : '依赖/安全扫描：过时 + 漏洞包（npm audit + OSV/Dependabot 或同类工具）',
         lang === 'en' ? 'Security review: secrets, sensitive writes, permissions, injection risks' : '安全复审：密钥/敏感写入/权限/注入风险',
         lang === 'en' ? 'Performance review: avoid leaks, large sync I/O, hotspots' : '性能复审：避免泄漏、过多同步 I/O、热点',
         lang === 'en' ? 'Docs: README/update notes, usage, restart requirements (hooks)' : '文档：README/更新说明/用法/重启要求（hooks）',
@@ -7300,6 +8318,7 @@ let planPanel: vscode.WebviewPanel | null = null;
 let walkthroughPanel: vscode.WebviewPanel | null = null;
 let memoryPanel: vscode.WebviewPanel | null = null;
 let wamPanel: vscode.WebviewPanel | null = null;
+let auditPanel: vscode.WebviewPanel | null = null;
 
 function resolveProjectForPanel(): ProjectTracker | null {
     try {
@@ -7332,6 +8351,13 @@ function refreshOpenPanels(project: ProjectTracker) {
             wamPanel.webview.html = getWamPanelHtml(project, lang, wamPanel.webview);
         } catch (e: any) {
             outputChannel?.appendLine(`WAM panel refresh failed: ${e?.message ?? String(e)}`);
+        }
+    }
+    if (auditPanel) {
+        try {
+            auditPanel.webview.html = getAuditPanelHtml(project, lang, auditPanel.webview);
+        } catch (e: any) {
+            outputChannel?.appendLine(`Audit panel refresh failed: ${e?.message ?? String(e)}`);
         }
     }
 }
@@ -7426,6 +8452,21 @@ function showWamPanel() {
     );
     wamPanel.webview.html = getWamPanelHtml(project, lang, wamPanel.webview);
     wamPanel.onDidDispose(() => { wamPanel = null; });
+}
+
+function showAuditPanel() {
+    const project = resolveProjectForPanel();
+    if (!project) return;
+    const lang = getUiLanguage();
+    if (auditPanel) auditPanel.dispose();
+    auditPanel = vscode.window.createWebviewPanel(
+        'mcpAudit',
+        tr('panel.auditTitle', {}, lang),
+        vscode.ViewColumn.Two,
+        { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: [extensionContext.extensionUri] }
+    );
+    auditPanel.webview.html = getAuditPanelHtml(project, lang, auditPanel.webview);
+    auditPanel.onDidDispose(() => { auditPanel = null; });
 }
 
 function getPanelShellHtml(
@@ -8063,6 +9104,124 @@ function getMemoryPanelHtml(
     return getPanelShellHtml(webview, tr('panel.memoryTitle', {}, lang), project.name, '', body, lang, { extraScript: script });
 }
 
+type AuditEntry = {
+    at?: string;
+    action?: string;
+    severity?: string;
+    message?: string;
+    [key: string]: any;
+};
+
+function readAuditEntries(project: ProjectTracker): Array<AuditEntry & { variant: string }> {
+    const entries: Array<AuditEntry & { variant: string }> = [];
+    if (!project.projectId) return entries;
+    const dirs = getProjectBrainDirs(getReadHomeDirs(), project.projectId);
+    for (const { variant, dir } of dirs) {
+        try {
+            const p = path.join(dir, AUDIT_FILE_NAME);
+            if (!fs.existsSync(p)) continue;
+            const raw = fs.readFileSync(p, 'utf-8');
+            if (!raw.trim()) continue;
+            const lines = raw.split(/\r?\n/).filter((l) => l.trim());
+            for (const line of lines.slice(-600)) {
+                try {
+                    const parsed = JSON.parse(line);
+                    if (parsed && typeof parsed === 'object') {
+                        entries.push({ variant, ...(parsed as any) });
+                    }
+                } catch {
+                    // ignore malformed lines
+                }
+            }
+        } catch {
+            // ignore read failures
+        }
+    }
+    entries.sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));
+    return entries.slice(0, 260);
+}
+
+function getAuditPanelHtml(project: ProjectTracker, lang: UiLanguage, webview: vscode.Webview): string {
+    const entries = readAuditEntries(project);
+    const badge = entries.length ? String(entries.length) : '';
+
+    const rows = entries.length
+        ? entries
+            .map((e) => {
+                const at = escapeHtml(String(e.at || ''));
+                const severityRaw = String(e.severity || '').toLowerCase();
+                const severity = severityRaw || 'info';
+                const action = escapeHtml(String(e.action || ''));
+                const message = escapeHtml(String(e.message || '')).replace(/\n/g, '<br/>');
+                const variant = escapeHtml(String(e.variant || ''));
+                const pillClass =
+                    severity === 'block' || severity === 'error'
+                        ? 'sev-bad'
+                        : severity === 'warn' || severity === 'warning'
+                            ? 'sev-warn'
+                            : 'sev-ok';
+                const sevLabel =
+                    severity === 'block'
+                        ? 'BLOCK'
+                        : severity === 'error'
+                            ? 'ERROR'
+                            : severity === 'warn' || severity === 'warning'
+                                ? 'WARN'
+                                : 'INFO';
+                return `
+                    <tr>
+                        <td class="col-at">${at}</td>
+                        <td class="col-sev"><span class="sev ${pillClass}">${sevLabel}</span></td>
+                        <td class="col-action">${action}</td>
+                        <td class="col-msg">${message}</td>
+                        <td class="col-variant">${variant}</td>
+                    </tr>
+                `;
+            })
+            .join('')
+        : `<div class="empty">${escapeHtml(tr('panel.readOnlyEmpty', {}, lang))}</div>`;
+
+    const body = `
+        <style>
+            .table { width: 100%; border-collapse: collapse; }
+            .table th, .table td { border-bottom: 1px solid var(--border); padding: 10px 10px; vertical-align: top; }
+            .table th { text-align: left; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; }
+            .col-at { width: 160px; color: var(--muted); font-size: 11px; white-space: nowrap; }
+            .col-sev { width: 84px; }
+            .col-action { width: 160px; font-weight: 650; }
+            .col-variant { width: 96px; color: var(--muted); font-size: 11px; white-space: nowrap; }
+            .col-msg { white-space: pre-wrap; font-size: 12px; line-height: 1.5; }
+            .sev { display: inline-flex; align-items:center; justify-content:center; padding: 2px 10px; border-radius: 999px; font-size: 11px; border: 1px solid var(--border); }
+            .sev-ok { color: var(--accent); border-color: rgba(32,201,151,0.25); background: rgba(32,201,151,0.08); }
+            .sev-warn { color: var(--warn); border-color: rgba(249,115,22,0.25); background: rgba(249,115,22,0.10); }
+            .sev-bad { color: #fb7185; border-color: rgba(251,113,133,0.25); background: rgba(251,113,133,0.10); }
+        </style>
+        <section class="card">
+            <div class="card-title">${escapeHtml(lang === 'en' ? 'Recent hook audit events' : '最近 Hook 审计事件')}</div>
+            <div class="card-body">
+                ${entries.length ? `
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>${lang === 'en' ? 'Time' : '时间'}</th>
+                            <th>${lang === 'en' ? 'Severity' : '级别'}</th>
+                            <th>${lang === 'en' ? 'Hook' : 'Hook'}</th>
+                            <th>${lang === 'en' ? 'Message' : '信息'}</th>
+                            <th>${lang === 'en' ? 'Variant' : '版本'}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rows}
+                    </tbody>
+                </table>
+                ` : rows}
+            </div>
+        </section>
+    `;
+
+    return getPanelShellHtml(webview, tr('panel.auditTitle', {}, lang), project.name, badge, body, lang);
+}
+
 function getWamPanelHtml(project: ProjectTracker, lang: UiLanguage, webview: vscode.Webview): string {
     const state = buildCurrentProjectWamState(project.rootPath);
     const wamDir = state.wamDir;
@@ -8102,11 +9261,34 @@ function getWamPanelHtml(project: ProjectTracker, lang: UiLanguage, webview: vsc
 
     const headLine = headHash ? headHash.slice(0, 12) : (lang === 'en' ? 'none' : '无');
     const digestLine = state.digest ? state.digest.slice(0, 12) : '';
-	    const dirtyHint = !clean
-	        ? (lang === 'en'
-	            ? `WAM is dirty. Fix: call <code>wam_commit()</code>.`
-	            : `WAM 有改动。修复：调用 <code>wam_commit()</code>。`)
-	        : '';
+    const dirtyHint = !clean
+        ? (lang === 'en'
+            ? `WAM is dirty. Fix: call <code>wam_commit()</code>.`
+            : `WAM 有改动。修复：调用 <code>wam_commit()</code>。`)
+        : '';
+
+    const signing = loadWamSigningKey(true);
+    const wantsSignatureVerify =
+        isWamSigningEnabled() ||
+        commits.some((c) => typeof (c as any).signature === 'string' && String((c as any).signature).trim().length > 0);
+
+    const integrity = headHash
+        ? verifyWamIntegrity(wamDir, 'project', headHash, {
+            maxCommits: 60,
+            verifySnapshots: true,
+            verifySignature: wantsSignatureVerify,
+            signingKey: signing?.keyBytes || null
+        })
+        : null;
+    const integrityHint = integrity
+        ? (integrity.ok
+            ? (lang === 'en'
+                ? `OK (checked=${integrity.checked})`
+                : `通过（检查=${integrity.checked}）`)
+            : (lang === 'en'
+                ? `FAIL (issues=${integrity.issues.length})`
+                : `失败（问题=${integrity.issues.length}）`))
+        : '';
 
     const commitsRows = commits.length
         ? commits.map((c) => {
@@ -8123,6 +9305,61 @@ function getWamPanelHtml(project: ProjectTracker, lang: UiLanguage, webview: vsc
         }).join('')
         : `<tr><td colspan="6" class="empty">${escapeHtml(tr('panel.readOnlyEmpty', {}, lang))}</td></tr>`;
 
+    const formatTriplet = (trip: any): string => {
+        const a = Number(trip?.added?.count ?? trip?.added ?? 0) || 0;
+        const r = Number(trip?.removed?.count ?? trip?.removed ?? 0) || 0;
+        const c = Number(trip?.changed?.count ?? trip?.statusChanged?.count ?? trip?.statusChanged ?? 0) || 0;
+        return `+${a} -${r} ~${c}`;
+    };
+    const renderSamples = (label: string, data: any) => {
+        const samples = Array.isArray(data?.samples) ? data.samples.slice(0, 8) : [];
+        if (samples.length === 0) return '';
+        return `<div><strong>${escapeHtml(label)}</strong><ul>${samples.map((s: any) => `<li><code>${escapeHtml(String(s))}</code></li>`).join('')}</ul></div>`;
+    };
+    const diffDetails = commits.slice(0, 16).map((c) => {
+        const ch: any = (c as any).changes || null;
+        const trackerTrip = ch?.tracker?.planItems ? formatTriplet({ added: ch.tracker.planItems.added, removed: ch.tracker.planItems.removed, statusChanged: ch.tracker.planItems.statusChanged }) : '';
+        const memTrip = ch?.memory ? formatTriplet({ added: ch.memory.added, removed: ch.memory.removed, changed: ch.memory.changed }) : '';
+        const summaryBits: string[] = [];
+        if (trackerTrip) summaryBits.push(`plan ${trackerTrip}`);
+        if (memTrip) summaryBits.push(`memory ${memTrip}`);
+        if (ch?.tracker?.overviewChanged) summaryBits.push('overview');
+        if (ch?.tracker?.prdChanged) summaryBits.push('prd');
+        if (ch?.tracker?.walkthroughChanged) summaryBits.push('walkthrough');
+        const summary = summaryBits.length ? summaryBits.join(' • ') : (lang === 'en' ? '(no diff data)' : '（无差异数据）');
+
+        const tracker = ch?.tracker || {};
+        const memory = ch?.memory || {};
+        const planItems = tracker.planItems || {};
+
+        return `
+            <details style="margin:10px 0; padding:10px 12px; border:1px solid var(--border); border-radius:14px; background: rgba(15,18,20,0.6);">
+                <summary style="cursor:pointer; list-style:none; display:flex; gap:10px; align-items:center;">
+                    <code>${escapeHtml(String(c.hash || '').slice(0, 10))}</code>
+                    <span style="color: var(--muted); font-size: 11px;">${escapeHtml(String(c.createdAt || ''))}</span>
+                    <span style="font-weight:650;">${escapeHtml(String(c.message || ''))}</span>
+                    <span style="margin-left:auto; color: var(--muted); font-size: 11px;">${escapeHtml(summary)}</span>
+                </summary>
+                <div class="markdown" style="margin-top:10px;">
+                    <p><strong>${escapeHtml(lang === 'en' ? 'Commit' : '提交')}</strong>: <code>${escapeHtml(String(c.hash || ''))}</code></p>
+                    <p><strong>${escapeHtml(lang === 'en' ? 'Parents' : '父提交')}</strong>: ${escapeHtml(Array.isArray(c.parents) ? c.parents.join(', ') : '')}</p>
+                    ${ch?.base ? `<p><strong>Base</strong>: <code>${escapeHtml(String(ch.base))}</code></p>` : ''}
+                    <p><strong>${escapeHtml(lang === 'en' ? 'Changes' : '变更')}</strong>: ${escapeHtml(summary)}</p>
+                    ${tracker.planItems ? `
+                        ${renderSamples(lang === 'en' ? 'Plan added' : '计划新增', planItems.added)}
+                        ${renderSamples(lang === 'en' ? 'Plan removed' : '计划移除', planItems.removed)}
+                        ${renderSamples(lang === 'en' ? 'Plan status changed' : '计划状态变更', planItems.statusChanged)}
+                    ` : ''}
+                    ${memory ? `
+                        ${renderSamples(lang === 'en' ? 'Memory added' : '记忆新增', memory.added)}
+                        ${renderSamples(lang === 'en' ? 'Memory removed' : '记忆移除', memory.removed)}
+                        ${renderSamples(lang === 'en' ? 'Memory changed' : '记忆变更', memory.changed)}
+                    ` : ''}
+                </div>
+            </details>
+        `;
+    }).join('');
+
     const renderRefList = (items: Array<{ name: string; hash: string }>) => {
         if (!items.length) return `<div class="empty">${escapeHtml(tr('panel.readOnlyEmpty', {}, lang))}</div>`;
         return `<ul>${items.slice(0, 40).map((r) => `<li><code>${escapeHtml(r.name)}</code> — <code>${escapeHtml(String(r.hash || '').slice(0, 10) || '')}</code></li>`).join('')}</ul>`;
@@ -8132,12 +9369,22 @@ function getWamPanelHtml(project: ProjectTracker, lang: UiLanguage, webview: vsc
         ? `<ul>${stashes.slice(0, 24).map((s) => `<li><code>${escapeHtml(String(s.id || '').slice(0, 10))}</code> — ${escapeHtml(String(s.createdAt || ''))} — ${escapeHtml(String(s.message || ''))}</li>`).join('')}</ul>`
         : `<div class="empty">${escapeHtml(tr('panel.readOnlyEmpty', {}, lang))}</div>`;
 
+    const signatureLine = wantsSignatureVerify
+        ? (lang === 'en'
+            ? `enabled${signing ? '' : ' (missing key)'}`
+            : `已启用${signing ? '' : '（缺少密钥）'}`)
+        : (lang === 'en'
+            ? `disabled${signing ? ' (key present)' : ''}`
+            : `未启用${signing ? '（已存在密钥）' : ''}`);
+
     const body = `
         <section class="card">
             <div class="card-title">${escapeHtml(titleStatus)}</div>
             <div class="card-body markdown">
                 <p><strong>HEAD</strong>: <code>${escapeHtml(headLine)}</code></p>
                 <p><strong>Digest</strong>: <code>${escapeHtml(digestLine)}</code></p>
+                <p><strong>${escapeHtml(lang === 'en' ? 'Signature' : '签名')}</strong>: <code>${escapeHtml(signatureLine)}</code></p>
+                ${integrityHint ? `<p><strong>Integrity</strong>: ${escapeHtml(integrityHint)}</p>` : ''}
                 ${dirtyHint ? `<p style="color:rgba(249,115,22,0.9)">${dirtyHint}</p>` : ''}
             </div>
         </section>
@@ -8159,6 +9406,12 @@ function getWamPanelHtml(project: ProjectTracker, lang: UiLanguage, webview: vsc
                         ${commitsRows}
                     </tbody>
                 </table>
+            </div>
+        </section>
+        <section class="card">
+            <div class="card-title">${escapeHtml(lang === 'en' ? 'Diff viewer' : '差异查看')}</div>
+            <div class="card-body markdown">
+                ${diffDetails || `<div class="empty">${escapeHtml(tr('panel.readOnlyEmpty', {}, lang))}</div>`}
             </div>
         </section>
         <div class="grid">
@@ -9529,6 +10782,7 @@ function configureWindsurf() {
     const homeDirs = getWriteHomeDirs();
     const configPaths = getWindsurfMcpConfigPaths(homeDirs);
     const written: string[] = [];
+    const repaired: Array<{ path: string; backup: string }> = [];
     const failed: Array<{ path: string; error: string }> = [];
 
     try {
@@ -9553,14 +10807,16 @@ function configureWindsurf() {
 	                    try {
 	                        config = parseJsonLenient(raw);
 	                    } catch (e: any) {
-	                        const lang = getUiLanguage();
-	                        throw new Error(
-	                            tr(
-                                'ext.invalidConfigJson',
-                                { path: configPath, error: e?.message ?? String(e) },
-                                lang
-                            )
-                        );
+	                        // Be resilient: back up the invalid file and rewrite a fresh config
+	                        // so MCP can still be configured for the user.
+	                        const backupPath = `${configPath}.invalid.${Date.now()}.bak`;
+	                        try {
+	                            fs.writeFileSync(backupPath, raw, 'utf-8');
+	                        } catch (be: any) {
+	                            outputChannel?.appendLine(`Configure Windsurf: failed to write backup ${backupPath}: ${be?.message ?? String(be)}`);
+	                        }
+	                        repaired.push({ path: configPath, backup: backupPath });
+	                        config = { mcpServers: {} };
                     }
                 }
                 if (!config || typeof config !== 'object') config = {};
@@ -9590,6 +10846,15 @@ function configureWindsurf() {
 
     if (written.length > 0) {
         vscode.window.showInformationMessage(tr('ext.configuredWindsurf', { port: currentPort }));
+        if (repaired.length > 0) {
+            const lang = getUiLanguage();
+            const detail = repaired.map((r) => `${r.path} -> ${r.backup}`).join('\n');
+            const msg =
+                lang === 'en'
+                    ? `Some mcp_config.json files were invalid and were backed up then rewritten:\n${detail}`
+                    : `部分 mcp_config.json JSON 无效，已备份后重写：\n${detail}`;
+            vscode.window.showWarningMessage(msg);
+        }
         if (failed.length > 0) {
             const lang = getUiLanguage();
             const detail = failed.map((f) => `${f.path}: ${f.error}`).join('\n');
@@ -9818,6 +11083,9 @@ class SidebarProvider implements vscode.WebviewViewProvider {
                 case 'openWamPanel':
                     showWamPanel();
                     break;
+                case 'openAuditPanel':
+                    showAuditPanel();
+                    break;
                 case 'clearPrd':
                     await clearProjectPrd();
                     break;
@@ -9832,6 +11100,9 @@ class SidebarProvider implements vscode.WebviewViewProvider {
                     break;
                 case 'clearTracking':
                     await clearProjectTracking();
+                    break;
+                case 'clearAudit':
+                    await clearProjectAudit();
                     break;
                 case 'installHooks':
                     installWindsurfHooks();
@@ -10185,6 +11456,10 @@ class SidebarProvider implements vscode.WebviewViewProvider {
 		                    <button class="panel-open" data-action="openWamPanel">${tr('sidebar.openPanel', {}, lang)}</button>
 		                </div>
 		                <div class="panel-row">
+		                    <div class="panel-name">${tr('sidebar.panelAudit', {}, lang)}</div>
+		                    <button class="panel-open" data-action="openAuditPanel">${tr('sidebar.openPanel', {}, lang)}</button>
+		                </div>
+		                <div class="panel-row">
 		                    <div class="panel-name">${tr('sidebar.panelWalkthrough', {}, lang)}</div>
 		                    <button class="panel-open" data-action="openWalkthroughPanel">${tr('sidebar.openPanel', {}, lang)}</button>
 		                </div>
@@ -10228,6 +11503,10 @@ class SidebarProvider implements vscode.WebviewViewProvider {
                     <div class="stat-value" id="statUpdatePlan">${stats.updatePlanCalls}</div>
                 </div>
                 <div class="stat">
+                    <div class="stat-label">${tr('sidebar.statPlanChangeRequest', {}, lang)}</div>
+                    <div class="stat-value" id="statPlanChangeRequest">${stats.planChangeRequestCalls}</div>
+                </div>
+                <div class="stat">
                     <div class="stat-label">${tr('sidebar.statUpdateWalkthrough', {}, lang)}</div>
                     <div class="stat-value" id="statUpdateWalkthrough">${stats.updateWalkthroughCalls}</div>
                 </div>
@@ -10240,12 +11519,20 @@ class SidebarProvider implements vscode.WebviewViewProvider {
                     <div class="stat-value" id="statMemorySearch">${stats.memorySearchCalls}</div>
                 </div>
                 <div class="stat">
+                    <div class="stat-label">${tr('sidebar.statMemoryHygiene', {}, lang)}</div>
+                    <div class="stat-value" id="statMemoryHygiene">${stats.memoryHygieneCalls}</div>
+                </div>
+                <div class="stat">
                     <div class="stat-label">${tr('sidebar.statRecordLesson', {}, lang)}</div>
                     <div class="stat-value" id="statRecordLesson">${stats.recordLessonCalls}</div>
                 </div>
                 <div class="stat">
                     <div class="stat-label">${tr('sidebar.statGetProjectStatus', {}, lang)}</div>
                     <div class="stat-value" id="statGetProjectStatus">${stats.getProjectStatusCalls}</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">${tr('sidebar.statPreflight', {}, lang)}</div>
+                    <div class="stat-value" id="statPreflight">${stats.preflightCalls}</div>
                 </div>
                 <div class="stat">
                     <div class="stat-label">${tr('sidebar.statSaveMemory', {}, lang)}</div>
@@ -10310,6 +11597,7 @@ class SidebarProvider implements vscode.WebviewViewProvider {
                 <button class="ghost" data-action="clearPrd">${tr('sidebar.clearPrd', {}, lang)}</button>
                 <button class="ghost" data-action="clearPlan">${tr('sidebar.clearPlan', {}, lang)}</button>
                 <button class="ghost" data-action="clearWalkthrough">${tr('sidebar.clearWalkthrough', {}, lang)}</button>
+                <button class="ghost" data-action="clearAudit">${tr('sidebar.clearAudit', {}, lang)}</button>
                 <button class="warn" data-action="clearTracking">${tr('sidebar.clearTracking', {}, lang)}</button>
             </div>
         </div>
@@ -10361,14 +11649,17 @@ class SidebarProvider implements vscode.WebviewViewProvider {
             setText('statUpdateOverview', s.updateOverviewCalls);
             setText('statGenerateOverview', s.generateOverviewCalls);
             setText('statUpdatePlan', s.updatePlanCalls);
+            setText('statPlanChangeRequest', s.planChangeRequestCalls);
             setText('statUpdateWalkthrough', s.updateWalkthroughCalls);
             setText('statRagSearch', s.ragSearchCalls);
             setText('statMemorySearch', s.memorySearchCalls);
+            setText('statMemoryHygiene', s.memoryHygieneCalls);
             setText('statRecordLesson', s.recordLessonCalls);
             setText('statGetProjectStatus', s.getProjectStatusCalls);
-            setText('statSaveMemory', s.saveMemoryCalls);
+	            setText('statSaveMemory', s.saveMemoryCalls);
 	            setText('statGetMemory', s.getMemoryCalls);
 	            setText('statListMemory', s.listMemoryCalls);
+	            setText('statPreflight', s.preflightCalls);
 	        };
         const updateProjectStats = (s) => {
             if (!s) return;

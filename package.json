@@ -2,7 +2,7 @@
   "name": "windsurf-auto-mcp",
   "displayName": "WindsurfAutoMcp",
   "description": "Windsurf MCP automation - task completion confirmation, user interaction, one-click setup / Windsurf MCP 自动化工具 - 任务完成确认、用户交互、一键配置",
-  "version": "1.0.15",
+  "version": "1.0.17",
   "publisher": "windsurf-auto-mcp",
   "repository": {
     "type": "git",
@@ -131,6 +131,11 @@
           "type": "string",
           "default": "",
           "description": "Override the user home directory used to write Windsurf configs/hooks (e.g. C:\\\\Users\\\\HP). Leave empty for auto-detect. / 覆盖用于写入 Windsurf 配置/Hook 的用户目录（例如 C:\\\\Users\\\\HP）。留空则自动检测。"
+        },
+        "mcpService.wamSigning": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable WAM commit signing (HMAC-SHA256) using a user-level key under ~/.codeium/windsurf-auto-mcp/.wam/global / 启用 WAM 提交签名（HMAC-SHA256，密钥存放于 ~/.codeium/windsurf-auto-mcp/.wam/global）"
         }
       }
     }

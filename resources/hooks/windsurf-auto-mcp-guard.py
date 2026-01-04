@@ -13,6 +13,12 @@ TRACKER_FILE_NAME = "windsurf-auto-mcp-tracker.json"
 MEMORY_FILE_NAME = "windsurf-auto-mcp-memories.json"
 GLOBAL_MEMORY_FILE_NAME = "windsurf-auto-mcp-global-memories.json"
 STATE_FILE_NAME = "windsurf-auto-mcp-guard-state.json"
+ARTIFACT_ROOT_DIR = "windsurf-auto-mcp"
+ARTIFACT_BRAIN_DIR = "brain"
+AUDIT_FILE_NAME = "audit.jsonl"
+
+AUDIT_MAX_BYTES = 260_000
+AUDIT_MAX_LINES = 260
 
 MAX_WRITES_WITHOUT_PLAN_UPDATE = 3
 
@@ -23,11 +29,13 @@ REQUIRE_RATIONALE_TOOLS = {
     "update_overview",
     "generate_overview",
     "update_plan",
+    "plan_change_request",
     "update_walkthrough",
     "generate_walkthrough",
     "ensure_release_gate",
     # Memory
     "save_memory",
+    "memory_hygiene",
     "record_lesson",
     # WAM (history)
     "wam_commit",
@@ -70,6 +78,29 @@ VERIFY_KEYWORDS = [
     "测试",
     "构建",
     "编译",
+]
+
+# Dependency + security scan gates that should be visible in the Plan.
+# These are surfaced by ensure_release_gate (extension tool) and backed by CI for this repo.
+DEPENDENCY_SECURITY_KEYWORDS = [
+    "dependency check",
+    "dependency audit",
+    "dependency scan",
+    "npm audit",
+    "osv",
+    "osv-scanner",
+    "dependabot",
+    "vulnerable",
+    "vulnerability",
+    "security scan",
+    "supply chain",
+    "依赖检查",
+    "依赖审计",
+    "依赖扫描",
+    "npm audit",
+    "漏洞",
+    "安全扫描",
+    "供应链",
 ]
 
 
@@ -353,6 +384,15 @@ def persist_hook_feedback(server_url, project, action, severity, message):
         )
         ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         value = f"[{ts}] {action}\n{msg}\n"
+        _append_audit_log(
+            project,
+            {
+                "at": ts,
+                "action": str(action or ""),
+                "severity": str(severity or ""),
+                "message": _truncate_lines(_redact_secrets(msg), 80, 4200),
+            },
+        )
         call_mcp_tool(
             server_url,
             "save_memory",
@@ -365,6 +405,55 @@ def persist_hook_feedback(server_url, project, action, severity, message):
             },
             timeout_sec=1.0,
         )
+    except Exception:
+        return
+
+
+def _audit_log_path(project):
+    project_id = "global"
+    root_path = ""
+    if isinstance(project, dict):
+        project_id = str(project.get("projectId") or "").strip() or "global"
+        root_path = str(project.get("rootPath") or "").strip()
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        variant_root = os.path.dirname(os.path.dirname(script_dir))
+        if os.path.isdir(variant_root):
+            return os.path.join(
+                variant_root,
+                ARTIFACT_ROOT_DIR,
+                ARTIFACT_BRAIN_DIR,
+                project_id,
+                AUDIT_FILE_NAME,
+            )
+    except Exception:
+        pass
+    home = os.path.expanduser("~")
+    variant = "windsurf-next" if "windsurf-next" in (root_path or "").lower() else "windsurf"
+    return os.path.join(home, ".codeium", variant, ARTIFACT_ROOT_DIR, ARTIFACT_BRAIN_DIR, project_id, AUDIT_FILE_NAME)
+
+
+def _append_audit_log(project, entry):
+    try:
+        p = _audit_log_path(project)
+        if not p:
+            return
+        d = os.path.dirname(p)
+        if d and not os.path.isdir(d):
+            os.makedirs(d, exist_ok=True)
+        line = json.dumps(entry or {}, ensure_ascii=False)
+        with open(p, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+        try:
+            if os.path.exists(p) and os.path.getsize(p) > AUDIT_MAX_BYTES:
+                with open(p, "r", encoding="utf-8", errors="replace") as f:
+                    lines = f.read().splitlines()
+                lines = lines[-AUDIT_MAX_LINES:]
+                with open(p, "w", encoding="utf-8") as f:
+                    if lines:
+                        f.write("\n".join(lines) + "\n")
+        except Exception:
+            pass
     except Exception:
         return
 
@@ -700,7 +789,7 @@ def _check_prompt_preflight(server_url, project):
 
         msg = (
             "Blocked: Preflight not completed for the latest user prompt.\n"
-            "Required (run these tools, then continue):\n"
+            "Required: run preflight(userPrompt=...) (recommended) OR run these tools, then continue:\n"
             "- get_project_status (read Overview/PRD/Plan/WAM/Walkthrough)\n"
             "- check_plan (review progress + next items)\n"
             "- memory_search (reuse lessons/decisions; include hook:last_* if blocked)\n"
@@ -763,6 +852,85 @@ def _plan_has_done_code_review(project):
 def _walkthrough_has_content(project):
     wt = project.get("walkthrough") or {}
     return bool(str(wt.get("content") or "").strip())
+
+
+def _walkthrough_has_review_artifact(project):
+    """
+    Require a structured review section in Walkthrough.
+    Minimal contract:
+      - a review heading exists
+      - within that section: security + performance + tests keywords are present
+    """
+    wt = project.get("walkthrough") or {}
+    content = str(wt.get("content") or "")
+    if not content.strip():
+        return False
+    lower = content.lower()
+    markers = [
+        "## review",
+        "## final review",
+        "## review artifact",
+        "## code review",
+        "## 审查",
+        "## 复审",
+        "## 代码审查",
+        "## 安全复审",
+    ]
+    start = -1
+    for m in markers:
+        idx = lower.find(m.lower())
+        if idx >= 0:
+            start = idx
+            break
+    if start < 0:
+        return False
+    section = lower[start : start + 8000]
+    sec_ok = any(
+        k in section
+        for k in [
+            "security",
+            "secret",
+            "secrets",
+            "permission",
+            "permissions",
+            "injection",
+            "auth",
+            "安全",
+            "密钥",
+            "权限",
+            "注入",
+        ]
+    )
+    perf_ok = any(
+        k in section
+        for k in [
+            "performance",
+            "perf",
+            "leak",
+            "memory leak",
+            "slow",
+            "性能",
+            "泄漏",
+            "内存",
+        ]
+    )
+    test_ok = any(
+        k in section
+        for k in [
+            "test",
+            "tests",
+            "unit",
+            "integration",
+            "lint",
+            "build",
+            "测试",
+            "单元",
+            "集成",
+            "构建",
+            "lint",
+        ]
+    )
+    return bool(sec_ok and perf_ok and test_ok)
 
 def find_tracker_path():
     try:
@@ -851,9 +1019,58 @@ def select_project(tracker, file_path=None, cwd=None):
                 best_len = len(root_norm)
         if best:
             return best
+        # If we had an explicit path hint but it didn't match any known project,
+        # do NOT fall back to tracker.activeProject (it may be stale across workspaces).
+        return None
     active = tracker.get("activeProject")
     if active and active in projects:
         return projects.get(active)
+    return None
+
+
+def _extract_workspace_root_hint(payload, tool_info):
+    """
+    Best-effort workspace root detection for robust per-project selection.
+
+    Official docs: if hook config doesn't set `working_directory`, Windsurf runs hooks
+    from the workspace root. For events like `pre_user_prompt`, the payload may not
+    include `cwd`, so we fall back to the hook process working directory.
+    """
+    candidates = []
+    if isinstance(tool_info, dict):
+        for k in [
+            "workspace_root",
+            "workspaceRoot",
+            "workspace_path",
+            "workspacePath",
+            "root_path",
+            "rootPath",
+            "cwd",
+            "working_directory",
+            "workingDirectory",
+        ]:
+            candidates.append(tool_info.get(k))
+    if isinstance(payload, dict):
+        for k in [
+            "workspace_root",
+            "workspaceRoot",
+            "workspace_path",
+            "workspacePath",
+            "root_path",
+            "rootPath",
+            "cwd",
+            "working_directory",
+            "workingDirectory",
+        ]:
+            candidates.append(payload.get(k))
+    try:
+        candidates.append(os.getcwd())
+    except Exception:
+        pass
+    for c in candidates:
+        p = normalize_path(c)
+        if p:
+            return p
     return None
 
 
@@ -1224,6 +1441,23 @@ def check_project_gates(project, memory_data=None, server_url=None):
             "Fix: run ensure_release_gate (recommended) or add Plan items for build/test/lint and acceptance verification."
         )
 
+    if not _plan_has_keyword(plan_items, DEPENDENCY_SECURITY_KEYWORDS, require_done=False):
+        maybe_record_lesson(
+            server_url,
+            project,
+            "plan_missing_dependency_security_scan_item",
+            "Plan is missing dependency/security scanning items, but implementation was attempted.",
+            "Add Plan items for dependency/security scan (npm audit / OSV / Dependabot or stack equivalent), or run ensure_release_gate to auto-add them, then proceed.",
+            "Always include dependency/supply-chain security checks in the Plan so outdated/vulnerable packages are caught before shipping.",
+            title="Plan must include dependency/security scan",
+            tags=["plan", "dependencies", "security", "block"],
+            scope="both",
+        )
+        return (
+            "Blocked: Plan is missing dependency/security scan items.\n"
+            "Fix: run ensure_release_gate (recommended) or add a Plan item like 'Dependency/security scan (npm audit + OSV/Dependabot)'."
+        )
+
     # Enforce "Memory + RAG before edits": require memory_search + rag_search after the latest plan change.
     try:
         stats = project.get("stats") or {}
@@ -1340,7 +1574,8 @@ def main():
 
     if action == "pre_user_prompt":
         tracker = load_tracker()
-        project = select_project(tracker, cwd=tool_info.get("cwd"))
+        cwd_hint = _extract_workspace_root_hint(payload, tool_info)
+        project = select_project(tracker, cwd=cwd_hint)
         if project:
             try:
                 project_id = str(project.get("projectId") or "").strip()
@@ -1357,7 +1592,8 @@ def main():
         command_line = tool_info.get("command_line")
         tracker = load_tracker()
         memory_data = load_memory()
-        project = select_project(tracker, cwd=tool_info.get("cwd"))
+        cwd_hint = _extract_workspace_root_hint(payload, tool_info)
+        project = select_project(tracker, cwd=cwd_hint)
         if project:
             preflight = _check_prompt_preflight(server_url, project)
             if preflight:
@@ -1503,8 +1739,15 @@ def main():
 
         tracker = load_tracker()
         memory_data = load_memory()
-        root_hint = str(tool_args.get("rootPath") or tool_args.get("root_path") or "").strip()
-        project = select_project(tracker, cwd=(root_hint or tool_info.get("cwd")))
+        root_hint = str(
+            tool_args.get("rootPath")
+            or tool_args.get("root_path")
+            or tool_args.get("workspaceRoot")
+            or tool_args.get("workspace_root")
+            or ""
+        ).strip()
+        cwd_hint = root_hint or _extract_workspace_root_hint(payload, tool_info)
+        project = select_project(tracker, cwd=cwd_hint)
 
         if tool_name in REQUIRE_RATIONALE_TOOLS:
             rationale = str(tool_args.get("rationale") or "").strip()
@@ -1522,6 +1765,28 @@ def main():
                     "Require rationale for state-changing tools to force think-before-act and avoid blind tool use.",
                     title=f"Missing rationale blocks MCP tool: {tool_name}",
                     tags=["rationale", "mcp", "block"],
+                    scope="both",
+                )
+                persist_hook_feedback(server_url, project, "pre_mcp_tool_use", "block", msg)
+                print(msg, file=sys.stderr)
+                return 2
+
+        if tool_name == "update_plan":
+            mode = str(tool_args.get("mode") or "").strip().lower()
+            if mode == "replace":
+                msg = (
+                    "Blocked: update_plan(mode=replace) is not allowed (high risk of losing tasks).\n"
+                    "Required: use plan_change_request to explicitly choose merge vs replace with user approval."
+                )
+                maybe_record_lesson(
+                    server_url,
+                    project,
+                    "update_plan_replace_blocked",
+                    "Attempted to replace the entire Plan via update_plan(mode=replace), which can accidentally delete tasks/checklists.",
+                    "Use plan_change_request to preview and explicitly approve merge vs replace, then proceed.",
+                    "Default to update_plan(mode=merge). Only replace with explicit user approval via plan_change_request.",
+                    title="Blocked: update_plan replace is unsafe",
+                    tags=["plan", "update_plan", "replace", "block"],
                     scope="both",
                 )
                 persist_hook_feedback(server_url, project, "pre_mcp_tool_use", "block", msg)
@@ -1597,13 +1862,70 @@ def main():
                 print(msg, file=sys.stderr)
                 return 2
 
+            # Formal review artifact: Walkthrough must contain a structured review section
+            # and must be updated after the last code write.
+            try:
+                project_id = str(project.get("projectId") or "").strip()
+                if project_id:
+                    state = load_guard_state()
+                    state, ps = _get_project_state(state, project_id)
+                    last_write = str(ps.get("lastCodeWriteAt") or "").strip()
+                    wt = project.get("walkthrough") or {}
+                    wt_at = str(wt.get("updatedAt") or "").strip()
+                    stats = project.get("stats") or {}
+                    wt_stat = str(stats.get("lastWalkthroughUpdateAt") or "").strip()
+                    wt_updated = wt_at if (wt_at and wt_at >= wt_stat) else wt_stat
+
+                    if last_write and (not wt_updated or wt_updated < last_write):
+                        msg = (
+                            "Blocked: Walkthrough review artifact is out-of-date.\n"
+                            f"Required: update_walkthrough AFTER the last code write ({last_write}) and include a Review section (security/perf/tests), then retry ask_continue."
+                        )
+                        maybe_record_lesson(
+                            server_url,
+                            project,
+                            "ask_continue_review_out_of_date",
+                            "Attempted ask_continue without updating Walkthrough after the most recent code write.",
+                            "Update Walkthrough after the last code write and include a structured Review section covering security, performance, and tests.",
+                            "Treat Walkthrough as an auditable artifact: update it after changes and after review. Block final delivery if it's stale.",
+                            title="ask_continue blocked: Review artifact out-of-date",
+                            tags=["ask_continue", "walkthrough", "review", "block"],
+                            scope="both",
+                        )
+                        persist_hook_feedback(server_url, project, "pre_mcp_tool_use", "block", msg)
+                        print(msg, file=sys.stderr)
+                        return 2
+
+                    if last_write and not _walkthrough_has_review_artifact(project):
+                        msg = (
+                            "Blocked: Walkthrough missing structured Review section.\n"
+                            "Required: add a '## Review' section covering Security + Performance + Tests (with concrete bullets), then update_walkthrough and retry ask_continue."
+                        )
+                        maybe_record_lesson(
+                            server_url,
+                            project,
+                            "ask_continue_review_missing",
+                            "Attempted ask_continue without a structured review artifact in Walkthrough.",
+                            "Add a Review section in Walkthrough that explicitly covers security, performance, and tests/verification, then retry.",
+                            "Make review artifacts mandatory: they prevent shipping gaps and force a final verification loop.",
+                            title="ask_continue blocked: Review artifact missing",
+                            tags=["ask_continue", "walkthrough", "review", "block"],
+                            scope="both",
+                        )
+                        persist_hook_feedback(server_url, project, "pre_mcp_tool_use", "block", msg)
+                        print(msg, file=sys.stderr)
+                        return 2
+            except Exception:
+                pass
+
     if action == "post_mcp_tool_use":
         server_name, tool_name, tool_args = _extract_mcp_call(tool_info)
         # Only record lessons for our own MCP server to avoid noise.
         if str(server_name or "").strip() not in ("windsurf_auto_mcp",):
             return 0
         tracker = load_tracker()
-        project = select_project(tracker, cwd=tool_info.get("cwd"))
+        cwd_hint = _extract_workspace_root_hint(payload, tool_info)
+        project = select_project(tracker, cwd=cwd_hint)
         error_text = _extract_tool_error_text(tool_info)
         if error_text:
             persist_hook_feedback(
@@ -1637,7 +1959,8 @@ def main():
         # remind it to update progress and/or record lessons before final delivery.
         try:
             tracker = load_tracker()
-            project = select_project(tracker)
+            cwd_hint = _extract_workspace_root_hint(payload, tool_info)
+            project = select_project(tracker, cwd=cwd_hint)
             if project:
                 plan = project.get("plan") or {}
                 items = plan.get("items") or []
@@ -1676,7 +1999,8 @@ def main():
         cmd, cwd, success, exit_code, stdout, stderr = _extract_run_command_fields(tool_info)
         if success is False or (exit_code is not None and exit_code != 0):
             tracker = load_tracker()
-            project = select_project(tracker, cwd=cwd or tool_info.get("cwd"))
+            cwd_hint = cwd or _extract_workspace_root_hint(payload, tool_info)
+            project = select_project(tracker, cwd=cwd_hint)
             persist_hook_feedback(
                 server_url,
                 project,
