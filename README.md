@@ -101,6 +101,14 @@ WindsurfAutoMcp standardizes task completion with MCP: when the AI finishes a ta
 ```text
 # WindsurfAutoMcp Workflow Rules
 
+## 🚨 BLOCKED ACTION? READ THIS FIRST 🚨
+**If ANY action failed or was blocked by a hook (exit code 2):**
+1. STOP immediately - do NOT retry the same action
+2. Call `check_hook_status()` NOW to see WHY you were blocked
+3. Read the `hookFeedback.lastBlock` message in the response
+4. Fix the root cause (missing plan? missing preflight? too many writes?)
+5. ONLY then retry
+
 ## ⚠️ CRITICAL: STOP → THINK → READ → RESEARCH → PLAN → CODE
 
 **NEVER trust your knowledge. ALWAYS research first. Treat 2024 info as outdated.**
@@ -108,7 +116,7 @@ WindsurfAutoMcp standardizes task completion with MCP: when the AI finishes a ta
 ## Phase 0: STOP & UNDERSTAND
 Before ANY action:
 1. `preflight()` - MANDATORY first call every session
-2. `check_hook_status()` - If ANY action fails/blocked, call this IMMEDIATELY
+2. If action fails/blocked → `check_hook_status()` IMMEDIATELY
 3. Read the error/block message. Understand WHY.
 
 ## Phase 1: THINK DEEPLY
