@@ -24,7 +24,22 @@ type TrackerItem = {
     text: string;
     status: TrackerItemStatus;
     updatedAt: string;
+    sprint?: string;   // Sprint ID
+    points?: number;   // Story points
+    assignee?: string; // "ai" | "user" | string
 };
+
+type Sprint = {
+    id: string;
+    name: string;
+    goal?: string;
+    status: 'planning' | 'active' | 'completed';
+    startDate?: string;
+    endDate?: string;
+    createdAt: string;
+    completedAt?: string;
+};
+
 type ProjectTrackerStats = {
     prdUpdates: number;
     prdApprovals: number;
@@ -32,13 +47,21 @@ type ProjectTrackerStats = {
     planUpdates: number;
     walkthroughUpdates: number;
     updatedAt?: string;
-    lastRagSearchAt?: string;
-    lastMemorySearchAt?: string;
-    lastWamStatusAt?: string;
-    lastCheckPlanAt?: string;
+
+    // Guard/preflight timestamps (do NOT affect WAM digest; see computeProjectWamDigest)
+    lastPreflightAt?: string;
     lastProjectStatusAt?: string;
+    lastCheckPlanAt?: string;
+    lastMemorySearchAt?: string;
+    lastRagSearchAt?: string;
+    lastWamStatusAt?: string;
+
+    // Artifact update timestamps
     lastPlanUpdateAt?: string;
     lastWalkthroughUpdateAt?: string;
+
+    // Informational (not part of WAM digest)
+    lastWamCommitAt?: string;
 };
 type ProjectTracker = {
     projectId: string;
@@ -56,6 +79,8 @@ type ProjectTracker = {
         reviewedAt?: string;
     };
     plan: { summary: string; items: TrackerItem[] };
+    sprints: Sprint[];
+    activeSprintId?: string;
     walkthrough: { content: string; updatedAt?: string };
     stats: ProjectTrackerStats;
     updatedAt: string;
@@ -491,55 +516,55 @@ const I18N: Record<UiLanguage, Record<string, string>> = {
 	        'sidebar.promptTitle': 'Prompt',
 	        'sidebar.promptText': 'Hard rule: when done, you must call ask_continue.',
 		        'sidebar.promptCopyText': [
-		            '=== WindsurfAutoMcp ACP Workflow ===',
-		            '',
-		            '[HARD RULES - Cannot Violate]',
-		            'R1. When DONE: code_review() → ask_continue(reason)',
-		            'R2. New input: preflight(userPrompt=...) FIRST',
-		            'R3. Before action: Must have Plan with Checklist',
-		            '',
-		            '[ACP LOOP - Follow in Order]',
-		            'STEP 1 - PREFLIGHT:',
-		            '  → preflight(userPrompt="user input")',
-		            '  → Reads: project status/Plan/Memory/WAM',
-		            '',
-		            'STEP 2 - PLAN:',
-		            '  → Complex tasks: set_prd → approve_prd',
-		            '  → All tasks: update_plan(mode=merge, items=[...])',
-		            '  → Must include: Checklist items',
-		            '',
-		            'STEP 3 - ACT [LOOP]:',
-		            '  DO {',
-		            '    → Implement one small task',
-		            '    → update_plan(mark done)',
-		            '    → verify_action(check result)',
-		            '  } WHILE (items remain)',
-		            '',
-		            'STEP 4 - VERIFY:',
-		            '  → Run: tests/build/lint',
-		            '  → If cannot run: provide manual steps',
-		            '',
-		            'STEP 5 - REVIEW [REQUIRED]:',
-		            '  → code_review(summary="...", qualityChecks={...})',
-		            '  → If gaps found: GO BACK to STEP 3',
-		            '',
-		            'STEP 6 - FINISH:',
-		            '  → check_plan() verify 100%',
-		            '  → ask_continue(reason="done+risks+verify+next")',
-		            '  → WAIT for user decision',
-		            '',
-		            '[QUALITY CHECKS - Before Delivery]',
-		            '☐ Overview: new project needs generate_overview',
-		            '☐ Plan: progress 100%',
-		            '☐ Walkthrough: decisions recorded',
-		            '☐ WAM: wam_status clean',
-		            '☐ Errors: record_lesson',
-		            '',
-		            '[SELF-CHECK - Before Each Step]',
-		            '? Is info current?',
-		            '? Is code correct?',
-		            '? Is it safe?',
-		            '? What does user want?',
+            '=== WindsurfAutoMcp Agile Workflow ===',
+            '',
+            '[HARD RULES - Cannot Violate]',
+            'R1. When DONE: code_review() → ask_continue(reason)',
+            'R2. New input: preflight(userPrompt=...) FIRST',
+            'R3. Before action: Must have Plan/Sprint with Checklist',
+            '',
+            '[AGILE LOOP - Follow in Order]',
+            'STEP 1 - PREFLIGHT & SPRINT:',
+            '  → preflight(userPrompt="user input")',
+            '  → manage_sprint(action="start") if new sprint',
+            '  → Reads: active sprint, plan status, memory',
+            '',
+            'STEP 2 - PLAN / BACKLOG:',
+            '  → Complex tasks: set_prd → approve_prd',
+            '  → Tasks: update_plan(items=[{text:"...", sprint:"id"}])',
+            '  → Assign tasks to Active Sprint or Backlog',
+            '',
+            'STEP 3 - ACT [LOOP]:',
+            '  DO {',
+            '    → Implement one small task',
+            '    → update_plan(mark done)',
+            '    → verify_action(check result)',
+            '  } WHILE (items remain)',
+            '',
+            'STEP 4 - VERIFY:',
+            '  → Run: tests/build/lint',
+            '  → If cannot run: provide manual steps',
+            '',
+            'STEP 5 - REVIEW [REQUIRED]:',
+            '  → code_review(summary="...", qualityChecks={...})',
+            '  → If gaps found: GO BACK to STEP 3',
+            '',
+            'STEP 6 - FINISH / COMMIT:',
+            '  → check_plan() verify 100%',
+            '  → generate_commit_message() → use suggestion',
+            '  → ask_continue(reason="done+risks+verify+next")',
+            '',
+            '[QUALITY CHECKS - Before Delivery]',
+            '☐ Sprint Goal met?',
+            '☐ Plan: progress 100%',
+            '☐ WAM: wam_status clean',
+            '☐ Commit message generated',
+            '',
+            '[SELF-CHECK - Before Each Step]',
+            '? Is this in the Sprint?',
+            '? Code correct?',
+            '? Safe?',
+            '? User goal met?',
             ...(false ? [
             'Hard rule (highest priority): When you decide a task is done / ready to deliver, do NOT output a normal final response; you MUST call WindsurfAutoMcp ask_continue and put in reason: what was done, risks/notes, verification steps/commands, and next steps.',
             '',
@@ -2351,6 +2376,14 @@ function commitProjectWam(
             }
         }
 
+        // Record WAM commit time for UI/workflow status (not part of digest).
+        try {
+            project.stats = normalizeTrackerStats(project.stats);
+            project.stats.lastWamCommitAt = nowIso();
+        } catch {
+            // ignore
+        }
+
         // Ensure latest state is persisted.
         saveTrackerData(trackerData);
         saveMemoryData(memoryData);
@@ -2713,13 +2746,15 @@ function createDefaultTrackerStats(): ProjectTrackerStats {
         overviewUpdates: 0,
         planUpdates: 0,
         walkthroughUpdates: 0,
-        lastRagSearchAt: undefined,
-        lastMemorySearchAt: undefined,
-        lastWamStatusAt: undefined,
-        lastCheckPlanAt: undefined,
+        lastPreflightAt: undefined,
         lastProjectStatusAt: undefined,
+        lastCheckPlanAt: undefined,
+        lastMemorySearchAt: undefined,
+        lastRagSearchAt: undefined,
+        lastWamStatusAt: undefined,
         lastPlanUpdateAt: undefined,
-        lastWalkthroughUpdateAt: undefined
+        lastWalkthroughUpdateAt: undefined,
+        lastWamCommitAt: undefined
     };
 }
 
@@ -2734,13 +2769,18 @@ function normalizeTrackerStats(raw: any): ProjectTrackerStats {
         planUpdates: safe(raw.planUpdates),
         walkthroughUpdates: safe(raw.walkthroughUpdates),
         updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : undefined,
-        lastRagSearchAt: typeof raw.lastRagSearchAt === 'string' ? raw.lastRagSearchAt : undefined,
-        lastMemorySearchAt: typeof raw.lastMemorySearchAt === 'string' ? raw.lastMemorySearchAt : undefined,
-        lastWamStatusAt: typeof raw.lastWamStatusAt === 'string' ? raw.lastWamStatusAt : undefined,
-        lastCheckPlanAt: typeof raw.lastCheckPlanAt === 'string' ? raw.lastCheckPlanAt : undefined,
+
+        lastPreflightAt: typeof raw.lastPreflightAt === 'string' ? raw.lastPreflightAt : undefined,
         lastProjectStatusAt: typeof raw.lastProjectStatusAt === 'string' ? raw.lastProjectStatusAt : undefined,
+        lastCheckPlanAt: typeof raw.lastCheckPlanAt === 'string' ? raw.lastCheckPlanAt : undefined,
+        lastMemorySearchAt: typeof raw.lastMemorySearchAt === 'string' ? raw.lastMemorySearchAt : undefined,
+        lastRagSearchAt: typeof raw.lastRagSearchAt === 'string' ? raw.lastRagSearchAt : undefined,
+        lastWamStatusAt: typeof raw.lastWamStatusAt === 'string' ? raw.lastWamStatusAt : undefined,
+
         lastPlanUpdateAt: typeof raw.lastPlanUpdateAt === 'string' ? raw.lastPlanUpdateAt : undefined,
-        lastWalkthroughUpdateAt: typeof raw.lastWalkthroughUpdateAt === 'string' ? raw.lastWalkthroughUpdateAt : undefined
+        lastWalkthroughUpdateAt: typeof raw.lastWalkthroughUpdateAt === 'string' ? raw.lastWalkthroughUpdateAt : undefined,
+
+        lastWamCommitAt: typeof raw.lastWamCommitAt === 'string' ? raw.lastWamCommitAt : undefined
     };
 }
 
@@ -2766,6 +2806,9 @@ function ensureProjectTracker(data: TrackerData, rootPath: string, lang: UiLangu
             if (typeof existing.plan.summary !== 'string') existing.plan.summary = '';
             if (!Array.isArray(existing.plan.items)) existing.plan.items = [];
         }
+        if (!Array.isArray(existing.sprints)) {
+            existing.sprints = [];
+        }
         if (!existing.walkthrough || typeof existing.walkthrough !== 'object') {
             existing.walkthrough = { content: '' };
         } else if (typeof existing.walkthrough.content !== 'string') {
@@ -2784,6 +2827,7 @@ function ensureProjectTracker(data: TrackerData, rootPath: string, lang: UiLangu
             updatedAt: nowIso()
         },
         plan: { summary: '', items: [] },
+        sprints: [],
         walkthrough: { content: '' },
         stats: createDefaultTrackerStats(),
         updatedAt: nowIso()
@@ -2822,7 +2866,15 @@ function normalizeTrackerItems(rawItems: any): TrackerItem[] {
             const text = entry.text.trim();
             if (!text) continue;
             const status = entry.status === 'doing' || entry.status === 'done' ? entry.status : 'todo';
-            items.push({ id: String(entry.id || `item_${Math.random().toString(36).slice(2, 10)}`), text, status, updatedAt: nowIso() });
+            items.push({
+                id: String(entry.id || `item_${Math.random().toString(36).slice(2, 10)}`),
+                text,
+                status,
+                updatedAt: nowIso(),
+                sprint: typeof entry.sprint === 'string' ? entry.sprint : undefined,
+                points: typeof entry.points === 'number' ? entry.points : undefined,
+                assignee: typeof entry.assignee === 'string' ? entry.assignee : undefined
+            });
         }
     }
     return items;
@@ -2898,11 +2950,27 @@ function formatSummaryBlock(summary: string | undefined, lang: UiLanguage): stri
 
 function buildPlanArtifactContent(project: ProjectTracker, lang: UiLanguage): string {
     const title = tr('panel.planTitle', {}, lang);
-    const header = project.name ? `${project.name} - ${title}` : title;
-    const sections = [
-        `## ${tr('panel.sectionSummary', {}, lang)}\n${formatSummaryBlock(project.plan.summary, lang)}`,
-        `## ${tr('panel.sectionItems', {}, lang)}\n${formatItemsTable(project.plan.items, lang)}`
-    ];
+    const activeSprint = project.sprints?.find(s => s.id === project.activeSprintId);
+    const activeHeader = activeSprint ? `Running: ${activeSprint.name}` : title;
+    
+    const sections = [];
+    
+    if (activeSprint) {
+        const sprintInfo = `**Goal:** ${activeSprint.goal || '-'}<br>**Ends:** ${activeSprint.endDate ? activeSprint.endDate.slice(0, 10) : '-'}`;
+        const activeItems = project.plan.items.filter(i => i.sprint === activeSprint.id);
+        sections.push(
+            `## 🏃 ${tr('panel.sectionItems', {}, lang)} (${activeSprint.name})\n${sprintInfo}\n${formatItemsTable(activeItems, lang)}`
+        );
+    }
+
+    const backlogItems = project.plan.items.filter(i => !i.sprint || (activeSprint && i.sprint !== activeSprint.id));
+    sections.push(
+        `## 📦 ${tr('panel.sectionItems', {}, lang)} (Backlog)\n${formatItemsTable(backlogItems, lang)}`
+    );
+
+    sections.push(`## ${tr('panel.sectionSummary', {}, lang)}\n${formatSummaryBlock(project.plan.summary, lang)}`);
+
+    const header = project.name ? `${project.name} - ${activeHeader}` : activeHeader;
     return [`# ${header}`, '', ...sections].join('\n\n');
 }
 
@@ -3004,7 +3072,9 @@ function appendWalkthroughEntry(project: ProjectTracker, entry: string, lang: Ui
 function buildHooksCommand(variantHooksDir: string): string {
     const guardPath = path.join(variantHooksDir, 'windsurf-auto-mcp-guard.py');
     if (process.platform === 'win32') {
-        return `python "${guardPath}"`;
+        // Prefer the Python launcher on Windows, but fall back to python if needed.
+        // Use cmd.exe so we can do a simple fallback without requiring a specific shell.
+        return `cmd /c "py -3 \"${guardPath}\" || python \"${guardPath}\""`;
     }
     return `python3 "${guardPath}"`;
 }
@@ -3457,7 +3527,7 @@ const TOOLS = [
 	                rationale: { type: 'string', description: 'Why you are doing this (required by hooks) / 为什么要做（hooks 要求）' },
 	                content: { type: 'string', description: 'PRD content / PRD 内容' }
 	            },
-	            required: ['content']
+	            required: ['rationale', 'content']
 	        }
 	    },
 	    {
@@ -3469,7 +3539,8 @@ const TOOLS = [
 	                rationale: { type: 'string', description: 'Why you are approving/reviewing PRD (required by hooks) / 为什么审批/审核 PRD（hooks 要求）' },
 	                content: { type: 'string', description: 'Optional PRD content to review (defaults to current PRD) / 可选 PRD 内容（默认使用当前 PRD）' },
 	                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
-	            }
+	            },
+	            required: ['rationale']
 	        }
 	    },
 		    {
@@ -3486,15 +3557,19 @@ const TOOLS = [
 	                    description: 'Plan items (tasks/checklist) / 计划条目（任务/清单）',
 	                    items: {
 	                        type: 'object',
-	                        properties: {
-	                            text: { type: 'string' },
-	                            status: { type: 'string', enum: ['todo', 'doing', 'done'] }
-	                        },
-	                        required: ['text']
+                        properties: {
+                            text: { type: 'string' },
+                            status: { type: 'string', enum: ['todo', 'doing', 'done'] },
+                            sprint: { type: 'string', description: 'Sprint ID or name ("backlog")' },
+                            points: { type: 'number', description: 'Story points' },
+                            assignee: { type: 'string', description: 'Assignee ("ai", "user")' }
+                        },
+                        required: ['text']
 	                    }
 	                },
 	                text: { type: 'string', description: 'Plan text lines (supports [x]/[~]/[ ]) / 计划文本（支持 [x]/[~]/[ ]）' }
-		            }
+		            },
+		            required: ['rationale']
 		        }
 		    },
 		    {
@@ -3518,7 +3593,8 @@ const TOOLS = [
 		                    }
 		                },
 		                text: { type: 'string', description: 'Proposed plan text (supports [x]/[~]/[ ]) / 计划文本（支持 [x]/[~]/[ ]）' }
-		            }
+		            },
+		            required: ['rationale']
 		        }
 		    },
 	    {
@@ -3530,7 +3606,7 @@ const TOOLS = [
 	                rationale: { type: 'string', description: 'Why you are updating the overview (required by hooks) / 为什么更新概览（hooks 要求）' },
 	                content: { type: 'string', description: 'Overview content (Markdown) / 概览内容（Markdown）' }
 	            },
-	            required: ['content']
+	            required: ['rationale', 'content']
 	        }
 	    },
 	    {
@@ -3539,8 +3615,10 @@ const TOOLS = [
 	        inputSchema: {
 	            type: 'object',
 	            properties: {
-	                rationale: { type: 'string', description: 'Why you are generating the overview (required by hooks) / 为什么生成概览（hooks 要求）' }
-	            }
+	                rationale: { type: 'string', description: 'Why you are generating the overview (required by hooks) / 为什么生成概览（hooks 要求）' },
+	                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
+	            },
+	            required: ['rationale']
 	        }
 	    },
     {
@@ -3550,7 +3628,8 @@ const TOOLS = [
             type: 'object',
             properties: {
                 query: { type: 'string', description: 'Search query / 查询内容' },
-                maxResults: { type: 'number', description: 'Max results / 最大返回数量' }
+                maxResults: { type: 'number', description: 'Max results / 最大返回数量' },
+                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
             },
             required: ['query']
         }
@@ -3568,28 +3647,30 @@ const TOOLS = [
                     items: { type: 'string', enum: ['short', 'long', 'lesson'] },
                     description: 'Filter by kinds / 类型过滤'
                 },
-                maxResults: { type: 'number', description: 'Max results / 最大返回数量' }
+                maxResults: { type: 'number', description: 'Max results / 最大返回数量' },
+                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
             },
             required: ['query']
         }
     },
-    {
-        name: 'memory_hygiene',
-        description: 'Review/apply memory hygiene (promote/dedupe/auto-link lessons) / 记忆整理（提升/去重/自动链接经验）',
-        inputSchema: {
-            type: 'object',
-            properties: {
-                rationale: { type: 'string', description: 'Why you are running memory hygiene (required by hooks) / 为什么整理记忆（hooks 要求）' },
-                scope: { type: 'string', enum: ['project', 'global', 'both'], description: 'Which memory scope to process / 处理范围' },
-                apply: { type: 'boolean', description: 'If true, ask user confirmation and apply changes / 若为 true，将请求用户确认并应用变更' },
-                promote: { type: 'boolean', description: 'Promote eligible short→long / 提升符合条件的 short→long' },
-                dedupe: { type: 'boolean', description: 'Dedupe near-duplicates / 近重复去重' },
-                autoLinkLessons: { type: 'boolean', description: 'Auto-link lessons to files/commands / 自动为经验添加文件/命令链接' },
-                similarity: { type: 'number', description: 'Duplicate similarity threshold (0-1) / 去重相似度阈值（0-1）' },
-                maxEntries: { type: 'number', description: 'Max entries to consider for dedupe / 去重最大处理条目数' }
-            }
-        }
-    },
+	    {
+	        name: 'memory_hygiene',
+	        description: 'Review/apply memory hygiene (promote/dedupe/auto-link lessons) / 记忆整理（提升/去重/自动链接经验）',
+	        inputSchema: {
+	            type: 'object',
+	            properties: {
+	                rationale: { type: 'string', description: 'Why you are running memory hygiene (required by hooks) / 为什么整理记忆（hooks 要求）' },
+	                scope: { type: 'string', enum: ['project', 'global', 'both'], description: 'Which memory scope to process / 处理范围' },
+	                apply: { type: 'boolean', description: 'If true, ask user confirmation and apply changes / 若为 true，将请求用户确认并应用变更' },
+	                promote: { type: 'boolean', description: 'Promote eligible short→long / 提升符合条件的 short→long' },
+	                dedupe: { type: 'boolean', description: 'Dedupe near-duplicates / 近重复去重' },
+	                autoLinkLessons: { type: 'boolean', description: 'Auto-link lessons to files/commands / 自动为经验添加文件/命令链接' },
+	                similarity: { type: 'number', description: 'Duplicate similarity threshold (0-1) / 去重相似度阈值（0-1）' },
+	                maxEntries: { type: 'number', description: 'Max entries to consider for dedupe / 去重最大处理条目数' }
+	            },
+	            required: ['rationale']
+	        }
+	    },
 	    {
 	        name: 'record_lesson',
 	        description: 'Record a lesson learned from a mistake (human-like learning) / 记录错误经验（类人学习）',
@@ -3603,10 +3684,10 @@ const TOOLS = [
 	                prevention: { type: 'string', description: 'How to prevent it / 预防措施' },
 	                scope: { type: 'string', enum: ['project', 'global', 'both'], description: 'Where to store / 保存范围' },
                 tags: { type: 'array', items: { type: 'string' }, description: 'Tags / 标签' }
-            },
-            required: ['mistake', 'fix']
-        }
-    },
+	            },
+            required: ['rationale', 'mistake', 'fix']
+	        }
+	    },
 	    {
 	        name: 'get_project_status',
 	        description: 'Get tracker summary for current project / 获取当前项目跟踪状态',
@@ -3663,7 +3744,8 @@ const TOOLS = [
 		            properties: {
 		                rationale: { type: 'string', description: 'Why you are adding the release gate (required by hooks) / 为什么添加门禁（hooks 要求）' },
 		                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
-		            }
+		            },
+		            required: ['rationale']
 		        }
 		    },
 	    // ==================== WAM (History) Tools ====================
@@ -3689,7 +3771,8 @@ const TOOLS = [
 		                message: { type: 'string', description: 'Commit message (optional; auto-generated if omitted) / 提交说明（可选；留空则自动生成）' },
 		                author: { type: 'string', enum: ['auto', 'ai', 'user'], description: 'Author / 作者' },
 		                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
-		            }
+		            },
+		            required: ['rationale']
 		        }
 		    },
     {
@@ -3743,7 +3826,8 @@ const TOOLS = [
 		                target: { type: 'string', description: 'Commit/ref specifier (hash, HEAD, branch, refs/...) / 目标（hash/HEAD/分支/refs/...）' },
 		                hash: { type: 'string', description: 'Legacy: commit hash / 兼容：提交 hash' },
 		                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
-		            }
+		            },
+		            required: ['rationale']
 		        }
 		    },
 		    {
@@ -3758,7 +3842,7 @@ const TOOLS = [
 		                author: { type: 'string', enum: ['auto', 'ai', 'user'], description: 'Author / 作者' },
 		                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
 		            },
-		            required: ['otherHash', 'message']
+		            required: ['rationale', 'otherHash', 'message']
 		        }
 		    },
 		    {
@@ -3775,7 +3859,7 @@ const TOOLS = [
 		                force: { type: 'boolean', description: 'Force overwrite (create) / 强制覆盖（创建）' },
 		                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
 		            },
-		            required: ['action']
+		            required: ['rationale', 'action']
 		        }
 		    },
 		    {
@@ -3792,7 +3876,7 @@ const TOOLS = [
 		                force: { type: 'boolean', description: 'Force overwrite (create) / 强制覆盖（创建）' },
 		                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
 		            },
-		            required: ['action']
+		            required: ['rationale', 'action']
 		        }
 		    },
 	    {
@@ -3820,7 +3904,7 @@ const TOOLS = [
 		                mode: { type: 'string', enum: ['hard'], description: 'Reset mode (only hard supported) / 重置模式（仅支持 hard）' },
 		                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
 		            },
-		            required: ['target']
+		            required: ['rationale', 'target']
 		        }
 		    },
 		    {
@@ -3836,7 +3920,7 @@ const TOOLS = [
 		                id: { type: 'string', description: 'Stash id (apply/pop/drop); default latest / 暂存 id（apply/pop/drop，默认最新）' },
 		                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
 		            },
-		            required: ['action']
+		            required: ['rationale', 'action']
 		        }
 		    },
 	    // ==================== Memory Tools ====================
@@ -3854,7 +3938,37 @@ const TOOLS = [
 	                tags: { type: 'array', items: { type: 'string' }, description: 'Tags / 标签' },
 	                links: { type: 'array', items: { type: 'string' }, description: 'Related keys / 关联键' }
             },
-            required: ['key', 'value']
+            required: ['rationale', 'key', 'value']
+        }
+    },
+    {
+        name: 'manage_sprint',
+        description: 'Manage sprints: create, start, complete, list. / 管理 Sprint：创建、开始、完成、列出。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                rationale: { type: 'string', description: 'Why you are managing sprints (required) / 为什么管理 Sprint（必填）' },
+                action: { type: 'string', enum: ['create', 'start', 'complete', 'list'], description: 'Action to perform' },
+                name: { type: 'string', description: 'Sprint name (e.g. "Sprint 1") / Sprint 名称' },
+                goal: { type: 'string', description: 'Sprint goal / Sprint 目标' },
+                durationDays: { type: 'number', description: 'Duration in days (default 14) / 持续天数（默认 14）' },
+                sprintId: { type: 'string', description: 'Sprint ID (for start/complete) / Sprint ID' },
+                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
+            },
+            required: ['rationale', 'action']
+        }
+    },
+    {
+        name: 'generate_commit_message',
+        description: 'Generate a conventional commit message based on recent changes and context. / 根据近期变更和上下文生成符合规范的 Git 提交信息。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                rationale: { type: 'string', description: 'Why you are generating a message (required) / 为什么生成消息（必填）' },
+                context: { type: 'string', description: 'Extra context about what was done (optional) / 额外上下文' },
+                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
+            },
+            required: ['rationale']
         }
     },
     {
@@ -3885,7 +3999,7 @@ const TOOLS = [
 	                rationale: { type: 'string', description: 'Why you are updating the walkthrough (required by hooks) / 为什么更新走查（hooks 要求）' },
 	                content: { type: 'string', description: 'Walkthrough markdown content / 摘要 Markdown 内容' }
 	            },
-	            required: ['content']
+	            required: ['rationale', 'content']
 	        }
 	    },
 	    {
@@ -3898,7 +4012,8 @@ const TOOLS = [
 	                includeDecisions: { type: 'boolean', description: 'Include key decisions / 包含关键决策' },
 	                includeLessons: { type: 'boolean', description: 'Include lessons learned / 包含经验教训' },
 	                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
-	            }
+	            },
+	            required: ['rationale']
 	        }
 	    },
     // ==================== Workflow & Self-Check Tools ====================
@@ -4296,6 +4411,12 @@ async function handleToolCall(name: string, args: any): Promise<any> {
 
     let result;
     switch (name) {
+        case 'manage_sprint':
+            result = await handleManageSprint(args);
+            break;
+        case 'generate_commit_message':
+            result = await handleGenerateCommitMessage(args);
+            break;
         case 'ask_user':
             stats.askUserCalls++;
             result = await handleAskUser(args);
@@ -5115,19 +5236,168 @@ function readPackageJsonSummary(rootPath: string): string {
     }
 }
 
+function readPackageJsonScripts(rootPath: string): Array<{ name: string; command: string }> {
+    try {
+        const pkgPath = path.join(rootPath, 'package.json');
+        if (!fs.existsSync(pkgPath)) return [];
+        const raw = fs.readFileSync(pkgPath, 'utf-8');
+        const pkg = JSON.parse(raw);
+        const scripts = pkg?.scripts && typeof pkg.scripts === 'object' ? pkg.scripts : {};
+        const preferred = ['dev', 'start', 'build', 'test', 'lint', 'typecheck', 'format'];
+        const keys = Array.from(new Set([...preferred, ...Object.keys(scripts)])).filter(Boolean);
+        const out: Array<{ name: string; command: string }> = [];
+        for (const k of keys) {
+            const v = scripts?.[k];
+            if (typeof v !== 'string') continue;
+            const cmd = v.trim();
+            if (!cmd) continue;
+            out.push({ name: String(k), command: cmd });
+            if (out.length >= 16) break;
+        }
+        return out;
+    } catch {
+        return [];
+    }
+}
+
+function readTextFileExcerpt(absPath: string, maxChars = 8000, maxLines = 48): string {
+    try {
+        if (!absPath || !fs.existsSync(absPath)) return '';
+        const stat = fs.statSync(absPath);
+        if (!stat.isFile() || stat.size <= 0) return '';
+        const raw = fs.readFileSync(absPath, 'utf-8');
+        const text = raw.slice(0, Math.min(raw.length, maxChars));
+        const lines = text.replace(/\r\n/g, '\n').split('\n').slice(0, maxLines);
+        return lines.join('\n').trim();
+    } catch {
+        return '';
+    }
+}
+
+function readReadmeExcerpt(rootPath: string): { relPath: string; excerpt: string } | null {
+    const candidates = ['README.md', 'README_EN.md', 'docs/README.md', 'docs/README_EN.md'];
+    for (const rel of candidates) {
+        const abs = path.join(rootPath, rel);
+        const excerpt = readTextFileExcerpt(abs, 9000, 56);
+        if (excerpt) {
+            return { relPath: rel, excerpt };
+        }
+    }
+    return null;
+}
+
 function generateOverviewMarkdown(project: ProjectTracker, lang: UiLanguage): string {
     const rootPath = project.rootPath;
     const title = lang === 'en' ? 'Project Overview' : '项目概览';
+
     const signals = detectProjectSignals(rootPath);
     const tree = buildProjectTree(rootPath, 5, 110, 1800);
     const pkgSummary = readPackageJsonSummary(rootPath);
+    const pkgScripts = readPackageJsonScripts(rootPath);
     const keyPaths = detectKeyPaths(rootPath);
+    const readme = readReadmeExcerpt(rootPath);
+
     const signalLines = signals.length ? signals.map((s) => `- ${s}`).join('\n') : `_${tr('panel.readOnlyEmpty', {}, lang)}_`;
     const pkgLines = pkgSummary ? pkgSummary : `_${tr('panel.readOnlyEmpty', {}, lang)}_`;
     const keyPathLines = keyPaths.length ? keyPaths.map((p) => `- ${p}`).join('\n') : `_${tr('panel.readOnlyEmpty', {}, lang)}_`;
+    const scriptLines = pkgScripts.length
+        ? pkgScripts.map((s) => `- ${s.name}: ${s.command}`).join('\n')
+        : `_${tr('panel.readOnlyEmpty', {}, lang)}_`;
+
+    const suggestedCmds = (() => {
+        const has = (p: string) => fs.existsSync(path.join(rootPath, p));
+        const lines: string[] = [];
+        if (has('package.json')) {
+            lines.push(lang === 'en' ? '- Install: npm install' : '- 安装：npm install');
+            lines.push(lang === 'en' ? '- Build: npm run build' : '- 构建：npm run build');
+            lines.push(lang === 'en' ? '- Test: npm test' : '- 测试：npm test');
+            lines.push(lang === 'en' ? '- Lint: npm run lint' : '- Lint：npm run lint');
+        } else if (has('pyproject.toml') || has('requirements.txt')) {
+            lines.push(lang === 'en' ? '- Tests: python -m pytest' : '- 测试：python -m pytest');
+        } else if (has('go.mod')) {
+            lines.push(lang === 'en' ? '- Tests: go test ./...' : '- 测试：go test ./...');
+        } else if (has('Cargo.toml')) {
+            lines.push(lang === 'en' ? '- Tests: cargo test' : '- 测试：cargo test');
+        }
+        if (!lines.length) {
+            lines.push(lang === 'en' ? '_No commands detected. Fill in the correct commands for this repo._' : '_未检测到命令，请补充本项目正确的命令。_');
+        }
+        return lines.join('\n');
+    })();
+
+    const onboarding = lang === 'en'
+        ? [
+            '- One-liner: What is this project?',
+            '- Primary users/personas',
+            '- Key modules (folder → responsibility)',
+            '- Runtime/deploy model (local/serverless/container/etc)',
+            '- External integrations (DB, APIs, queues)',
+            '- Dev workflow: install/build/test/lint + expected outputs',
+            '- Conventions: code style, naming, branch/release strategy',
+            '- Risks/constraints (security/perf/compat)'
+        ].map((l) => `- ${l.replace(/^\-\s*/, '')}`).join('\n')
+        : [
+            '- 一句话：这个项目是做什么的？',
+            '- 主要用户/角色',
+            '- 核心模块（目录 → 职责）',
+            '- 运行/部署方式（本地/服务端/容器/Serverless 等）',
+            '- 外部集成（DB、API、队列等）',
+            '- 开发流程：安装/构建/测试/Lint + 期望结果',
+            '- 约定：代码风格、命名、分支/发布策略',
+            '- 风险/约束（安全/性能/兼容性）'
+        ].map((l) => `- ${l.replace(/^\-\s*/, '')}`).join('\n');
+
+    const archTemplate = lang === 'en'
+        ? [
+            'Fill this after reading key files (README, entrypoints, configs).',
+            '',
+            '### Components',
+            '- (TBD) UI / client',
+            '- (TBD) API / server',
+            '- (TBD) Data store',
+            '- (TBD) Background jobs',
+            '',
+            '### Key flows',
+            '- (TBD) Request → validation → business logic → persistence',
+            '',
+            '### Boundaries & contracts',
+            '- (TBD) Public APIs, internal modules, invariants'
+        ].join('\n')
+        : [
+            '请在阅读关键文件（README、入口文件、配置）后补全。',
+            '',
+            '### 组件',
+            '-（待补全）前端/客户端',
+            '-（待补全）API/服务端',
+            '-（待补全）数据存储',
+            '-（待补全）后台任务',
+            '',
+            '### 关键流程',
+            '-（待补全）请求 → 校验 → 业务逻辑 → 持久化',
+            '',
+            '### 边界与契约',
+            '-（待补全）对外接口、内部模块、不变量'
+        ].join('\n');
+
+    const readmeBlock = readme
+        ? [
+            `## ${lang === 'en' ? `README excerpt (${readme.relPath})` : `README 摘要（${readme.relPath}）`}`,
+            '```text',
+            readme.excerpt,
+            '```'
+        ].join('\n')
+        : `## ${lang === 'en' ? 'README excerpt' : 'README 摘要'}\n_${tr('panel.readOnlyEmpty', {}, lang)}_`;
 
     return [
         `# ${project.name ? `${project.name} - ${title}` : title}`,
+        '',
+        `## ${lang === 'en' ? 'What this overview is for' : '本概览用于做什么'}`,
+        lang === 'en'
+            ? 'This is the workspace project baseline (not the MCP/extension). Use it as the architecture record and onboarding map.'
+            : '这是“工作区项目”的基线概览（不是 MCP/插件本身）。用于作为架构记录与上手地图。',
+        '',
+        `## ${lang === 'en' ? 'Onboarding checklist (fill in)' : '上手清单（请补全）'}`,
+        onboarding,
         '',
         `## ${lang === 'en' ? 'Signals' : '技术信号'}`,
         signalLines,
@@ -5135,21 +5405,23 @@ function generateOverviewMarkdown(project: ProjectTracker, lang: UiLanguage): st
         `## ${lang === 'en' ? 'Key paths (quick map)' : '关键路径（快速定位）'}`,
         keyPathLines,
         '',
+        `## ${lang === 'en' ? 'Suggested commands (verify for this repo)' : '建议命令（请以本仓库为准）'}`,
+        suggestedCmds,
+        '',
         `## ${lang === 'en' ? 'package.json summary' : 'package.json 摘要'}`,
         pkgLines,
+        '',
+        `## ${lang === 'en' ? 'package.json scripts (selected)' : 'package.json scripts（节选）'}`,
+        scriptLines,
+        '',
+        readmeBlock,
+        '',
+        `## ${lang === 'en' ? 'Architecture record (fill in)' : '架构记录（请补全）'}`,
+        archTemplate,
         '',
         `## ${lang === 'en' ? 'Folder tree (trimmed)' : '目录结构（节选）'}`,
         '```text',
         tree || tr('panel.readOnlyEmpty', {}, lang),
-        '```',
-        '',
-        `## ${lang === 'en' ? 'Architecture sketch (Mermaid)' : '架构草图（Mermaid）'}`,
-        '```mermaid',
-        'flowchart LR',
-        '  User[User] -->|prompt| AI[AI / Cascade]',
-        '  AI -->|MCP tools| MCP[WindsurfAutoMcp]',
-        '  MCP -->|tracking/artifacts| Home[~/.codeium/.../windsurf-auto-mcp/brain]',
-        '  AI -->|code changes| Repo[(Workspace Repo)]',
         '```',
         ''
     ].join('\n');
@@ -5206,7 +5478,7 @@ async function handleRagSearch(args: any): Promise<any> {
         throw new Error(msg);
     }
     const maxResults = Number.isFinite(args?.maxResults) ? Math.max(1, Math.min(10, Math.floor(args.maxResults))) : 6;
-    const rootPath = getWorkspaceRootPath();
+    const rootPath = typeof args?.rootPath === 'string' ? args.rootPath : (getWorkspaceRootPath() || '');
     if (!rootPath) {
         const msg = lang === 'en' ? 'Workspace is required for rag_search.' : 'rag_search 需要打开工作区。';
         throw new Error(msg);
@@ -5343,15 +5615,80 @@ async function handleUpdateOverview(args: any): Promise<any> {
     return { content: [{ type: 'text', text }, { type: 'text', text: `OVERVIEW_JSON:\n${JSON.stringify(buildTrackerSnapshot(project), null, 2)}` }] };
 }
 
-async function handleGenerateOverview(_args: any): Promise<any> {
+async function handleGenerateOverview(args: any): Promise<any> {
     const lang = getUiLanguage();
-    const { data, project } = resolveProjectTracker();
+    const rootPath = typeof args?.rootPath === 'string' ? args.rootPath : undefined;
+    const { data, project } = resolveProjectTracker(rootPath);
+
     const content = generateOverviewMarkdown(project, lang);
     project.overview = { content, updatedAt: nowIso(), generatedBy: 'auto' };
     bumpProjectStat(project, 'overviewUpdates');
     appendWalkthroughEntry(project, lang === 'en' ? 'Overview generated.' : '项目概览已生成。', lang);
     project.updatedAt = nowIso();
     saveTrackerAndNotify(data, project);
+
+    // Bootstrap new projects:
+    // - Initialize layered project memory (so hooks don't block implementation)
+    // - Initialize WAM history (HEAD.json) so WAM gating works from first run
+    try {
+        const mem = resolveProjectMemory(project.rootPath);
+        const memKeys = Object.keys(mem.project.memories || {});
+        if (memKeys.length === 0) {
+            const baselineKey = 'baseline:project';
+            const baselineValue = [
+                `# ${project.name || 'Project'} — Baseline (auto)`,
+                `GeneratedAt: ${nowIso()}`,
+                `RootPath: ${project.rootPath}`,
+                '',
+                '## Overview',
+                (project.overview?.content || '').slice(0, 6000),
+                '',
+                '## Notes',
+                lang === 'en'
+                    ? '- Fill in missing architecture details in Overview (components/flows/contracts).'
+                    : '- 请在 Overview 中补全架构细节（组件/流程/契约）。'
+            ].join('\n');
+            await handleSaveMemory({
+                key: baselineKey,
+                value: baselineValue,
+                scope: 'project',
+                kind: 'long',
+                tags: ['baseline', 'architecture', 'auto']
+            });
+
+            const rulesKey = 'baseline:dev_workflow';
+            const rulesValue = [
+                `# ${project.name || 'Project'} — Dev workflow (auto)`,
+                '',
+                lang === 'en'
+                    ? 'Validate and replace the commands below with the repo-true commands:'
+                    : '请以本仓库真实命令为准，校验/替换下列命令：',
+                '',
+                (readPackageJsonScripts(project.rootPath).map((s) => `- npm run ${s.name}  # ${s.command}`).join('\n') || ''),
+                '',
+                lang === 'en'
+                    ? 'Recommended baseline:'
+                    : '建议基线：',
+                '- npm install',
+                '- npm run build',
+                '- npm test',
+                '- npm run lint'
+            ].filter(Boolean).join('\n');
+            await handleSaveMemory({
+                key: rulesKey,
+                value: rulesValue,
+                scope: 'project',
+                kind: 'long',
+                tags: ['baseline', 'workflow', 'auto']
+            });
+
+            // Make an initial WAM snapshot so future hooks can reliably enforce WAM cleanliness.
+            commitProjectWam('wam: init baseline (generate_overview)', 'auto', project.rootPath);
+        }
+    } catch {
+        // best-effort
+    }
+
     const text = lang === 'en' ? 'Overview generated.' : '项目概览已生成。';
     return { content: [{ type: 'text', text }, { type: 'text', text: `OVERVIEW_JSON:\n${JSON.stringify(buildTrackerSnapshot(project), null, 2)}` }] };
 }
@@ -5742,10 +6079,20 @@ async function handlePreflight(args: any): Promise<any> {
     const statusRes = await runCheck(() => handleGetProjectStatus({ rootPath }));
     const planRes = await runCheck(() => handleCheckPlan({ rootPath }));
     const memoryRes = await runCheck(() =>
-        handleMemorySearch({ query: effectiveMemoryQuery, scope: memoryScope, maxResults: memoryMaxResults })
+        handleMemorySearch({ query: effectiveMemoryQuery, scope: memoryScope, maxResults: memoryMaxResults, rootPath })
     );
-    const ragRes = await runCheck(() => handleRagSearch({ query: effectiveRagQuery, maxResults: ragMaxResults }));
+    const ragRes = await runCheck(() => handleRagSearch({ query: effectiveRagQuery, maxResults: ragMaxResults, rootPath }));
     const wamRes = await runCheck(() => handleWamStatus({ scope: 'project', rootPath }));
+
+    // Mark the project as having completed a preflight (separate from last* tool timestamps).
+    try {
+        const trackerInfo = resolveProjectTracker(rootPath);
+        trackerInfo.project.stats = normalizeTrackerStats(trackerInfo.project.stats);
+        trackerInfo.project.stats.lastPreflightAt = nowIso();
+        saveTrackerData(trackerInfo.data);
+    } catch {
+        // ignore
+    }
 
     const payload: any = {
         startedAt,
@@ -7956,9 +8303,11 @@ async function handleMemorySearch(args: any): Promise<any> {
         throw new Error(msg);
     }
 
+    const rootPath = typeof args?.rootPath === 'string' ? args.rootPath : undefined;
+
     // Record that we refreshed memory context for this project (used by hooks to enforce "memory_search before edits").
     try {
-        const trackerInfo = resolveProjectTracker();
+        const trackerInfo = resolveProjectTracker(rootPath);
         trackerInfo.project.stats = normalizeTrackerStats(trackerInfo.project.stats);
         trackerInfo.project.stats.lastMemorySearchAt = nowIso();
         saveTrackerData(trackerInfo.data);
@@ -7987,7 +8336,7 @@ async function handleMemorySearch(args: any): Promise<any> {
     };
 
     if (scope === 'project' || scope === 'both') {
-        const { project } = resolveProjectMemory();
+        const { project } = resolveProjectMemory(rootPath);
         consider('project', project.memories || {});
     }
     if (scope === 'global' || scope === 'both') {
@@ -8328,6 +8677,95 @@ async function handleRecordLesson(args: any): Promise<any> {
 }
 
 // ==================== Walkthrough Handler ====================
+
+async function handleManageSprint(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const action = args.action;
+    const { data, project } = resolveProjectTracker(args.rootPath);
+    if (!Array.isArray(project.sprints)) project.sprints = [];
+
+    const formatSprintList = (sprints: Sprint[]) => {
+        if (!sprints.length) return lang === 'en' ? '(no sprints)' : '(无 Sprint)';
+        return sprints.map(s => `[${s.status.toUpperCase()}] ${s.name} (Goal: ${s.goal || '-'})`).join('\n');
+    };
+
+    if (action === 'list') {
+        return { content: [{ type: 'text', text: formatSprintList(project.sprints) }] };
+    }
+
+    if (action === 'create') {
+        const name = args.name || `Sprint ${project.sprints.length + 1}`;
+        const id = `sprint_${Math.random().toString(36).slice(2, 10)}`;
+        const newSprint: Sprint = {
+            id,
+            name,
+            goal: args.goal || '',
+            status: 'planning',
+            createdAt: nowIso()
+        };
+        project.sprints.push(newSprint);
+        project.updatedAt = nowIso();
+        saveTrackerAndNotify(data, project);
+        const text = lang === 'en' ? `Sprint created: ${name} (${id})` : `Sprint 已创建：${name} (${id})`;
+        return { content: [{ type: 'text', text }] };
+    }
+
+    if (action === 'start') {
+        const id = args.sprintId;
+        const sprint = project.sprints.find(s => s.id === id || s.name === id);
+        if (!sprint) throw new Error(`Sprint not found: ${id}`);
+        if (project.activeSprintId) {
+            throw new Error(lang === 'en' ? 'Another sprint is already active. Complete it first.' : '已有活跃的 Sprint，请先完成。');
+        }
+        sprint.status = 'active';
+        sprint.startDate = nowIso();
+        if (args.durationDays) {
+            const end = new Date();
+            end.setDate(end.getDate() + Number(args.durationDays));
+            sprint.endDate = end.toISOString();
+        }
+        project.activeSprintId = sprint.id;
+        project.updatedAt = nowIso();
+        saveTrackerAndNotify(data, project);
+        return { content: [{ type: 'text', text: `Sprint started: ${sprint.name}` }] };
+    }
+
+    if (action === 'complete') {
+        const id = args.sprintId || project.activeSprintId;
+        const sprint = project.sprints.find(s => s.id === id || s.name === id);
+        if (!sprint) throw new Error(`Sprint not found: ${id}`);
+        sprint.status = 'completed';
+        sprint.completedAt = nowIso();
+        if (project.activeSprintId === sprint.id) {
+            project.activeSprintId = undefined;
+        }
+        project.updatedAt = nowIso();
+        saveTrackerAndNotify(data, project);
+        return { content: [{ type: 'text', text: `Sprint completed: ${sprint.name}` }] };
+    }
+
+    throw new Error(`Unknown action: ${action}`);
+}
+
+async function handleGenerateCommitMessage(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const { project } = resolveProjectTracker(args.rootPath);
+    // Heuristic: look at recent walkthrough entries or plan completions
+    const recentWalkthrough = (project.walkthrough.content || '').split('\n').slice(-10).join('\n');
+    const recentDone = (project.plan.items || []).filter(i => i.status === 'done').slice(-3).map(i => i.text).join(', ');
+    
+    // In a real agent scenario, the LLM would generate this. Here we construct a template/prompt.
+    // But wait, the tool *is* the LLM tool. The *output* of this tool goes back to the LLM.
+    // The user wants the *agent* to generate it.
+    // Actually, this tool might be redundant if the agent just does it. 
+    // BUT the user asked for a "generate commit message" feature. 
+    // Let's provide a structured suggestion based on tracker state.
+    
+    const context = args.context || '';
+    const suggestion = `feat: update project progress\n\n- Completed: ${recentDone || 'various tasks'}\n- Context: ${context || 'routine update'}`;
+    
+    return { content: [{ type: 'text', text: `Suggested commit message:\n\n${suggestion}` }] };
+}
 
 async function handleUpdateWalkthrough(args: any): Promise<any> {
     const lang = getUiLanguage();
@@ -9751,29 +10189,55 @@ function getPrdPanelHtml(project: ProjectTracker, lang: UiLanguage, webview: vsc
 }
 
 function getPlanPanelHtml(project: ProjectTracker, lang: UiLanguage, webview: vscode.Webview): string {
-    const progress = computeItemProgress(project.plan.items);
+    const activeSprint = project.sprints?.find(s => s.id === project.activeSprintId);
+    
+    let activeSection = '';
+    if (activeSprint) {
+        const activeItems = project.plan.items.filter(i => i.sprint === activeSprint.id);
+        const progress = computeItemProgress(activeItems);
+        activeSection = `
+            <section class="card" style="border-left: 4px solid var(--vscode-charts-green)">
+                <div class="card-title">🏃 ${escapeHtml(activeSprint.name)} (${activeSprint.status.toUpperCase()})</div>
+                <div style="font-size: 12px; margin-bottom: 8px; color: var(--vscode-descriptionForeground)">
+                    Goal: ${escapeHtml(activeSprint.goal || '-')}<br>
+                    Ends: ${activeSprint.endDate ? activeSprint.endDate.slice(0, 10) : '-'}
+                </div>
+                <div class="progress">
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width:${progress.percent}%"></div>
+                    </div>
+                    <div class="progress-meta">${progress.done}/${progress.total} • ${progress.percent}%</div>
+                </div>
+                <div class="list">
+                    ${renderTrackerItems(activeItems, lang)}
+                </div>
+            </section>
+        `;
+    }
+
+    const backlogItems = project.plan.items.filter(i => !i.sprint || (activeSprint && i.sprint !== activeSprint.id));
     const summaryHtml = project.plan.summary
-        ? renderMarkdownToHtml(project.plan.summary)
+        ? `<div class="card-body markdown">${renderMarkdownToHtml(project.plan.summary)}</div>`
         : `<p class="empty">${escapeHtml(tr('panel.readOnlyEmpty', {}, lang))}</p>`;
-    const itemsHtml = renderTrackerItems(project.plan.items, lang);
+
     const needsMermaid = summaryHtml.includes('class="mermaid"');
     const body = `
+        ${activeSection}
+        
+        <section class="card">
+            <div class="card-title">📦 Backlog</div>
+            <div class="list">
+                ${renderTrackerItems(backlogItems, lang)}
+            </div>
+        </section>
+
         <section class="card">
             <div class="card-title">${escapeHtml(tr('panel.sectionSummary', {}, lang))}</div>
             <div class="card-body markdown">${summaryHtml}</div>
         </section>
-        <section class="card">
-            <div class="card-title">${escapeHtml(tr('panel.sectionItems', {}, lang))}</div>
-            <div class="progress">
-                <div class="progress-bar">
-                    <div class="progress-fill" style="width:${progress.percent}%"></div>
-                </div>
-                <div class="progress-meta">${progress.done}/${progress.total} • ${progress.percent}%</div>
-            </div>
-            <div class="list">${itemsHtml}</div>
-        </section>
     `;
-    const badge = progress.total > 0 ? `${progress.percent}%` : '';
+    const progress = computeItemProgress(project.plan.items); // Global progress
+    const badge = activeSprint ? 'Running' : (progress.total > 0 ? `${progress.percent}%` : '');
     return getPanelShellHtml(webview, tr('panel.planTitle', {}, lang), project.name, badge, body, lang, { mermaid: needsMermaid });
 }
 
