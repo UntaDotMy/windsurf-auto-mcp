@@ -3070,11 +3070,11 @@ function appendWalkthroughEntry(project: ProjectTracker, entry: string, lang: Ui
 }
 
 function buildHooksCommand(variantHooksDir: string): string {
-    const guardPath = path.join(variantHooksDir, 'windsurf-auto-mcp-guard.py');
+    const guardPath = path.resolve(variantHooksDir, 'windsurf-auto-mcp-guard.py');
     if (process.platform === 'win32') {
-        // Prefer the Python launcher on Windows, but fall back to python if needed.
-        // Use cmd.exe so we can do a simple fallback without requiring a specific shell.
-        return `cmd /c "py -3 \"${guardPath}\" || python \"${guardPath}\""`;
+        // On Windows, use Python directly without cmd wrapper to avoid path issues
+        // Try py launcher first, Windsurf will handle the fallback if needed
+        return `python "${guardPath}"`;
     }
     return `python3 "${guardPath}"`;
 }
