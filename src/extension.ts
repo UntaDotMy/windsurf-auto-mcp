@@ -11264,134 +11264,204 @@ function getPanelShellHtml(
     <title>${safeTitle}</title>
     <style>
         :root {
-            --radius: 4px;
-            --font-family: var(--vscode-font-family, "Segoe UI", sans-serif);
+            --radius: 6px;
+            --spacing: 20px;
+            --font-family: var(--vscode-font-family, "Segoe UI", system-ui, sans-serif);
+            --shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
         }
         body {
             margin: 0;
-            padding: 24px;
+            padding: var(--spacing);
             color: var(--vscode-foreground);
             font-family: var(--font-family);
             font-size: var(--vscode-font-size);
             background-color: var(--vscode-editor-background);
-            line-height: 1.5;
+            line-height: 1.6;
+            overflow-x: hidden; /* Prevent horizontal scroll on body */
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
+        /* Layout */
         .stage {
             display: flex;
             flex-direction: column;
             gap: 20px;
-            max-width: 1000px;
+            width: 100%;
+            max-width: 1200px; /* Increased max-width */
             margin: 0 auto;
         }
 
+        /* Hero Section */
         .hero {
             background: var(--vscode-sideBar-background);
             border: 1px solid var(--vscode-widget-border);
             border-radius: var(--radius);
-            padding: 16px;
+            padding: 20px;
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 12px;
+            box-shadow: var(--shadow);
         }
-        .hero h1 { font-size: 20px; font-weight: 600; margin: 0; color: var(--vscode-foreground); }
-        .subtitle { font-size: 12px; color: var(--vscode-descriptionForeground); }
+        .hero h1 { 
+            font-size: 24px; 
+            font-weight: 600; 
+            margin: 0; 
+            color: var(--vscode-foreground); 
+            line-height: 1.2;
+        }
+        .subtitle { 
+            font-size: 13px; 
+            color: var(--vscode-descriptionForeground); 
+            opacity: 0.9;
+        }
         .badge {
             align-self: flex-start;
-            padding: 2px 8px;
+            padding: 4px 10px;
             border-radius: 12px;
             font-size: 11px;
+            font-weight: 600;
             background: var(--vscode-badge-background);
             color: var(--vscode-badge-foreground);
             text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
+        /* Grid Layout */
         .grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 16px;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
         }
 
+        /* Cards */
         .card {
             background: var(--vscode-editor-inactiveSelectionBackground);
             border: 1px solid var(--vscode-widget-border);
             border-radius: var(--radius);
-            padding: 16px;
+            padding: 20px;
             display: flex;
             flex-direction: column;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .card:hover {
+            border-color: var(--vscode-focusBorder);
         }
         .card-title {
-            font-size: 11px;
+            font-size: 12px;
             text-transform: uppercase;
             color: var(--vscode-descriptionForeground);
-            margin-bottom: 12px;
-            font-weight: 600;
-            letter-spacing: 0.5px;
+            margin-bottom: 16px;
+            font-weight: 700;
+            letter-spacing: 0.8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-bottom: 1px solid var(--vscode-widget-border);
+            padding-bottom: 8px;
         }
         .card-body {
-            font-size: 13px;
+            font-size: 14px;
             line-height: 1.6;
             color: var(--vscode-foreground);
         }
 
-        /* Markdown Styles */
-        .markdown { white-space: normal; }
+        /* Markdown Styles - Improved Overflow Handling */
+        .markdown { 
+            white-space: normal; 
+            overflow-wrap: break-word; 
+            word-wrap: break-word;
+            word-break: break-word;
+        }
         .markdown h1, .markdown h2, .markdown h3, .markdown h4 {
-            margin: 16px 0 8px;
+            margin: 24px 0 12px;
             font-weight: 600;
             color: var(--vscode-foreground);
+            line-height: 1.3;
         }
-        .markdown h1 { font-size: 18px; }
-        .markdown h2 { font-size: 16px; }
-        .markdown h3 { font-size: 14px; }
-        .markdown p { margin: 0 0 12px; }
-        .markdown ul, .markdown ol { margin: 0 0 12px 20px; padding: 0; }
-        .markdown li { margin-bottom: 4px; }
+        .markdown h1 { font-size: 22px; border-bottom: 1px solid var(--vscode-widget-border); padding-bottom: 6px; }
+        .markdown h2 { font-size: 18px; }
+        .markdown h3 { font-size: 16px; }
+        .markdown p { margin: 0 0 16px; }
+        .markdown ul, .markdown ol { margin: 0 0 16px 24px; padding: 0; }
+        .markdown li { margin-bottom: 6px; }
+        
+        /* Code Blocks */
         .markdown code {
-            font-family: var(--vscode-editor-font-family, monospace);
+            font-family: var(--vscode-editor-font-family, "Consolas", "Monaco", monospace);
             background: var(--vscode-textCodeBlock-background);
-            padding: 2px 4px;
-            border-radius: 3px;
-            font-size: 12px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 13px;
+            color: var(--vscode-textPreformat-foreground);
         }
         .markdown pre {
             background: var(--vscode-textCodeBlock-background);
             border: 1px solid var(--vscode-widget-border);
-            padding: 12px;
+            padding: 16px;
             border-radius: var(--radius);
             overflow-x: auto;
-            margin-bottom: 12px;
+            margin-bottom: 16px;
+            max-width: 100%;
         }
-        .markdown pre code { background: transparent; padding: 0; }
+        .markdown pre code { 
+            background: transparent; 
+            padding: 0; 
+            color: inherit;
+            white-space: pre;
+            word-break: normal;
+            word-wrap: normal;
+        }
+
+        /* Blockquotes */
         .markdown blockquote {
             border-left: 4px solid var(--vscode-textBlockQuote-border);
             background: var(--vscode-textBlockQuote-background);
-            margin: 0 0 12px;
-            padding: 8px 12px;
+            margin: 0 0 16px;
+            padding: 12px 16px;
+            color: var(--vscode-descriptionForeground);
         }
+
+        /* Tables - Responsive Wrapper */
         .markdown table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 12px;
-            font-size: 12px;
+            margin-bottom: 16px;
+            font-size: 13px;
+            display: block; /* For horizontal scroll */
+            overflow-x: auto;
         }
         .markdown th, .markdown td {
             border: 1px solid var(--vscode-widget-border);
-            padding: 8px;
+            padding: 10px 12px;
             text-align: left;
         }
         .markdown th { background: var(--vscode-list-hoverBackground); font-weight: 600; }
-        .markdown .mermaid svg { max-width: 100%; height: auto; background: var(--vscode-editor-background); }
+        
+        /* Mermaid Diagram Responsive */
+        .markdown .mermaid {
+            display: flex;
+            justify-content: center;
+            background: var(--vscode-editor-background);
+            padding: 16px;
+            border-radius: var(--radius);
+            overflow-x: auto;
+        }
+        .markdown .mermaid svg { max-width: 100%; height: auto; }
 
         /* Helpers */
-        .empty { color: var(--vscode-descriptionForeground); font-style: italic; }
+        .empty { 
+            color: var(--vscode-descriptionForeground); 
+            font-style: italic; 
+            text-align: center;
+            padding: 20px;
+            opacity: 0.7;
+        }
 
         /* Progress Bar */
-        .progress { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+        .progress { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
         .progress-bar {
-            height: 6px;
-            border-radius: 3px;
+            height: 8px;
+            border-radius: 4px;
             background: var(--vscode-widget-border);
             overflow: hidden;
         }
@@ -11399,43 +11469,77 @@ function getPanelShellHtml(
             height: 100%;
             background: var(--vscode-progressBar-background);
             width: 0%;
-            transition: width 0.3s ease;
+            transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
         }
         .progress-meta {
-            font-size: 11px;
+            font-size: 12px;
+            font-weight: 500;
             color: var(--vscode-descriptionForeground);
             display: flex;
             justify-content: space-between;
         }
 
-        /* Lists */
-        .list { display: flex; flex-direction: column; gap: 8px; }
+        /* Lists & Items */
+        .list { display: flex; flex-direction: column; gap: 10px; }
         .item {
             display: flex;
-            gap: 12px;
-            padding: 10px;
+            gap: 14px;
+            padding: 12px;
             border-radius: var(--radius);
             background: var(--vscode-editor-background);
             border: 1px solid var(--vscode-widget-border);
             align-items: flex-start;
+            transition: background 0.2s;
+        }
+        .item:hover {
+            background: var(--vscode-list-hoverBackground);
         }
         .dot {
-            width: 8px;
-            height: 8px;
+            width: 10px;
+            height: 10px;
             border-radius: 50%;
             margin-top: 6px;
             flex-shrink: 0;
+            border: 2px solid transparent;
         }
-        .item.todo .dot { background: var(--vscode-descriptionForeground); }
-        .item.doing .dot { background: var(--vscode-editorWarning-foreground); }
-        .item.done .dot { background: var(--vscode-testing-iconPassed); }
+        .item.todo .dot { 
+            background: transparent; 
+            border-color: var(--vscode-descriptionForeground); 
+        }
+        .item.doing .dot { 
+            background: var(--vscode-editorWarning-foreground);
+            box-shadow: 0 0 4px var(--vscode-editorWarning-foreground);
+        }
+        .item.done .dot { 
+            background: var(--vscode-testing-iconPassed);
+        }
         .item-content { flex: 1; min-width: 0; }
-        .item-text { font-size: 13px; line-height: 1.5; word-wrap: break-word; }
-        .item-meta { font-size: 11px; color: var(--vscode-descriptionForeground); margin-top: 2px; }
+        .item-text { 
+            font-size: 14px; 
+            line-height: 1.5; 
+            word-wrap: break-word;
+            color: var(--vscode-foreground);
+        }
+        .item-meta { 
+            font-size: 11px; 
+            color: var(--vscode-descriptionForeground); 
+            margin-top: 4px;
+            font-family: var(--vscode-editor-font-family, monospace);
+        }
+
+        /* Mobile Responsiveness */
+        @media (max-width: 600px) {
+            body { padding: 12px; }
+            .stage { gap: 16px; }
+            .hero { padding: 16px; }
+            .card { padding: 16px; }
+            .hero h1 { font-size: 20px; }
+            .grid { grid-template-columns: 1fr; }
+        }
 
         /* Animations */
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .card, .hero { animation: fadeIn 0.3s ease-out; }
+        .card, .hero { animation: fadeIn 0.4s ease-out; }
     </style>
 </head>
 <body>
