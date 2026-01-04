@@ -3339,6 +3339,7 @@ let extensionContext: vscode.ExtensionContext;
 	    saveMemoryCalls: 0,
 	    getMemoryCalls: 0,
 	    listMemoryCalls: 0,
+	    checkHookStatusCalls: 0,
 	    workflowStatusCalls: 0,
 	    verifyActionCalls: 0,
 	    generateUserStoriesCalls: 0,
@@ -3935,6 +3936,17 @@ const TOOLS = [
 	        }
 	    },
     // ==================== Workflow & Self-Check Tools ====================
+    {
+        name: 'check_hook_status',
+        description: 'CALL WHEN YOUR ACTION FAILS OR IS BLOCKED. Check if hooks blocked your last action and get the reason. Hooks enforce workflow (e.g., require plan before code). If your file write or command keeps failing, call this to understand why. / 当你的操作失败或被阻止时调用。检查钩子是否阻止了你的上一个操作并获取原因。钩子强制工作流（例如，编码前需要计划）。如果你的文件写入或命令一直失败，调用此工具以了解原因。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' },
+                clearAfterRead: { type: 'boolean', description: 'Clear hook feedback after reading (default: false) / 读取后清除钩子反馈（默认: false）' }
+            }
+        }
+    },
     {
         name: 'workflow_status',
         description: 'CALL FREQUENTLY. Get think-first workflow status: checks if you followed THINK→RECALL→RESEARCH→PLAN→CODE→VERIFY→LEARN sequence. Shows critical reminders, next steps, and rules. Call after preflight, before planning, and when unsure. / 常调用。获取先思考工作流状态：检查是否遵循思考→回忆→研究→计划→编码→验证→学习序列。显示关键提醒、下一步和规则。预检后、计划前、不确定时调用。',
@@ -4585,6 +4597,10 @@ async function handleToolCall(name: string, args: any): Promise<any> {
         case 'generate_walkthrough':
             stats.updateWalkthroughCalls++;
             result = await handleGenerateWalkthrough(args);
+            break;
+        case 'check_hook_status':
+            stats.checkHookStatusCalls++;
+            result = await handleCheckHookStatus(args);
             break;
         case 'workflow_status':
             stats.workflowStatusCalls++;
@@ -5263,17 +5279,145 @@ function detectKeyPaths(rootPath: string): string[] {
 function detectProjectSignals(rootPath: string): string[] {
     const signals: string[] = [];
     const has = (p: string) => fs.existsSync(path.join(rootPath, p));
+    const hasAny = (...ps: string[]) => ps.some(p => has(p));
+    
+    // Read package.json for deeper analysis
+    let pkgDeps: string[] = [];
+    let pkgDevDeps: string[] = [];
+    try {
+        const pkgPath = path.join(rootPath, 'package.json');
+        if (fs.existsSync(pkgPath)) {
+            const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+            pkgDeps = Object.keys(pkg.dependencies || {});
+            pkgDevDeps = Object.keys(pkg.devDependencies || {});
+        }
+    } catch { /* ignore */ }
+    const allDeps = [...pkgDeps, ...pkgDevDeps];
+    const hasDep = (name: string) => allDeps.some(d => d === name || d.startsWith(`@${name}/`) || d.startsWith(`${name}-`) || d.endsWith(`-${name}`));
 
-    if (has('package.json')) signals.push('Node.js / package.json');
-    if (has('pnpm-lock.yaml')) signals.push('pnpm');
-    if (has('yarn.lock')) signals.push('yarn');
-    if (has('package-lock.json')) signals.push('npm');
+    // Base languages/runtimes
+    if (has('package.json')) signals.push('Node.js');
     if (has('tsconfig.json')) signals.push('TypeScript');
-    if (has('pyproject.toml') || has('requirements.txt')) signals.push('Python');
+    if (hasAny('pyproject.toml', 'requirements.txt', 'setup.py', 'Pipfile')) signals.push('Python');
     if (has('go.mod')) signals.push('Go');
     if (has('Cargo.toml')) signals.push('Rust');
-    if (has('pom.xml') || has('build.gradle') || has('build.gradle.kts')) signals.push('Java/Kotlin');
+    if (hasAny('pom.xml', 'build.gradle', 'build.gradle.kts')) signals.push('Java/Kotlin');
+    if (hasAny('*.csproj', '*.fsproj', '*.sln')) signals.push('.NET/C#');
+    if (has('composer.json')) signals.push('PHP');
+    if (has('Gemfile')) signals.push('Ruby');
+    
+    // Package managers
+    if (has('pnpm-lock.yaml')) signals.push('pnpm');
+    else if (has('yarn.lock')) signals.push('yarn');
+    else if (has('package-lock.json')) signals.push('npm');
+    if (has('bun.lockb')) signals.push('bun');
+    
+    // Frontend frameworks (detect from deps)
+    if (hasDep('react') || hasDep('@types/react')) signals.push('React');
+    if (hasDep('vue') || has('vue.config.js')) signals.push('Vue');
+    if (hasDep('svelte') || has('svelte.config.js')) signals.push('Svelte');
+    if (hasDep('angular') || has('angular.json')) signals.push('Angular');
+    if (hasDep('solid-js')) signals.push('Solid.js');
+    if (hasDep('preact')) signals.push('Preact');
+    
+    // Meta-frameworks
+    if (hasDep('next') || has('next.config.js') || has('next.config.ts') || has('next.config.mjs')) signals.push('Next.js');
+    if (hasDep('nuxt') || has('nuxt.config.ts') || has('nuxt.config.js')) signals.push('Nuxt');
+    if (hasDep('gatsby')) signals.push('Gatsby');
+    if (hasDep('remix') || has('remix.config.js')) signals.push('Remix');
+    if (hasDep('astro') || has('astro.config.mjs')) signals.push('Astro');
+    if (has('vite.config.ts') || has('vite.config.js') || hasDep('vite')) signals.push('Vite');
+    
+    // Backend frameworks
+    if (hasDep('express')) signals.push('Express.js');
+    if (hasDep('fastify')) signals.push('Fastify');
+    if (hasDep('nestjs') || hasDep('@nestjs/core')) signals.push('NestJS');
+    if (hasDep('hono')) signals.push('Hono');
+    if (hasDep('koa')) signals.push('Koa');
+    if (hasDep('fastapi') || hasAny('main.py', 'app/main.py')) signals.push('FastAPI (potential)');
+    if (hasDep('django') || has('manage.py')) signals.push('Django');
+    if (hasDep('flask')) signals.push('Flask');
+    
+    // Styling
+    if (hasDep('tailwindcss') || has('tailwind.config.js') || has('tailwind.config.ts')) signals.push('Tailwind CSS');
+    if (hasDep('styled-components')) signals.push('styled-components');
+    if (hasDep('@emotion/react') || hasDep('emotion')) signals.push('Emotion');
+    if (hasDep('sass') || hasDep('node-sass')) signals.push('Sass/SCSS');
+    
+    // State management
+    if (hasDep('redux') || hasDep('@reduxjs/toolkit')) signals.push('Redux');
+    if (hasDep('zustand')) signals.push('Zustand');
+    if (hasDep('jotai')) signals.push('Jotai');
+    if (hasDep('recoil')) signals.push('Recoil');
+    if (hasDep('mobx')) signals.push('MobX');
+    if (hasDep('@tanstack/react-query') || hasDep('react-query')) signals.push('React Query');
+    
+    // Testing
+    if (hasDep('jest') || has('jest.config.js') || has('jest.config.ts')) signals.push('Jest');
+    if (hasDep('vitest') || has('vitest.config.ts')) signals.push('Vitest');
+    if (hasDep('playwright') || has('playwright.config.ts')) signals.push('Playwright');
+    if (hasDep('cypress') || has('cypress.config.ts')) signals.push('Cypress');
+    if (hasDep('mocha')) signals.push('Mocha');
+    if (has('pytest.ini') || hasDep('pytest')) signals.push('pytest');
+    
+    // Database/ORM
+    if (hasDep('prisma') || has('prisma/schema.prisma')) signals.push('Prisma');
+    if (hasDep('drizzle-orm')) signals.push('Drizzle ORM');
+    if (hasDep('typeorm')) signals.push('TypeORM');
+    if (hasDep('sequelize')) signals.push('Sequelize');
+    if (hasDep('mongoose')) signals.push('Mongoose/MongoDB');
+    if (hasDep('pg') || hasDep('postgres')) signals.push('PostgreSQL');
+    if (hasDep('mysql') || hasDep('mysql2')) signals.push('MySQL');
+    if (hasDep('redis') || hasDep('ioredis')) signals.push('Redis');
+    
+    // API/Data fetching
+    if (hasDep('trpc') || hasDep('@trpc/server')) signals.push('tRPC');
+    if (hasDep('graphql') || hasDep('apollo-server')) signals.push('GraphQL');
+    if (hasDep('axios')) signals.push('Axios');
+    if (hasDep('swr')) signals.push('SWR');
+    
+    // Auth
+    if (hasDep('next-auth') || hasDep('@auth/core')) signals.push('NextAuth/Auth.js');
+    if (hasDep('passport')) signals.push('Passport.js');
+    if (hasDep('jsonwebtoken') || hasDep('jose')) signals.push('JWT');
+    
+    // Infrastructure/DevOps
     if (has('.github/workflows')) signals.push('GitHub Actions');
+    if (has('.gitlab-ci.yml')) signals.push('GitLab CI');
+    if (has('Dockerfile') || has('docker-compose.yml') || has('docker-compose.yaml')) signals.push('Docker');
+    if (has('kubernetes') || has('k8s') || hasAny('*.yaml', '*.yml')) {
+        // Check for k8s manifests
+        try {
+            const files = fs.readdirSync(rootPath).filter(f => f.endsWith('.yaml') || f.endsWith('.yml'));
+            for (const f of files.slice(0, 5)) {
+                const content = fs.readFileSync(path.join(rootPath, f), 'utf-8').slice(0, 500);
+                if (content.includes('apiVersion:') && content.includes('kind:')) {
+                    signals.push('Kubernetes');
+                    break;
+                }
+            }
+        } catch { /* ignore */ }
+    }
+    if (has('vercel.json') || has('.vercel')) signals.push('Vercel');
+    if (has('netlify.toml')) signals.push('Netlify');
+    if (has('fly.toml')) signals.push('Fly.io');
+    if (has('railway.json') || has('railway.toml')) signals.push('Railway');
+    if (has('serverless.yml') || has('serverless.yaml')) signals.push('Serverless Framework');
+    if (has('terraform') || hasAny('*.tf')) signals.push('Terraform');
+    
+    // Monorepo tools
+    if (has('turbo.json')) signals.push('Turborepo');
+    if (has('nx.json')) signals.push('Nx');
+    if (has('lerna.json')) signals.push('Lerna');
+    if (has('pnpm-workspace.yaml')) signals.push('pnpm Workspaces');
+    
+    // Code quality
+    if (hasAny('.eslintrc.json', '.eslintrc.js', '.eslintrc.yml', 'eslint.config.js', 'eslint.config.mjs')) signals.push('ESLint');
+    if (hasAny('.prettierrc', '.prettierrc.json', 'prettier.config.js')) signals.push('Prettier');
+    if (has('biome.json')) signals.push('Biome');
+    if (hasDep('husky') || has('.husky')) signals.push('Husky');
+    if (hasDep('lint-staged')) signals.push('lint-staged');
+    
     return signals;
 }
 
@@ -6068,6 +6212,130 @@ function calculatePlanProgress(items: TrackerItem[]): { total: number; done: num
     return { total, done, percent };
 }
 
+/**
+ * Read hook feedback from memory (saved by guard.py via save_memory).
+ * This allows LLMs to see why their actions were blocked even if they missed stderr.
+ */
+function getHookFeedbackFromMemory(rootPath?: string): { lastBlock?: string; lastWarning?: string; lastError?: string } | null {
+    try {
+        const { project } = resolveProjectMemory(rootPath);
+        const global = loadGlobalMemoryData();
+        
+        const getContent = (key: string): string | undefined => {
+            const entry = project.memories?.[key] || global.memories?.[key];
+            return entry?.content?.trim();
+        };
+        
+        const lastBlock = getContent('hook:last_block');
+        const lastWarning = getContent('hook:last_warning');
+        const lastError = getContent('hook:last_error');
+        
+        if (!lastBlock && !lastWarning && !lastError) {
+            return null;
+        }
+        
+        return {
+            ...(lastBlock ? { lastBlock } : {}),
+            ...(lastWarning ? { lastWarning } : {}),
+            ...(lastError ? { lastError } : {})
+        };
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Clear hook feedback from memory after it's been acknowledged.
+ */
+function clearHookFeedbackFromMemory(rootPath?: string): void {
+    try {
+        const { data, project } = resolveProjectMemory(rootPath);
+        let changed = false;
+        for (const key of ['hook:last_block', 'hook:last_warning', 'hook:last_error']) {
+            if (project.memories?.[key]) {
+                delete project.memories[key];
+                changed = true;
+            }
+        }
+        if (changed) {
+            saveMemoryAndNotify(data);
+        }
+    } catch {
+        // ignore
+    }
+}
+
+/**
+ * Handler for check_hook_status tool.
+ * Returns hook feedback prominently so smaller LLMs understand why actions were blocked.
+ */
+async function handleCheckHookStatus(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const rootPath = typeof args?.rootPath === 'string' ? args.rootPath : undefined;
+    const clearAfterRead = args?.clearAfterRead === true;
+    
+    const hookFeedback = getHookFeedbackFromMemory(rootPath);
+    
+    const lines: string[] = [];
+    const payload: any = {
+        hasBlock: false,
+        hasWarning: false,
+        hasError: false,
+        feedback: hookFeedback
+    };
+    
+    if (!hookFeedback) {
+        lines.push(lang === 'en' 
+            ? '✅ No hook blocks or warnings. Your actions are not being blocked by workflow hooks.'
+            : '✅ 没有钩子阻止或警告。你的操作没有被工作流钩子阻止。');
+        return { content: [{ type: 'text', text: lines.join('\n') }, { type: 'text', text: `HOOK_STATUS_JSON:\n${JSON.stringify(payload, null, 2)}` }] };
+    }
+    
+    if (hookFeedback.lastBlock) {
+        payload.hasBlock = true;
+        lines.push(lang === 'en'
+            ? `⛔ BLOCKED: ${hookFeedback.lastBlock}`
+            : `⛔ 被阻止: ${hookFeedback.lastBlock}`);
+        lines.push('');
+        lines.push(lang === 'en'
+            ? 'Your action was BLOCKED by a workflow hook. You MUST fix the issue before retrying:'
+            : '你的操作被工作流钩子阻止。你必须在重试前修复问题：');
+        lines.push(lang === 'en'
+            ? '  • If "PLAN REQUIRED": call update_plan() to create a plan first'
+            : '  • 如果是"需要计划": 先调用 update_plan() 创建计划');
+        lines.push(lang === 'en'
+            ? '  • If "PREFLIGHT REQUIRED": call preflight() first'
+            : '  • 如果是"需要预检": 先调用 preflight()');
+        lines.push(lang === 'en'
+            ? '  • If "PRD NOT APPROVED": call approve_prd() to get user approval'
+            : '  • 如果是"PRD 未审批": 调用 approve_prd() 获取用户审批');
+        lines.push('');
+    }
+    
+    if (hookFeedback.lastWarning) {
+        payload.hasWarning = true;
+        lines.push(lang === 'en'
+            ? `⚠️ WARNING: ${hookFeedback.lastWarning}`
+            : `⚠️ 警告: ${hookFeedback.lastWarning}`);
+    }
+    
+    if (hookFeedback.lastError) {
+        payload.hasError = true;
+        lines.push(lang === 'en'
+            ? `❌ ERROR: ${hookFeedback.lastError}`
+            : `❌ 错误: ${hookFeedback.lastError}`);
+    }
+    
+    // Optionally clear the feedback after reading
+    if (clearAfterRead) {
+        clearHookFeedbackFromMemory(rootPath);
+        lines.push('');
+        lines.push(lang === 'en' ? '(Hook feedback cleared)' : '(钩子反馈已清除)');
+    }
+    
+    return { content: [{ type: 'text', text: lines.join('\n') }, { type: 'text', text: `HOOK_STATUS_JSON:\n${JSON.stringify(payload, null, 2)}` }] };
+}
+
 async function handleGetProjectStatus(args: any): Promise<any> {
     const lang = getUiLanguage();
     const rootPath = typeof args?.rootPath === 'string' ? args.rootPath : undefined;
@@ -6087,8 +6355,28 @@ async function handleGetProjectStatus(args: any): Promise<any> {
         outputChannel?.appendLine(`Artifact sync failed (status): ${e?.message ?? String(e)}`);
     }
     const snapshot = buildTrackerSnapshot(project);
+    
+    // Include hook feedback from memory so LLMs see why their actions were blocked
+    const hookFeedback = getHookFeedbackFromMemory(rootPath);
+    if (hookFeedback) {
+        (snapshot as any).hookFeedback = hookFeedback;
+    }
+    
     const text = lang === 'en' ? 'Project status:' : '项目状态：';
-    return { content: [{ type: 'text', text }, { type: 'text', text: `STATUS_JSON:\n${JSON.stringify(snapshot, null, 2)}` }] };
+    const lines: string[] = [text];
+    
+    // Surface hook block prominently at the top for smaller LLMs
+    if (hookFeedback?.lastBlock) {
+        lines.push('');
+        lines.push(lang === 'en' 
+            ? `⛔ HOOK BLOCKED YOUR LAST ACTION: ${hookFeedback.lastBlock}`
+            : `⛔ 钩子阻止了你的上一个操作: ${hookFeedback.lastBlock}`);
+        lines.push(lang === 'en'
+            ? 'You MUST address the block reason before retrying the action.'
+            : '你必须先解决阻止原因才能重试该操作。');
+    }
+    
+    return { content: [{ type: 'text', text: lines.join('\n') }, { type: 'text', text: `STATUS_JSON:\n${JSON.stringify(snapshot, null, 2)}` }] };
 }
 
 function extractMarkerJson(result: any, markerPrefix: string): any | null {
@@ -6175,11 +6463,15 @@ async function handlePreflight(args: any): Promise<any> {
         // ignore
     }
 
+    // Include hook feedback from memory so LLMs see why their actions were blocked
+    const hookFeedback = getHookFeedbackFromMemory(rootPath);
+    
     const payload: any = {
         startedAt,
         finishedAt: nowIso(),
         rootPath: rootPath || getWorkspaceRootPath() || '',
         autoInitialized,
+        hookFeedback: hookFeedback || null,
         queries: {
             baseQuery,
             ragQuery: effectiveRagQuery,
@@ -6228,6 +6520,17 @@ async function handlePreflight(args: any): Promise<any> {
         lines.push(lang === 'en' 
             ? '⚠️ NO PLAN EXISTS - Create one with update_plan(items=[...]) before implementing!'
             : '⚠️ 尚无计划 - 请用 update_plan(items=[...]) 创建计划后再实施！');
+    }
+    
+    // Surface hook block prominently for smaller LLMs that may miss stderr
+    if (hookFeedback?.lastBlock) {
+        lines.push('');
+        lines.push(lang === 'en' 
+            ? `⛔ HOOK BLOCKED YOUR LAST ACTION: ${hookFeedback.lastBlock}`
+            : `⛔ 钩子阻止了你的上一个操作: ${hookFeedback.lastBlock}`);
+        lines.push(lang === 'en'
+            ? 'You MUST address the block reason before retrying the action.'
+            : '你必须先解决阻止原因才能重试该操作。');
     }
 
     const text = lines.join('\n');
@@ -9017,9 +9320,13 @@ async function handleGenerateWalkthrough(args: any): Promise<any> {
 
 async function handleWorkflowStatus(args: any): Promise<any> {
     const lang = getUiLanguage();
+    const rootPath = typeof args?.rootPath === 'string' ? args.rootPath : undefined;
     try {
-        const { project } = resolveProjectTracker();
+        const { project } = resolveProjectTracker(rootPath);
         const snapshot = buildTrackerSnapshot(project);
+        
+        // Check for hook feedback (blocked actions)
+        const hookFeedback = getHookFeedbackFromMemory(rootPath);
         
         // Determine workflow state based on tracker state
         const checks = {
@@ -9136,7 +9443,7 @@ async function handleWorkflowStatus(args: any): Promise<any> {
             syncOverview: '概览缺失或过时时使用 sync_overview()'
         };
         
-        const status = {
+        const status: any = {
             checks,
             nextSteps,
             criticalReminders,
@@ -9147,7 +9454,25 @@ async function handleWorkflowStatus(args: any): Promise<any> {
                 : '强制: 思考 → 回忆 → 研究 → 计划 → 编码 → 验证 → 学习'
         };
         
-        return { content: [{ type: 'text', text: JSON.stringify(status, null, 2) }] };
+        // Include hook feedback if present
+        if (hookFeedback) {
+            status.hookFeedback = hookFeedback;
+        }
+        
+        // Build response lines with hook block prominently displayed
+        const lines: string[] = [];
+        if (hookFeedback?.lastBlock) {
+            lines.push(lang === 'en' 
+                ? `⛔ HOOK BLOCKED YOUR LAST ACTION: ${hookFeedback.lastBlock}`
+                : `⛔ 钩子阻止了你的上一个操作: ${hookFeedback.lastBlock}`);
+            lines.push(lang === 'en'
+                ? 'You MUST address the block reason before retrying!'
+                : '你必须先解决阻止原因才能重试！');
+            lines.push('');
+        }
+        lines.push(lang === 'en' ? 'Workflow status:' : '工作流状态：');
+        
+        return { content: [{ type: 'text', text: lines.join('\n') }, { type: 'text', text: `WORKFLOW_STATUS_JSON:\n${JSON.stringify(status, null, 2)}` }] };
     } catch (e: any) {
         const msg = lang === 'en' 
             ? `workflow_status error: ${e?.message}` 
@@ -10597,19 +10922,37 @@ async function handleCheckPlan(args: any): Promise<any> {
     const progress = snapshot.progress;
     const remaining = (project.plan.items || []).filter((i) => i && i.status !== 'done').map((i) => i.text).slice(0, 50);
 
-    const header = lang === 'en' ? 'Plan status:' : 'Plan 状态：';
-    const summary =
-        lang === 'en'
-            ? `Progress: ${progress.done}/${progress.total} (${progress.percent}%)`
-            : `进度：${progress.done}/${progress.total}（${progress.percent}%）`;
+    // Check for hook feedback (blocked actions)
+    const hookFeedback = getHookFeedbackFromMemory(rootPath);
+    
+    const lines: string[] = [];
+    
+    // Surface hook block prominently at the top
+    if (hookFeedback?.lastBlock) {
+        lines.push(lang === 'en' 
+            ? `⛔ HOOK BLOCKED YOUR LAST ACTION: ${hookFeedback.lastBlock}`
+            : `⛔ 钩子阻止了你的上一个操作: ${hookFeedback.lastBlock}`);
+        lines.push(lang === 'en'
+            ? 'You MUST address the block reason before retrying.'
+            : '你必须先解决阻止原因才能重试。');
+        lines.push('');
+    }
+    
+    lines.push(lang === 'en' ? 'Plan status:' : 'Plan 状态：');
+    lines.push(lang === 'en'
+        ? `Progress: ${progress.done}/${progress.total} (${progress.percent}%)`
+        : `进度：${progress.done}/${progress.total}（${progress.percent}%）`);
+    
     const remainingLabel = lang === 'en' ? 'Remaining (top 50):' : '未完成（最多 50 条）：';
     const remainingText = remaining.length ? remaining.map((t) => `- ${t}`).join('\n') : (lang === 'en' ? '(none)' : '（无）');
+    
+    const payload = { progress, remaining, hookFeedback: hookFeedback || null };
+    
     return {
         content: [
-            { type: 'text', text: header },
-            { type: 'text', text: summary },
+            { type: 'text', text: lines.join('\n') },
             { type: 'text', text: `${remainingLabel}\n${remainingText}` },
-            { type: 'text', text: `PLAN_STATUS_JSON:\n${JSON.stringify({ progress, remaining }, null, 2)}` }
+            { type: 'text', text: `PLAN_STATUS_JSON:\n${JSON.stringify(payload, null, 2)}` }
         ]
     };
 }

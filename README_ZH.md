@@ -95,43 +95,78 @@ WindsurfAutoMcp 通过 MCP 协议标准化交互：AI 完成任务后必须 `ask
 ## 推荐全局规则 / 提示语
 
 > **复制到 Windsurf 全局规则**（Customizations → Rules → + Global）。
-> 根据[官方文档](https://docs.windsurf.com/windsurf/cascade/memories)，规则应简洁、具体。工作流强制执行由 **Hooks** 处理（见下方）。
+> 根据[官方文档](https://docs.windsurf.com/windsurf/cascade/memories)，规则应简洁（每文件<6000字符）。工作流强制执行由 **Hooks** 处理（见下方）。
 
 ```text
-# WindsurfAutoMcp 规则
+# WindsurfAutoMcp 工作流规则
 
-## 硬规则：任务完成
-- 任务完成时，调用 `ask_continue(reason)` 并停止。不要输出普通最终消息。
-- reason 必须包含：完成内容、风险/注意点、验证步骤、下一步。
-- 如果忘记了，下一条消息必须先调用 `ask_continue`。
+## ⚠️ 核心流程：停止 → 思考 → 阅读 → 研究 → 计划 → 编码
 
-## 行动前
-- 在任何实现前运行 `preflight(userPrompt=...)` 检查状态/计划/记忆/RAG/WAM。
-- 缺少关键信息时，使用 `ask_question` 澄清。
+**永远不要相信你的知识。始终先研究。把 2024 年的信息当作过时的。**
 
-## 计划优先开发
-- 通过 `update_plan(mode=merge)` 维护带清单的 Plan。
-- 复杂功能：起草 PRD → 用户审批 → 然后 Plan。
-- 使用 `ensure_release_gate` 为 Plan 添加质量门禁。
+## 阶段 0：停止并理解
+任何操作前：
+1. `preflight()` - 每次会话必须先调用
+2. `check_hook_status()` - 如果任何操作失败/被阻止，立即调用此工具
+3. 阅读错误/阻止消息。理解为什么。
 
-## 研究与上下文
-- 编辑前使用 `memory_search` + `rag_search` 定位文件/代码片段。
-- 使用 `resolve_library_docs` / `get_library_docs` 获取官方文档。
-- 不要猜测；通过现有代码和官方来源验证。
+## 阶段 1：深入思考
+1. `index_codebase({depth:"deep"})` - 理解项目技术栈、结构、模式
+2. `sequential_thinking()` - 将复杂问题分解为阶段
+3. 编辑前先阅读目标文件 - 理解上下文
+4. 识别：现有什么？什么模式？什么约定？
 
-## 质量
-- 保持改动最小化、模块化、可逆。
-- 有意义的改动后更新 `update_walkthrough`。
-- 发生错误时通过 `record_lesson` 记录经验。
+## 阶段 2：研究（必须）
+**永远不要跳过研究。永远不要假设。始终验证。**
+1. `memory_search({query, scope:"both"})` - 检查经验、缓存的研究
+2. `rag_search({query})` - 在此项目中查找现有代码模式
+3. `resolve_library_docs()` → `get_library_docs()` - 获取当前文档（不是从记忆）
+4. 网络搜索最佳实践 - 把 2024 年的知识当作可能过时
+5. 保存发现：`save_memory({key:"research:topic", scope:"global", kind:"long"})`
 
-## 不要污染工作区
-- 未经批准不要在用户仓库创建临时文件。
-- 使用 tracker/memory 面板（.codeium）记录笔记。
+## 阶段 3：计划（无计划不编码）
+1. `update_plan({items:[...]})` - 创建详细清单
+2. 包含：验证步骤、测试、code_review
+3. 重大变更需获取用户批准
+4. 计划必须引用研究发现
 
-## 工具用途
-- `ask_question`：仅用于澄清/规划
-- `ask_continue`：仅用于任务完成确认
-- `wam_commit`：跟踪/记忆变更后使用
+## 阶段 4：执行（一次一步）
+1. 完成一个计划项
+2. `check_plan()` - 标记完成，获取下一项
+3. `verify_action()` - 确认成功
+4. 重复直到完成
+
+## 阶段 5：验证与学习
+1. `code_review()` - 完成前必须执行
+2. `record_lesson()` - 记录错误/经验
+3. `ask_continue()` - 仅在 code_review 通过后调用
+
+## 🛑 绝对禁止
+- ❌ 无审批计划不能编码
+- ❌ 无研究不能做计划（memory + rag + docs）
+- ❌ 不先阅读现有代码不能实现
+- ❌ 无 code_review 不能 ask_continue
+- ❌ 不能假设 - 用现有代码验证一切
+
+## 🚨 被阻止时
+如果钩子阻止了你的操作（退出码 2）：
+1. 停止重试相同操作
+2. 立即调用 `check_hook_status()`
+3. 阅读响应中的阻止原因
+4. 修复问题（如先创建计划、运行 preflight）
+5. 然后重试
+
+## 关键工具
+- `preflight()` - 会话开始（必须）
+- `check_hook_status()` - 被阻止/失败时调用
+- `index_codebase({depth:"deep"})` - 理解项目
+- `sequential_thinking()` - 思考复杂问题
+- `memory_search({scope:"both"})` - 检查记忆
+- `rag_search()` - 查找代码模式
+- `resolve_library_docs()` / `get_library_docs()` - 获取文档
+- `update_plan()` / `check_plan()` - 计划管理
+- `code_review()` - 完成前必须
+- `ask_continue()` - 请求下一个任务
 ```
 
 ## 项目跟踪（Overview / PRD / Plan / WAM / Walkthrough）
@@ -254,6 +289,7 @@ WindsurfAutoMcp 通过 MCP 协议标准化交互：AI 完成任务后必须 `ask
 || `index_codebase` | 深度代码库索引（入口点、约定、技术栈） |
 || `sync_overview` | 概览过时或缺失时重新生成 |
 || `workflow_status` | 获取当前工作流状态和先思考指导 |
+|| `check_hook_status` | **操作被阻止时调用** - 显示钩子阻止/警告原因（存储在 Memory 中）|
 || `verify_action` | 验证操作结果并记录到 walkthrough |
 || `code_review` | 记录代码审查结果 |
 || `ask_continue` | 任务完成后询问是否继续 |

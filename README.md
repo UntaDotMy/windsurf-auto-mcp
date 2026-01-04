@@ -96,43 +96,78 @@ WindsurfAutoMcp standardizes task completion with MCP: when the AI finishes a ta
 ## Recommended Global Rules / Prompt
 
 > **Copy this into Windsurf global rules** (Customizations → Rules → + Global).
-> Per [official docs](https://docs.windsurf.com/windsurf/cascade/memories), rules should be concise and specific. Workflow enforcement is handled by **hooks** (see below).
+> Per [official docs](https://docs.windsurf.com/windsurf/cascade/memories), rules should be concise (<6000 chars per file). Workflow enforcement is handled by **hooks** (see below).
 
 ```text
-# WindsurfAutoMcp Rules
+# WindsurfAutoMcp Workflow Rules
 
-## Hard Rule: Task Completion
-- When task is complete, call `ask_continue(reason)` and STOP. Do not output a normal final message.
-- Reason must include: summary, risks/notes, verification steps, next steps.
-- If you forgot, your next message must call `ask_continue` first.
+## ⚠️ CRITICAL: STOP → THINK → READ → RESEARCH → PLAN → CODE
 
-## Before Acting
-- Run `preflight(userPrompt=...)` before any implementation to check status/plan/memory/RAG/WAM.
-- If key info is missing, use `ask_question` to clarify.
+**NEVER trust your knowledge. ALWAYS research first. Treat 2024 info as outdated.**
 
-## Plan-First Development
-- Maintain a Plan with checklist via `update_plan(mode=merge)`.
-- For complex features: draft PRD → user approval → then Plan.
-- Use `ensure_release_gate` to add quality gates to Plan.
+## Phase 0: STOP & UNDERSTAND
+Before ANY action:
+1. `preflight()` - MANDATORY first call every session
+2. `check_hook_status()` - If ANY action fails/blocked, call this IMMEDIATELY
+3. Read the error/block message. Understand WHY.
 
-## Research & Context
-- Use `memory_search` + `rag_search` to locate files/snippets before editing.
-- Use `resolve_library_docs` / `get_library_docs` for official documentation.
-- Never guess; verify with existing code and official sources.
+## Phase 1: THINK DEEPLY
+1. `index_codebase({depth:"deep"})` - Understand project tech stack, structure, patterns
+2. `sequential_thinking()` - Break down complex problems into stages
+3. Read target files BEFORE editing - understand context
+4. Identify: What exists? What patterns? What conventions?
 
-## Quality
-- Keep changes minimal, modular, reversible.
-- Update `update_walkthrough` after meaningful changes.
-- Record lessons via `record_lesson` when errors occur.
+## Phase 2: RESEARCH (MANDATORY)
+**NEVER skip research. NEVER assume. ALWAYS verify.**
+1. `memory_search({query, scope:"both"})` - Check lessons, cached research
+2. `rag_search({query})` - Find existing code patterns in THIS project
+3. `resolve_library_docs()` → `get_library_docs()` - Get CURRENT docs (not from memory)
+4. Web search for best practices - treat knowledge from 2024 as potentially outdated
+5. Save findings: `save_memory({key:"research:topic", scope:"global", kind:"long"})`
 
-## No Workspace Pollution
-- Do not create ad-hoc files in user repo without approval.
-- Use tracker/memory panels (.codeium) for notes.
+## Phase 3: PLAN (NO CODE WITHOUT PLAN)
+1. `update_plan({items:[...]})` - Create detailed checklist
+2. Include: verification steps, tests, code_review
+3. Get user approval for significant changes
+4. Plan must reference research findings
 
-## Tool Usage
-- `ask_question`: clarification/planning only
-- `ask_continue`: task completion confirmation only
-- `wam_commit`: after tracking/memory changes
+## Phase 4: EXECUTE (ONE STEP AT A TIME)
+1. Complete ONE plan item
+2. `check_plan()` - Mark done, get next
+3. `verify_action()` - Confirm success
+4. Repeat until complete
+
+## Phase 5: VERIFY & LEARN
+1. `code_review()` - Required before completion
+2. `record_lesson()` - On errors/learnings
+3. `ask_continue()` - Only after code_review passes
+
+## 🛑 ABSOLUTE BLOCKS
+- ❌ NO code without approved plan
+- ❌ NO plan without research (memory + rag + docs)
+- ❌ NO implementation without reading existing code first
+- ❌ NO ask_continue without code_review
+- ❌ NO assumptions - verify everything with existing code
+
+## 🚨 WHEN BLOCKED
+If hooks block your action (exit code 2):
+1. STOP retrying the same action
+2. Call `check_hook_status()` immediately
+3. Read the block reason in the response
+4. Fix the issue (e.g., create plan first, run preflight)
+5. Then retry
+
+## KEY TOOLS
+- `preflight()` - Session start (MANDATORY)
+- `check_hook_status()` - When blocked/failed
+- `index_codebase({depth:"deep"})` - Understand project
+- `sequential_thinking()` - Think through complex problems
+- `memory_search({scope:"both"})` - Check memory
+- `rag_search()` - Find code patterns
+- `resolve_library_docs()` / `get_library_docs()` - Get docs
+- `update_plan()` / `check_plan()` - Plan management
+- `code_review()` - Before completion
+- `ask_continue()` - Request next task
 ```
 
 ## Project Tracker (Overview / PRD / Plan / WAM / Walkthrough)
@@ -257,6 +292,7 @@ The sidebar **Maintenance** card lets you:
 | `index_codebase` | Deep codebase indexing (entry points, conventions, stack) |
 | `sync_overview` | Regenerate overview if stale or missing |
 | `workflow_status` | Get current workflow status with think-first guidance |
+| `check_hook_status` | **Call when action blocked** - shows hook block/warning reasons stored in memory |
 | `verify_action` | Verify action results and log to walkthrough |
 | `code_review` | Record code review results |
 | `ask_continue` | Ask whether to continue after completion |
