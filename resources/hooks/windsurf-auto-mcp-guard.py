@@ -595,31 +595,28 @@ def print_block_prominent(msg, fix_hint=None):
     """
     Print block message to BOTH stdout and stderr for maximum AI visibility.
     Many LLMs don't reliably read stderr, so we output to both streams.
-    Uses ASCII only to avoid Windows encoding issues.
+    Uses ASCII only to avoid Windows encoding issues. No decorations.
     """
     block_count = _get_block_count()
-    separator = "=" * 60
     
-    # Escalate urgency based on consecutive blocks (ASCII only)
+    # Simple output without decorations
     if block_count >= 5:
-        urgency = "*** CRITICAL: {} CONSECUTIVE BLOCKS! ***".format(block_count)
-        extra = "\n\n[STOP] You've been blocked {} times in a row!\nDo NOT retry the same action. READ the fix hint and do that FIRST!".format(block_count)
+        header = "CRITICAL: {} CONSECUTIVE BLOCKS".format(block_count)
+        extra = "\nSTOP! You've been blocked {} times. Do NOT retry. Fix the issue first.".format(block_count)
     elif block_count >= 3:
-        urgency = "[WARNING] {} consecutive blocks!".format(block_count)
-        extra = "\n\n[!] You've been blocked {} times. STOP retrying and fix the issue first!".format(block_count)
+        header = "WARNING: {} consecutive blocks".format(block_count)
+        extra = "\nYou've been blocked {} times. Fix the issue first.".format(block_count)
     else:
-        urgency = "[BLOCKED] HOOK BLOCKED - AI MUST READ THIS:"
+        header = "BLOCKED"
         extra = ""
     
-    print("\n" + separator, file=sys.stdout)
-    print(urgency, file=sys.stdout)
-    print(separator, file=sys.stdout)
+    print("\n" + header, file=sys.stdout)
     print(msg, file=sys.stdout)
     if fix_hint:
-        print("\n[FIX] " + fix_hint, file=sys.stdout)
+        print("FIX: " + fix_hint, file=sys.stdout)
     if extra:
         print(extra, file=sys.stdout)
-    print(separator + "\n", file=sys.stdout)
+    print("", file=sys.stdout)
     # Also print to stderr for traditional logging
     print(msg, file=sys.stderr)
 
@@ -1085,9 +1082,7 @@ def _check_prompt_preflight(server_url, project):
             return None
 
         msg = (
-            "\n" + "="*60 + "\n"
-            "BLOCKED: RECALL -> THINK -> ACT WORKFLOW REQUIRED\n"
-            "="*60 + "\n\n"
+            "BLOCKED: RECALL -> THINK -> ACT WORKFLOW REQUIRED\n\n"
             "Before ANY action, you MUST:\n"
             "1. RECALL - What do I already know?\n"
             "2. THINK - Analyze the problem\n"
@@ -1100,9 +1095,8 @@ def _check_prompt_preflight(server_url, project):
             "4. get_project_status - Understand current state\n"
             "5. check_plan - Review plan progress\n"
             "6. wam_status - Check if history is clean\n\n"
-            f"[!] MISSING: {', '.join(missing)}\n\n"
-            "THEN: Create/update plan with update_plan(items=[...]) before coding.\n"
-            + "="*60
+            f"MISSING: {', '.join(missing)}\n\n"
+            "THEN: Create/update plan with update_plan(items=[...]) before coding."
         )
         maybe_record_lesson(
             server_url,
@@ -1145,11 +1139,9 @@ def _check_research_save_required(server_url, project):
         
         # Research was done but not saved!
         msg = (
-            "\n" + "="*60 + "\n"
-            "[BLOCKED] UNSAVED RESEARCH DETECTED\n"
-            "="*60 + "\n\n"
+            "BLOCKED: UNSAVED RESEARCH DETECTED\n\n"
             "You used get_library_docs or resolve_library_docs but did NOT save your findings!\n\n"
-            "[!] Research is USELESS if not saved to memory.\n\n"
+            "Research is USELESS if not saved to memory.\n\n"
             "REQUIRED: Save your research NOW:\n"
             "  save_memory({\n"
             "    key: 'research:<library>:<topic>',\n"
@@ -1160,8 +1152,7 @@ def _check_research_save_required(server_url, project):
             "  })\n\n"
             "OR use record_lesson() if you learned something important.\n\n"
             f"Research at: {last_research}\n"
-            f"Last save:   {last_save or '(never)'}\n"
-            + "="*60
+            f"Last save:   {last_save or '(never)'}"
         )
         maybe_record_lesson(
             server_url,
@@ -1709,17 +1700,14 @@ def check_project_gates(project, memory_data=None, server_url=None):
             scope="both",
         )
         return (
-            "\n" + "="*60 + "\n"
-            "BLOCKED: PROJECT OVERVIEW REQUIRED\n"
-            "="*60 + "\n\n"
+            "BLOCKED: PROJECT OVERVIEW REQUIRED\n\n"
             "The project has no architecture overview yet.\n\n"
             "REQUIRED STEPS:\n"
             "1. Run index_codebase(rationale='initial context') - Deep analyze codebase\n"
             "2. Run generate_overview(rationale='establish baseline') - Create overview\n"
             "3. Run save_memory(key='project:context', value='...', kind='long') - Save key facts\n"
             "4. Run update_plan(items=[...]) - Create actionable plan\n\n"
-            "THEN you can start implementing.\n"
-            + "="*60
+            "THEN you can start implementing."
         )
 
     project_root = _get_project_root_path(project)
@@ -1775,9 +1763,7 @@ def check_project_gates(project, memory_data=None, server_url=None):
             scope="both",
         )
         return (
-            "\n" + "="*60 + "\n"
-            "BLOCKED: PLAN REQUIRED BEFORE IMPLEMENTATION\n"
-            "="*60 + "\n\n"
+            "BLOCKED: PLAN REQUIRED BEFORE IMPLEMENTATION\n\n"
             "You MUST create a plan before writing any code!\n\n"
             "REQUIRED: Run update_plan(rationale='...', items=[\n"
             "  {text: 'Task 1 description', status: 'todo'},\n"
@@ -1785,8 +1771,7 @@ def check_project_gates(project, memory_data=None, server_url=None):
             "  {text: 'Final code review', status: 'todo'},\n"
             "  {text: 'Run tests and verify', status: 'todo'}\n"
             "])\n\n"
-            "REMEMBER: Always include verification and code review items!\n"
-            + "="*60
+            "REMEMBER: Always include verification and code review items!"
         )
 
     # Ensure the Plan includes a release gate (verification + code review) before any implementation.
