@@ -566,18 +566,56 @@ def _iso_now():
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 
+def _get_block_count():
+    """Get and increment the consecutive block counter."""
+    try:
+        state = load_guard_state()
+        count = int(state.get("consecutiveBlocks") or 0) + 1
+        state["consecutiveBlocks"] = count
+        state["lastBlockAt"] = _iso_now()
+        save_guard_state(state)
+        return count
+    except Exception:
+        return 1
+
+
+def _reset_block_count():
+    """Reset block counter (called on successful action)."""
+    try:
+        state = load_guard_state()
+        state["consecutiveBlocks"] = 0
+        save_guard_state(state)
+    except Exception:
+        pass
+
+
 def print_block_prominent(msg, fix_hint=None):
     """
     Print block message to BOTH stdout and stderr for maximum AI visibility.
     Many LLMs don't reliably read stderr, so we output to both streams.
     """
+    block_count = _get_block_count()
     separator = "=" * 60
+    
+    # Escalate urgency based on consecutive blocks
+    if block_count >= 5:
+        urgency = "🚨🚨🚨 CRITICAL: {} CONSECUTIVE BLOCKS! 🚨🚨🚨".format(block_count)
+        extra = "\n\n🛑 STOP! You've been blocked {} times in a row!\nDo NOT retry the same action. READ the fix hint and do that FIRST!".format(block_count)
+    elif block_count >= 3:
+        urgency = "⚠️ WARNING: {} consecutive blocks!".format(block_count)
+        extra = "\n\n🔴 You've been blocked {} times. STOP retrying and fix the issue first!".format(block_count)
+    else:
+        urgency = "⛔ HOOK BLOCKED - AI MUST READ THIS:"
+        extra = ""
+    
     print("\n" + separator, file=sys.stdout)
-    print("⛔ HOOK BLOCKED - AI MUST READ THIS:", file=sys.stdout)
+    print(urgency, file=sys.stdout)
     print(separator, file=sys.stdout)
     print(msg, file=sys.stdout)
     if fix_hint:
         print("\n🔧 FIX: " + fix_hint, file=sys.stdout)
+    if extra:
+        print(extra, file=sys.stdout)
     print(separator + "\n", file=sys.stdout)
     # Also print to stderr for traditional logging
     print(msg, file=sys.stderr)
@@ -1993,6 +2031,8 @@ def main():
             return 2
 
     if action == "post_write_code":
+        # Action succeeded - reset block counter
+        _reset_block_count()
         file_path = tool_info.get("file_path")
         tracker = load_tracker()
         project = select_project(tracker, file_path=file_path)
@@ -2225,6 +2265,9 @@ def main():
         cwd_hint = _extract_workspace_root_hint(payload, tool_info)
         project = select_project(tracker, cwd=cwd_hint)
         error_text = _extract_tool_error_text(tool_info)
+        if not error_text:
+            # MCP tool succeeded - reset block counter
+            _reset_block_count()
         if error_text:
             persist_hook_feedback(
                 server_url,
@@ -2295,6 +2338,9 @@ def main():
 
     if action == "post_run_command":
         cmd, cwd, success, exit_code, stdout, stderr = _extract_run_command_fields(tool_info)
+        # Reset block counter on successful command
+        if success is True or (exit_code is not None and exit_code == 0):
+            _reset_block_count()
         if success is False or (exit_code is not None and exit_code != 0):
             tracker = load_tracker()
             cwd_hint = cwd or _extract_workspace_root_hint(payload, tool_info)
