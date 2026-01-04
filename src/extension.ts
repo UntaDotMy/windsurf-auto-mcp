@@ -56,6 +56,8 @@ type ProjectTrackerStats = {
     lastRagSearchAt?: string;
     lastWamStatusAt?: string;
     lastSequentialThinkingAt?: string;  // Required for THINK-FIRST workflow
+    lastResearchAt?: string;  // When resolve_library_docs or get_library_docs was called
+    lastResearchSaveAt?: string;  // When research was saved via save_memory/record_lesson
 
     // Artifact update timestamps
     lastPlanUpdateAt?: string;
@@ -8744,9 +8746,12 @@ async function handleSaveMemory(args: any): Promise<any> {
 	        pruneShortMemories(global);
 	        saveGlobalMemoryData(global);
 	    }
+    // Track research save timestamp so guard knows research findings were saved
     try {
-        // Best-effort: refresh panels so global memory changes show up when Memory panel is open.
         const trackerInfo = resolveProjectTracker(rootPath);
+        trackerInfo.project.stats = normalizeTrackerStats(trackerInfo.project.stats);
+        trackerInfo.project.stats.lastResearchSaveAt = nowIso();
+        saveTrackerData(trackerInfo.data);
         refreshOpenPanels(trackerInfo.project);
     } catch {
         // ignore
@@ -10672,6 +10677,15 @@ async function handleResolveLibraryDocs(args: any): Promise<any> {
     matches.sort((a, b) => b.relevance - a.relevance);
     const best = matches[0];
     
+    // Track research timestamp so guard can enforce save_memory after research
+    try {
+        const { data, project } = resolveProjectTracker();
+        project.stats.lastResearchAt = nowIso();
+        saveTrackerData(data);
+    } catch {
+        // ignore tracker errors
+    }
+    
     return {
         content: [
             { type: 'text', text: lang === 'en' 
@@ -10823,16 +10837,32 @@ async function handleGetLibraryDocs(args: any): Promise<any> {
         saveGlobalMemoryData(globalMem);
     }
     
+    // Track research timestamp so guard can enforce save_memory after research
+    try {
+        const { data, project } = resolveProjectTracker();
+        project.stats.lastResearchAt = nowIso();
+        saveTrackerData(data);
+    } catch {
+        // ignore tracker errors
+    }
+    
+    // Build mandatory reminder to save research
+    const saveReminder = lang === 'en' 
+        ? `\n\n⚠️ **MANDATORY: Save your research!**\nAfter reading the docs, you MUST call save_memory() or record_lesson() to cache your findings.\nExample: save_memory({key: "research:${effectiveLib}", value: "<your findings>", scope: "global", kind: "long"})`
+        : `\n\n⚠️ **必须: 保存你的研究!**\n阅读文档后，你必须调用 save_memory() 或 record_lesson() 来缓存发现。\n示例: save_memory({key: "research:${effectiveLib}", value: "<你的发现>", scope: "global", kind: "long"})`;
+    
     return {
         content: [
             { type: 'text', text: lang === 'en' ? `📚 Documentation for ${knownLib?.name || effectiveLib}` : `📚 ${knownLib?.name || effectiveLib} 文档` },
             { type: 'text', text: docContent.slice(0, maxTokens * 4) },
+            { type: 'text', text: saveReminder },
             { type: 'text', text: `GET_LIBRARY_DOCS_JSON:\n${JSON.stringify({ 
                 library: effectiveLib, 
                 topic, 
                 source: docSource,
                 cached: cacheResult,
-                cacheKey: cacheResult ? cacheKey : undefined
+                cacheKey: cacheResult ? cacheKey : undefined,
+                mustSaveResearch: true  // Flag to remind AI to save
             }, null, 2)}` }
         ]
     };

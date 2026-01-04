@@ -1119,6 +1119,65 @@ def _check_prompt_preflight(server_url, project):
         return None
 
 
+def _check_research_save_required(server_url, project):
+    """
+    Enforce saving research after using get_library_docs or resolve_library_docs.
+    If lastResearchAt > lastResearchSaveAt, research was done but not saved.
+    """
+    try:
+        if not isinstance(project, dict):
+            return None
+        stats = project.get("stats") or {}
+        if not isinstance(stats, dict):
+            return None
+        
+        last_research = str(stats.get("lastResearchAt") or "").strip()
+        last_save = str(stats.get("lastResearchSaveAt") or "").strip()
+        
+        # No research done yet
+        if not last_research:
+            return None
+        
+        # Research was saved (save timestamp >= research timestamp)
+        if last_save and last_save >= last_research:
+            return None
+        
+        # Research was done but not saved!
+        msg = (
+            "\n" + "═"*60 + "\n"
+            "⛔ BLOCKED: UNSAVED RESEARCH DETECTED\n"
+            "═"*60 + "\n\n"
+            "You used get_library_docs or resolve_library_docs but did NOT save your findings!\n\n"
+            "⚠️ Research is USELESS if not saved to memory.\n\n"
+            "REQUIRED: Save your research NOW:\n"
+            "  save_memory({\n"
+            "    key: 'research:<library>:<topic>',\n"
+            "    value: '<your findings and learnings>',\n"
+            "    scope: 'global',\n"
+            "    kind: 'long',\n"
+            "    tags: ['research', '<library>']\n"
+            "  })\n\n"
+            "OR use record_lesson() if you learned something important.\n\n"
+            f"Research at: {last_research}\n"
+            f"Last save:   {last_save or '(never)'}\n"
+            + "═"*60
+        )
+        maybe_record_lesson(
+            server_url,
+            project,
+            "research_not_saved",
+            "Used documentation lookup tools (get_library_docs/resolve_library_docs) but did not save findings to memory.",
+            "Always call save_memory() or record_lesson() after researching documentation to preserve learnings.",
+            "After ANY research (get_library_docs, resolve_library_docs), immediately save findings with save_memory({key: 'research:<lib>', value: '<findings>', scope: 'global'}).",
+            title="Research not saved to memory",
+            tags=["research", "memory", "save", "block"],
+            scope="both",
+        )
+        return msg
+    except Exception:
+        return None
+
+
 def _plan_is_complete(project):
     plan = project.get("plan") or {}
     items = plan.get("items") or []
@@ -1925,6 +1984,12 @@ def main():
                 persist_hook_feedback(server_url, project, "pre_run_command", "block", preflight)
                 print_block_prominent(preflight, "Run preflight() or the required tools first")
                 return 2
+            # Enforce research save requirement
+            research_block = _check_research_save_required(server_url, project)
+            if research_block:
+                persist_hook_feedback(server_url, project, "pre_run_command", "block", research_block)
+                print_block_prominent(research_block, "Call save_memory() or record_lesson() to save your research")
+                return 2
             # Enforce periodic Plan progress updates during implementation (to prevent drifting trackers).
             try:
                 project_id = str(project.get("projectId") or "").strip()
@@ -1993,6 +2058,12 @@ def main():
             if preflight:
                 persist_hook_feedback(server_url, project, "pre_write_code", "block", preflight)
                 print_block_prominent(preflight, "Run preflight() or the required tools first")
+                return 2
+            # Enforce research save requirement
+            research_block = _check_research_save_required(server_url, project)
+            if research_block:
+                persist_hook_feedback(server_url, project, "pre_write_code", "block", research_block)
+                print_block_prominent(research_block, "Call save_memory() or record_lesson() to save your research")
                 return 2
             # Enforce periodic Plan progress updates during implementation (to prevent drifting trackers).
             try:
