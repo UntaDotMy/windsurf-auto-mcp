@@ -9483,8 +9483,8 @@ function getPanelShellHtml(
 	        : '';
 	    const extraScriptHtml = extraScript ? `<script nonce="${nonce}">${extraScript}</script>` : '';
 
-	    return `<!DOCTYPE html>
-	<html lang="${lang === 'en' ? 'en' : 'zh-CN'}">
+    return `<!DOCTYPE html>
+<html lang="${lang === 'en' ? 'en' : 'zh-CN'}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9492,233 +9492,195 @@ function getPanelShellHtml(
     <title>${safeTitle}</title>
     <style>
         :root {
-            --bg: #0c0f10;
-            --panel: #151a1c;
-            --card: #1b2226;
-            --card-strong: #20282d;
-            --text: #f5f2e9;
-            --muted: #9aa4a9;
-            --accent: #20c997;
-            --accent-weak: rgba(32, 201, 151, 0.2);
-            --warn: #f97316;
-            --border: rgba(255,255,255,0.08);
-            --shadow: 0 20px 40px rgba(0,0,0,0.45);
+            --radius: 4px;
+            --font-family: var(--vscode-font-family, "Segoe UI", sans-serif);
+        }
+        body {
+            margin: 0;
+            padding: 24px;
+            color: var(--vscode-foreground);
+            font-family: var(--font-family);
+            font-size: var(--vscode-font-size);
+            background-color: var(--vscode-editor-background);
+            line-height: 1.5;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: "Trebuchet MS", "Segoe UI Variable Display", "Segoe UI", sans-serif;
-            background:
-                radial-gradient(800px 400px at 10% -10%, rgba(32,201,151,0.18), transparent 60%),
-                radial-gradient(600px 360px at 100% 0%, rgba(249,115,22,0.12), transparent 55%),
-                var(--bg);
-            color: var(--text);
-            min-height: 100vh;
-        }
+
         .stage {
-            padding: 28px;
             display: flex;
             flex-direction: column;
-            gap: 18px;
+            gap: 20px;
+            max-width: 1000px;
+            margin: 0 auto;
         }
+
         .hero {
-            background: linear-gradient(145deg, rgba(32,201,151,0.18), rgba(21,26,28,0.9));
-            border: 1px solid var(--border);
-            border-radius: 20px;
-            padding: 22px;
-            box-shadow: var(--shadow);
-            animation: floatIn 0.6s ease;
+            background: var(--vscode-sideBar-background);
+            border: 1px solid var(--vscode-widget-border);
+            border-radius: var(--radius);
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
         }
-        .hero h1 { font-size: 22px; letter-spacing: 0.4px; }
-        .subtitle { margin-top: 6px; font-size: 12px; color: var(--muted); }
+        .hero h1 { font-size: 20px; font-weight: 600; margin: 0; color: var(--vscode-foreground); }
+        .subtitle { font-size: 12px; color: var(--vscode-descriptionForeground); }
         .badge {
-            display: inline-flex;
-            margin-top: 12px;
-            padding: 4px 12px;
-            border-radius: 999px;
+            align-self: flex-start;
+            padding: 2px 8px;
+            border-radius: 12px;
             font-size: 11px;
-            border: 1px solid var(--accent-weak);
-            color: var(--accent);
+            background: var(--vscode-badge-background);
+            color: var(--vscode-badge-foreground);
             text-transform: uppercase;
-            letter-spacing: 0.12em;
         }
+
         .grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             gap: 16px;
         }
+
         .card {
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 16px;
+            background: var(--vscode-editor-inactiveSelectionBackground);
+            border: 1px solid var(--vscode-widget-border);
+            border-radius: var(--radius);
             padding: 16px;
-            box-shadow: 0 16px 30px rgba(0,0,0,0.35);
-            animation: floatIn 0.6s ease;
+            display: flex;
+            flex-direction: column;
         }
         .card-title {
             font-size: 11px;
             text-transform: uppercase;
-            letter-spacing: 0.12em;
-            color: var(--muted);
-            margin-bottom: 10px;
+            color: var(--vscode-descriptionForeground);
+            margin-bottom: 12px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
         }
         .card-body {
             font-size: 13px;
-            line-height: 1.7;
-            white-space: pre-wrap;
+            line-height: 1.6;
+            color: var(--vscode-foreground);
         }
-        .markdown {
-            white-space: normal;
+
+        /* Markdown Styles */
+        .markdown { white-space: normal; }
+        .markdown h1, .markdown h2, .markdown h3, .markdown h4 {
+            margin: 16px 0 8px;
+            font-weight: 600;
+            color: var(--vscode-foreground);
         }
-        .markdown h1,
-        .markdown h2,
-        .markdown h3,
-        .markdown h4 {
-            margin: 12px 0 6px;
-            font-size: 15px;
+        .markdown h1 { font-size: 18px; }
+        .markdown h2 { font-size: 16px; }
+        .markdown h3 { font-size: 14px; }
+        .markdown p { margin: 0 0 12px; }
+        .markdown ul, .markdown ol { margin: 0 0 12px 20px; padding: 0; }
+        .markdown li { margin-bottom: 4px; }
+        .markdown code {
+            font-family: var(--vscode-editor-font-family, monospace);
+            background: var(--vscode-textCodeBlock-background);
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-size: 12px;
         }
-        .markdown p {
-            margin: 0 0 10px;
+        .markdown pre {
+            background: var(--vscode-textCodeBlock-background);
+            border: 1px solid var(--vscode-widget-border);
+            padding: 12px;
+            border-radius: var(--radius);
+            overflow-x: auto;
+            margin-bottom: 12px;
         }
-        .markdown ul {
-            margin: 0 0 10px 18px;
-            padding: 0;
-        }
-        .markdown li {
-            margin-bottom: 6px;
+        .markdown pre code { background: transparent; padding: 0; }
+        .markdown blockquote {
+            border-left: 4px solid var(--vscode-textBlockQuote-border);
+            background: var(--vscode-textBlockQuote-background);
+            margin: 0 0 12px;
+            padding: 8px 12px;
         }
         .markdown table {
             width: 100%;
             border-collapse: collapse;
+            margin-bottom: 12px;
             font-size: 12px;
-            margin-bottom: 10px;
         }
-        .markdown th,
-        .markdown td {
-            border: 1px solid var(--border);
-            padding: 6px 8px;
+        .markdown th, .markdown td {
+            border: 1px solid var(--vscode-widget-border);
+            padding: 8px;
             text-align: left;
         }
-        .markdown th {
-            background: rgba(255,255,255,0.04);
-            color: var(--text);
-            font-weight: 600;
-        }
-        .markdown pre {
-            background: rgba(10,12,14,0.8);
-            border: 1px solid var(--border);
-            padding: 12px;
-            border-radius: 12px;
-            overflow-x: auto;
-            margin-bottom: 10px;
-        }
-        .markdown .mermaid svg {
-            max-width: 100%;
-            height: auto;
-        }
-        .empty {
-            color: var(--muted);
-            font-style: italic;
-        }
-        .progress {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
+        .markdown th { background: var(--vscode-list-hoverBackground); font-weight: 600; }
+        .markdown .mermaid svg { max-width: 100%; height: auto; background: var(--vscode-editor-background); }
+
+        /* Helpers */
+        .empty { color: var(--vscode-descriptionForeground); font-style: italic; }
+
+        /* Progress Bar */
+        .progress { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
         .progress-bar {
-            height: 8px;
-            border-radius: 999px;
-            background: #101416;
+            height: 6px;
+            border-radius: 3px;
+            background: var(--vscode-widget-border);
             overflow: hidden;
-            border: 1px solid var(--border);
         }
         .progress-fill {
             height: 100%;
-            background: linear-gradient(90deg, var(--accent), rgba(32,201,151,0.6));
+            background: var(--vscode-progressBar-background);
             width: 0%;
+            transition: width 0.3s ease;
         }
         .progress-meta {
-            font-size: 12px;
-            color: var(--muted);
-        }
-        .list {
+            font-size: 11px;
+            color: var(--vscode-descriptionForeground);
             display: flex;
-            flex-direction: column;
-            gap: 10px;
+            justify-content: space-between;
         }
+
+        /* Lists */
+        .list { display: flex; flex-direction: column; gap: 8px; }
         .item {
             display: flex;
             gap: 12px;
-            padding: 12px;
-            border-radius: 12px;
-            background: var(--card-strong);
-            border: 1px solid rgba(255,255,255,0.04);
-            animation: rise 0.5s ease forwards;
-            opacity: 0;
-            transform: translateY(8px);
+            padding: 10px;
+            border-radius: var(--radius);
+            background: var(--vscode-editor-background);
+            border: 1px solid var(--vscode-widget-border);
+            align-items: flex-start;
         }
-        .item.todo .dot { background: #64748b; }
-        .item.doing .dot { background: var(--warn); }
-        .item.done .dot { background: var(--accent); }
         .dot {
-            width: 10px;
-            height: 10px;
+            width: 8px;
+            height: 8px;
             border-radius: 50%;
             margin-top: 6px;
-            box-shadow: 0 0 12px rgba(255,255,255,0.2);
+            flex-shrink: 0;
         }
-        .item-text {
-            font-size: 13px;
-            line-height: 1.6;
-        }
-        .item-meta {
-            font-size: 11px;
-            color: var(--muted);
-            margin-top: 4px;
-        }
-        .stat-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-            gap: 12px;
-        }
-        .stat {
-            padding: 12px;
-            border-radius: 12px;
-            background: rgba(15,18,20,0.9);
-            border: 1px solid var(--border);
-        }
-        .stat-label {
-            font-size: 11px;
-            color: var(--muted);
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-        }
-        .stat-value {
-            font-size: 18px;
-            font-weight: 700;
-            margin-top: 4px;
-        }
-        @keyframes floatIn {
-            from { opacity: 0; transform: translateY(12px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes rise {
-            to { opacity: 1; transform: translateY(0); }
-        }
+        .item.todo .dot { background: var(--vscode-descriptionForeground); }
+        .item.doing .dot { background: var(--vscode-editorWarning-foreground); }
+        .item.done .dot { background: var(--vscode-testing-iconPassed); }
+        .item-content { flex: 1; min-width: 0; }
+        .item-text { font-size: 13px; line-height: 1.5; word-wrap: break-word; }
+        .item-meta { font-size: 11px; color: var(--vscode-descriptionForeground); margin-top: 2px; }
+
+        /* Animations */
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .card, .hero { animation: fadeIn 0.3s ease-out; }
     </style>
 </head>
 <body>
     <div class="stage">
-	        <div class="hero">
-	            <h1>${safeTitle}</h1>
-	            ${subtitleHtml}
-	            ${badgeHtml}
-	        </div>
-	        ${body}
-	    </div>
-	    ${mermaidScripts}
-	    ${extraScriptHtml}
-	</body>
-	</html>`;
+        <div class="hero">
+            <div>
+                <h1>${safeTitle}</h1>
+                ${subtitleHtml}
+            </div>
+            ${badgeHtml}
+        </div>
+        ${body}
+    </div>
+    ${mermaidScripts}
+    ${extraScriptHtml}
+</body>
+</html>`;
 	}
 
 function renderTrackerItems(items: TrackerItem[], lang: UiLanguage): string {
@@ -9871,28 +9833,85 @@ function getMemoryPanelHtml(
 
     const body = `
         <style>
-            .mem-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 16px; }
-            .mem-section-title { display:flex; align-items:center; justify-content:space-between; gap: 10px; }
-            .mem-count { color: var(--muted); font-size: 12px; }
-            .mem-item { border: 1px solid var(--border); border-radius: 14px; background: rgba(15,18,20,0.7); margin-bottom: 10px; overflow: hidden; }
-            .mem-item summary { list-style: none; cursor: pointer; padding: 12px 14px; display:flex; align-items:center; gap:10px; }
-            .mem-item summary::-webkit-details-marker { display:none; }
-            .mem-key { font-weight: 700; }
-            .pill { padding: 2px 10px; border-radius: 999px; font-size: 11px; border: 1px solid var(--border); color: var(--muted); }
-            .pill.kind-long { color: var(--accent); border-color: rgba(32,201,151,0.25); background: rgba(32,201,151,0.08); }
-            .pill.kind-short { color: #60a5fa; border-color: rgba(96,165,250,0.25); background: rgba(96,165,250,0.08); }
-            .pill.kind-lesson { color: var(--warn); border-color: rgba(249,115,22,0.25); background: rgba(249,115,22,0.08); }
-            .meta { margin-left: auto; color: var(--muted); font-size: 11px; }
-            .mem-meta-row { padding: 0 14px 10px; display:flex; flex-wrap: wrap; gap: 8px; }
-            .chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08); color: var(--text); }
-            .chip-link { color: var(--muted); }
-            .mem-body { padding: 0 14px 14px; }
-            .graph-wrap { width: 100%; height: 420px; border-radius: 16px; border: 1px solid var(--border); background: rgba(10,12,14,0.7); overflow: hidden; position: relative; }
+            .mem-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 16px; margin-bottom: 16px; }
+            .mem-count { color: var(--vscode-descriptionForeground); font-size: 12px; margin-bottom: 8px; }
+            
+            .mem-item { 
+                border: 1px solid var(--vscode-widget-border); 
+                border-radius: var(--radius); 
+                background: var(--vscode-editor-background); 
+                margin-bottom: 8px; 
+                overflow: hidden; 
+            }
+            .mem-item summary { 
+                list-style: none; 
+                cursor: pointer; 
+                padding: 10px 12px; 
+                display: flex; 
+                align-items: center; 
+                gap: 10px; 
+            }
+            .mem-item summary:hover { background: var(--vscode-list-hoverBackground); }
+            .mem-item summary::-webkit-details-marker { display: none; }
+            
+            .mem-key { font-weight: 600; font-size: 13px; color: var(--vscode-foreground); }
+            
+            .pill { 
+                padding: 2px 8px; 
+                border-radius: 12px; 
+                font-size: 11px; 
+                border: 1px solid var(--vscode-widget-border); 
+                color: var(--vscode-descriptionForeground); 
+            }
+            .pill.kind-long { color: var(--vscode-symbolIcon-classForeground); border-color: var(--vscode-symbolIcon-classForeground); }
+            .pill.kind-short { color: var(--vscode-symbolIcon-functionForeground); border-color: var(--vscode-symbolIcon-functionForeground); }
+            .pill.kind-lesson { color: var(--vscode-symbolIcon-variableForeground); border-color: var(--vscode-symbolIcon-variableForeground); }
+            
+            .meta { margin-left: auto; color: var(--vscode-descriptionForeground); font-size: 11px; }
+            
+            .mem-meta-row { padding: 0 12px 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+            
+            .chip { 
+                font-size: 11px; 
+                padding: 2px 6px; 
+                border-radius: 4px; 
+                background: var(--vscode-textCodeBlock-background); 
+                border: 1px solid var(--vscode-widget-border); 
+                color: var(--vscode-textPreformat-foreground); 
+            }
+            .chip-link { color: var(--vscode-textLink-foreground); cursor: pointer; }
+            .chip-link:hover { text-decoration: underline; }
+            
+            .mem-body { padding: 0 12px 12px; font-size: 13px; color: var(--vscode-foreground); border-top: 1px solid var(--vscode-widget-border); margin-top: 4px; padding-top: 10px; }
+            
+            .graph-wrap { 
+                width: 100%; 
+                height: 400px; 
+                border-radius: var(--radius); 
+                border: 1px solid var(--vscode-widget-border); 
+                background: var(--vscode-editor-background); 
+                overflow: hidden; 
+                position: relative; 
+            }
             .graph-svg { width: 100%; height: 100%; }
-            .graph-empty { color: var(--muted); font-size: 12px; padding: 14px; }
-            .graph-detail { margin-top: 12px; border-radius: 16px; border: 1px solid var(--border); background: rgba(15,18,20,0.8); padding: 12px; }
-            .graph-detail h3 { font-size: 14px; margin-bottom: 6px; }
-            .graph-detail pre { white-space: pre-wrap; font-size: 12px; line-height: 1.6; }
+            .graph-empty { color: var(--vscode-descriptionForeground); font-size: 12px; padding: 14px; text-align: center; }
+            
+            .graph-detail { 
+                margin-top: 12px; 
+                border-radius: var(--radius); 
+                border: 1px solid var(--vscode-widget-border); 
+                background: var(--vscode-editor-inactiveSelectionBackground); 
+                padding: 12px; 
+            }
+            .graph-detail h3 { font-size: 13px; margin: 0 0 6px 0; font-weight: 600; }
+            .graph-detail pre { 
+                white-space: pre-wrap; 
+                font-size: 12px; 
+                line-height: 1.5; 
+                margin: 0; 
+                font-family: var(--vscode-editor-font-family); 
+                color: var(--vscode-foreground);
+            }
         </style>
 
         <div class="mem-grid">
@@ -9973,16 +9992,20 @@ function getMemoryPanelHtml(
             const height = 420;
             const padX = 90;
             const padY = 40;
+            
+            // "Neural" layout: central cluster for 'long', dispersed for others?
+            // Actually, keep columns but make them organic.
             const colX = {
-                long: padX,
-                short: Math.floor(width / 2),
-                lesson: width - padX
+                long: padX + (Math.random() * 20 - 10),
+                short: Math.floor(width / 2) + (Math.random() * 40 - 20),
+                lesson: width - padX + (Math.random() * 20 - 10)
             };
             const byKind = { long: [], short: [], lesson: [] };
             for (const n of nodes) {
                 const k = (n.kind === 'long' || n.kind === 'lesson') ? n.kind : 'short';
                 byKind[k].push(n);
             }
+            // Sort by connectivity? Or just simple sort.
             for (const k of Object.keys(byKind)) {
                 byKind[k].sort((a, b) => String(a.key).localeCompare(String(b.key)));
             }
@@ -9992,7 +10015,13 @@ function getMemoryPanelHtml(
                 const list = byKind[kind];
                 const step = list.length > 1 ? (height - padY * 2) / (list.length - 1) : 0;
                 list.forEach((n, idx) => {
-                    positions.set(n.key, { x: colX[kind], y: padY + (step * idx) });
+                    // Add some jitter for "brain" feel
+                    const jitterX = Math.random() * 30 - 15;
+                    const jitterY = Math.random() * 10 - 5;
+                    positions.set(n.key, { 
+                        x: colX[kind] + jitterX, 
+                        y: (list.length === 1 ? height / 2 : padY + (step * idx)) + jitterY
+                    });
                 });
             }
 
@@ -10013,19 +10042,31 @@ function getMemoryPanelHtml(
 
             function setDetail(node) {
                 detail.innerHTML =
-                    '<h3>' + esc(node.key) + ' <span style="color:#9aa4a9;font-size:12px;">(' + esc(node.kind) + ')</span></h3>' +
-                    '<div style="color:#9aa4a9;font-size:11px;margin-bottom:8px;">' + esc(node.updatedAt) + '</div>' +
+                    '<h3>' + esc(node.key) + ' <span style="color:var(--vscode-descriptionForeground);font-size:12px;">(' + esc(node.kind) + ')</span></h3>' +
+                    '<div style="color:var(--vscode-descriptionForeground);font-size:11px;margin-bottom:8px;">' + esc(node.updatedAt) + '</div>' +
                     '<pre>' + esc(node.content) + '</pre>';
             }
 
             svg.innerHTML = '';
+            
+            // Defs for glow
+            const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+            const glow = document.createElementNS('http://www.w3.org/2000/svg', 'filter');
+            glow.setAttribute('id', 'glow');
+            glow.innerHTML = '<feGaussianBlur stdDeviation="2.5" result="coloredBlur"/><feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>';
+            defs.appendChild(glow);
+            svg.appendChild(defs);
+
             const edgeGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-            edgeGroup.setAttribute('stroke', 'rgba(255,255,255,0.16)');
+            edgeGroup.setAttribute('stroke', 'var(--vscode-editorRuler-foreground)'); // Very faint
             edgeGroup.setAttribute('stroke-width', '1');
+            edgeGroup.setAttribute('stroke-opacity', '0.4');
             edgeGroup.setAttribute('fill', 'none');
+            
             for (const e of edges) {
                 const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                 const midX = (e.x1 + e.x2) / 2;
+                // Bezier curve for organic connection
                 const d = 'M ' + e.x1 + ' ' + e.y1 + ' C ' + midX + ' ' + e.y1 + ', ' + midX + ' ' + e.y2 + ', ' + e.x2 + ' ' + e.y2;
                 path.setAttribute('d', d);
                 edgeGroup.appendChild(path);
@@ -10038,20 +10079,26 @@ function getMemoryPanelHtml(
                 if (!pos) continue;
                 const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
                 g.setAttribute('cursor', 'pointer');
+                
+                // Node circle
                 const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
                 circle.setAttribute('cx', String(pos.x));
                 circle.setAttribute('cy', String(pos.y));
-                circle.setAttribute('r', '9');
-                const fill = n.kind === 'long' ? 'rgba(32,201,151,0.9)' : (n.kind === 'lesson' ? 'rgba(249,115,22,0.9)' : 'rgba(96,165,250,0.9)');
+                circle.setAttribute('r', '6');
+                // Use theme colors but distinct
+                const fill = n.kind === 'long' ? 'var(--vscode-symbolIcon-classForeground)' : (n.kind === 'lesson' ? 'var(--vscode-symbolIcon-variableForeground)' : 'var(--vscode-symbolIcon-functionForeground)');
                 circle.setAttribute('fill', fill);
-                circle.setAttribute('stroke', 'rgba(0,0,0,0.4)');
-                circle.setAttribute('stroke-width', '1');
+                circle.setAttribute('filter', 'url(#glow)'); // Add glow
+                
+                // Label
                 const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                label.setAttribute('x', String(pos.x + 14));
+                label.setAttribute('x', String(pos.x + 10));
                 label.setAttribute('y', String(pos.y + 4));
-                label.setAttribute('fill', 'rgba(245,242,233,0.92)');
+                label.setAttribute('fill', 'var(--vscode-foreground)');
                 label.setAttribute('font-size', '11');
+                label.setAttribute('font-family', 'var(--vscode-font-family)');
                 label.textContent = String(n.key);
+                
                 g.appendChild(circle);
                 g.appendChild(label);
                 g.addEventListener('click', () => setDetail(n));
@@ -10144,18 +10191,40 @@ function getAuditPanelHtml(project: ProjectTracker, lang: UiLanguage, webview: v
 
     const body = `
         <style>
-            .table { width: 100%; border-collapse: collapse; }
-            .table th, .table td { border-bottom: 1px solid var(--border); padding: 10px 10px; vertical-align: top; }
-            .table th { text-align: left; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; }
-            .col-at { width: 160px; color: var(--muted); font-size: 11px; white-space: nowrap; }
-            .col-sev { width: 84px; }
-            .col-action { width: 160px; font-weight: 650; }
-            .col-variant { width: 96px; color: var(--muted); font-size: 11px; white-space: nowrap; }
-            .col-msg { white-space: pre-wrap; font-size: 12px; line-height: 1.5; }
-            .sev { display: inline-flex; align-items:center; justify-content:center; padding: 2px 10px; border-radius: 999px; font-size: 11px; border: 1px solid var(--border); }
-            .sev-ok { color: var(--accent); border-color: rgba(32,201,151,0.25); background: rgba(32,201,151,0.08); }
-            .sev-warn { color: var(--warn); border-color: rgba(249,115,22,0.25); background: rgba(249,115,22,0.10); }
-            .sev-bad { color: #fb7185; border-color: rgba(251,113,133,0.25); background: rgba(251,113,133,0.10); }
+            .table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+            .table th, .table td { 
+                border-bottom: 1px solid var(--vscode-widget-border); 
+                padding: 10px 10px; 
+                vertical-align: top; 
+                font-size: 12px;
+            }
+            .table th { 
+                text-align: left; 
+                color: var(--vscode-descriptionForeground); 
+                font-size: 11px; 
+                text-transform: uppercase; 
+                letter-spacing: 0.05em; 
+                font-weight: 600;
+            }
+            .col-at { width: 140px; color: var(--vscode-descriptionForeground); font-size: 11px; white-space: nowrap; }
+            .col-sev { width: 80px; }
+            .col-action { width: 150px; font-weight: 600; color: var(--vscode-foreground); }
+            .col-variant { width: 90px; color: var(--vscode-descriptionForeground); font-size: 11px; white-space: nowrap; }
+            .col-msg { white-space: pre-wrap; font-size: 12px; line-height: 1.5; color: var(--vscode-foreground); }
+            
+            .sev { 
+                display: inline-flex; 
+                align-items: center; 
+                justify-content: center; 
+                padding: 2px 8px; 
+                border-radius: 12px; 
+                font-size: 10px; 
+                font-weight: 600;
+                border: 1px solid transparent;
+            }
+            .sev-ok { color: var(--vscode-testing-iconPassed); border-color: var(--vscode-testing-iconPassed); background: transparent; }
+            .sev-warn { color: var(--vscode-editorWarning-foreground); border-color: var(--vscode-editorWarning-foreground); background: transparent; }
+            .sev-bad { color: var(--vscode-errorForeground); border-color: var(--vscode-errorForeground); background: transparent; }
         </style>
         <section class="card">
             <div class="card-title">${escapeHtml(lang === 'en' ? 'Recent hook audit events' : '最近 Hook 审计事件')}</div>
@@ -10294,14 +10363,14 @@ function getWamPanelHtml(project: ProjectTracker, lang: UiLanguage, webview: vsc
         const planItems = tracker.planItems || {};
 
         return `
-            <details style="margin:10px 0; padding:10px 12px; border:1px solid var(--border); border-radius:14px; background: rgba(15,18,20,0.6);">
-                <summary style="cursor:pointer; list-style:none; display:flex; gap:10px; align-items:center;">
+            <details class="item" style="display: block; padding: 0;">
+                <summary style="padding: 10px 12px;">
                     <code>${escapeHtml(String(c.hash || '').slice(0, 10))}</code>
-                    <span style="color: var(--muted); font-size: 11px;">${escapeHtml(String(c.createdAt || ''))}</span>
-                    <span style="font-weight:650;">${escapeHtml(String(c.message || ''))}</span>
-                    <span style="margin-left:auto; color: var(--muted); font-size: 11px;">${escapeHtml(summary)}</span>
+                    <span style="color: var(--vscode-descriptionForeground); font-size: 11px;">${escapeHtml(String(c.createdAt || ''))}</span>
+                    <span style="font-weight:600;">${escapeHtml(String(c.message || ''))}</span>
+                    <span style="margin-left:auto; color: var(--vscode-descriptionForeground); font-size: 11px;">${escapeHtml(summary)}</span>
                 </summary>
-                <div class="markdown" style="margin-top:10px;">
+                <div class="markdown" style="padding: 0 12px 12px; border-top: 1px solid var(--vscode-widget-border); margin-top: 4px; padding-top: 10px;">
                     <p><strong>${escapeHtml(lang === 'en' ? 'Commit' : '提交')}</strong>: <code>${escapeHtml(String(c.hash || ''))}</code></p>
                     <p><strong>${escapeHtml(lang === 'en' ? 'Parents' : '父提交')}</strong>: ${escapeHtml(Array.isArray(c.parents) ? c.parents.join(', ') : '')}</p>
                     ${ch?.base ? `<p><strong>Base</strong>: <code>${escapeHtml(String(ch.base))}</code></p>` : ''}
@@ -10429,184 +10498,153 @@ function getPrdDialogHtml(
     <title>${title}</title>
     <style>
         :root {
-            --bg: #0b0f0f;
-            --panel: #151a1a;
-            --card: #1b2121;
-            --text: #f5f1e8;
-            --muted: #8f979c;
-            --accent: #20c997;
-            --accent-weak: rgba(32, 201, 151, 0.2);
-            --warn: #f97316;
-            --border: rgba(255, 255, 255, 0.08);
-            --shadow: 0 18px 40px rgba(0,0,0,0.45);
+            --radius: 4px;
+            --font-family: var(--vscode-font-family, "Segoe UI", sans-serif);
         }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
-            font-family: "Trebuchet MS", "Segoe UI Variable Display", "Segoe UI", sans-serif;
-            background: radial-gradient(800px 400px at 10% -10%, rgba(32,201,151,0.18), transparent 60%),
-                        radial-gradient(600px 360px at 100% 0%, rgba(249,115,22,0.14), transparent 55%),
-                        var(--bg);
-            color: var(--text);
-            padding: 28px;
-            min-height: 100vh;
+            margin: 0;
+            padding: 24px;
+            color: var(--vscode-foreground);
+            font-family: var(--font-family);
+            font-size: var(--vscode-font-size);
+            background-color: var(--vscode-editor-background);
+            line-height: 1.5;
         }
+        * { box-sizing: border-box; }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
         .hero {
-            background: linear-gradient(140deg, rgba(32,201,151,0.18), rgba(21,26,26,0.9));
-            border: 1px solid var(--border);
-            border-radius: 18px;
-            padding: 20px 22px;
-            margin-bottom: 18px;
-            box-shadow: var(--shadow);
-        }
-        .hero h1 { font-size: 20px; margin-bottom: 6px; }
-        .hero p { font-size: 12px; color: var(--muted); }
-        .badge {
-            display: inline-flex;
-            align-items: center;
-            padding: 4px 10px;
-            border-radius: 999px;
-            font-size: 11px;
-            border: 1px solid var(--accent-weak);
-            color: var(--accent);
-            margin-top: 10px;
-        }
-        .hint {
-            margin-top: 8px;
-            font-size: 12px;
-            color: var(--muted);
-        }
-        .card {
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 16px;
+            background: var(--vscode-sideBar-background);
+            border: 1px solid var(--vscode-widget-border);
+            border-radius: var(--radius);
             padding: 16px;
-            margin-bottom: 14px;
+            margin-bottom: 20px;
+        }
+        .hero h1 { font-size: 18px; font-weight: 600; margin: 0 0 4px 0; color: var(--vscode-foreground); }
+        .hero p { font-size: 12px; color: var(--vscode-descriptionForeground); margin: 0; }
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            background: var(--vscode-badge-background);
+            color: var(--vscode-badge-foreground);
+            margin-top: 8px;
+        }
+        .hint { margin-top: 8px; font-size: 12px; color: var(--vscode-descriptionForeground); }
+
+        .card {
+            background: var(--vscode-editor-inactiveSelectionBackground);
+            border: 1px solid var(--vscode-widget-border);
+            border-radius: var(--radius);
+            padding: 16px;
+            margin-bottom: 16px;
         }
         .card-title {
             font-size: 11px;
             text-transform: uppercase;
-            letter-spacing: 0.12em;
-            color: var(--muted);
-            margin-bottom: 10px;
-        }
-        .content {
-            line-height: 1.6;
-            font-size: 13px;
-            color: var(--text);
-        }
-        .markdown .mermaid svg {
-            max-width: 100%;
-            height: auto;
-        }
-        .markdown {
-            white-space: normal;
-        }
-        .markdown h1,
-        .markdown h2,
-        .markdown h3,
-        .markdown h4 {
-            margin: 12px 0 6px;
-            font-size: 15px;
-        }
-        .markdown p {
-            margin: 0 0 10px;
-        }
-        .markdown ul {
-            margin: 0 0 10px 18px;
-            padding: 0;
-        }
-        .markdown li {
-            margin-bottom: 6px;
-        }
-        .markdown table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 12px;
-            margin-bottom: 10px;
-        }
-        .markdown th,
-        .markdown td {
-            border: 1px solid var(--border);
-            padding: 6px 8px;
-            text-align: left;
-        }
-        .markdown th {
-            background: rgba(255,255,255,0.04);
-            color: var(--text);
+            color: var(--vscode-descriptionForeground);
+            margin-bottom: 12px;
             font-weight: 600;
         }
-        .markdown pre {
-            background: rgba(10,12,14,0.8);
-            border: 1px solid var(--border);
-            padding: 12px;
-            border-radius: 12px;
-            overflow-x: auto;
-            margin-bottom: 10px;
+        .content {
+            color: var(--vscode-foreground);
+            font-size: 13px;
+            line-height: 1.6;
         }
+        .markdown h1, .markdown h2, .markdown h3 { margin-top: 16px; margin-bottom: 8px; color: var(--vscode-foreground); }
+        .markdown p { margin-bottom: 12px; }
+        .markdown code {
+            background: var(--vscode-textCodeBlock-background);
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: var(--vscode-editor-font-family);
+        }
+        .markdown pre {
+            background: var(--vscode-textCodeBlock-background);
+            padding: 12px;
+            border-radius: var(--radius);
+            overflow-x: auto;
+            margin-bottom: 12px;
+            border: 1px solid var(--vscode-widget-border);
+        }
+        .markdown table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+        .markdown th, .markdown td {
+            border: 1px solid var(--vscode-widget-border);
+            padding: 6px 8px;
+        }
+        .markdown th { background: var(--vscode-list-hoverBackground); font-weight: 600; }
+
         textarea {
             width: 100%;
-            min-height: 90px;
-            background: #111515;
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            color: var(--text);
-            font-size: 13px;
-            padding: 12px;
-            resize: vertical;
+            min-height: 100px;
+            background: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            border: 1px solid var(--vscode-input-border);
+            border-radius: var(--radius);
+            padding: 10px;
             font-family: inherit;
+            resize: vertical;
         }
-        .actions {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 12px;
-            margin-top: 16px;
-        }
+        textarea:focus { outline: 1px solid var(--vscode-focusBorder); border-color: var(--vscode-focusBorder); }
+
+        .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 20px; }
         .btn {
             border: none;
-            border-radius: 12px;
-            padding: 12px 18px;
+            border-radius: var(--radius);
+            padding: 10px 16px;
             font-size: 13px;
             font-weight: 600;
             cursor: pointer;
-            transition: transform 0.2s ease;
+            font-family: inherit;
+            display: flex; align-items: center; justify-content: center;
         }
-        .btn:active { transform: scale(0.97); }
         .btn-approve {
-            background: var(--accent);
-            color: #06221c;
-            box-shadow: 0 10px 20px rgba(32,201,151,0.3);
+            background: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
         }
+        .btn-approve:hover { background: var(--vscode-button-hoverBackground); }
         .btn-request {
-            background: transparent;
-            color: var(--warn);
-            border: 1px solid rgba(249,115,22,0.35);
+            background: var(--vscode-button-secondaryBackground);
+            color: var(--vscode-button-secondaryForeground);
         }
+        .btn-request:hover { background: var(--vscode-button-secondaryHoverBackground); }
         .btn-cancel {
-            background: #141818;
-            color: var(--muted);
-            border: 1px solid var(--border);
+            background: transparent;
+            border: 1px solid var(--vscode-button-border, transparent);
+            color: var(--vscode-foreground);
         }
+        .btn-cancel:hover { background: var(--vscode-list-hoverBackground); }
     </style>
 </head>
 <body>
-    <div class="hero">
-        <h1>${title}</h1>
-        <p>${subtitle}</p>
-        ${projectBadge}
-        <div class="hint">${hint}</div>
-    </div>
-    <div class="card">
-        <div class="card-title">${tr('panel.prdPanelTitle', {}, lang)}</div>
-        <div class="content markdown">${contentHtml}</div>
-    </div>
-    <div class="card">
-        <div class="card-title">${noteLabel}</div>
-        <textarea id="noteInput" placeholder="${notePlaceholder}"></textarea>
-    </div>
-    <div class="actions">
-        <button class="btn btn-approve" id="approveBtn">${approveLabel}</button>
-        <button class="btn btn-request" id="requestBtn">${requestLabel}</button>
-        <button class="btn btn-cancel" id="cancelBtn">${cancelLabel}</button>
+    <div class="container">
+        <div class="hero">
+            <h1>${title}</h1>
+            <p>${subtitle}</p>
+            ${projectBadge}
+            <div class="hint">${hint}</div>
+        </div>
+        <div class="card">
+            <div class="card-title">${tr('panel.prdPanelTitle', {}, lang)}</div>
+            <div class="content markdown">${contentHtml}</div>
+        </div>
+        <div class="card">
+            <div class="card-title">${noteLabel}</div>
+            <textarea id=\"noteInput\" placeholder=\"${notePlaceholder}\"></textarea>
+        </div>
+        <div class="actions">
+            <button class="btn btn-approve" id="approveBtn">${approveLabel}</button>
+            <button class="btn btn-request" id="requestBtn">${requestLabel}</button>
+            <button class="btn btn-cancel" id="cancelBtn">${cancelLabel}</button>
+        </div>
     </div>
     <script nonce="${nonce}">
         const vscode = acquireVsCodeApi();
@@ -10781,416 +10819,266 @@ function getDialogHtml(
 		    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 		    <meta http-equiv="Content-Security-Policy" content="${csp}">
 		    <title>WindsurfAutoMcp</title>
-		    <style>
+    <style>
         :root {
-            --bg-base: #0f0f0f;
-            --bg-card: #1a1a1a;
-            --bg-elevated: #242424;
-            --bg-input: #1e1e1e;
-            --text-primary: #ffffff;
-            --text-secondary: #b0b0b0;
-            --text-muted: #707070;
-            --accent: #20c997;
-            --accent-hover: #34d399;
-            --accent-glow: rgba(32, 201, 151, 0.3);
-            --success: #22c55e;
-            --success-glow: rgba(34, 197, 94, 0.3);
-            --danger: #ef4444;
-            --border: rgba(255, 255, 255, 0.08);
-            --border-hover: rgba(255, 255, 255, 0.15);
-            --radius-sm: 6px;
-            --radius-md: 10px;
-            --radius-lg: 14px;
-            --shadow-md: 0 4px 20px rgba(0,0,0,0.4);
-            --transition: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            --radius: 4px;
+            --font-family: var(--vscode-font-family, "Segoe UI", sans-serif);
         }
-        * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
-            font-family: "Trebuchet MS", "Segoe UI Variable Display", "Segoe UI", sans-serif;
-            font-size: 13px;
-            color: var(--text-primary);
-            background: var(--bg-base);
+            margin: 0;
             padding: 24px;
+            color: var(--vscode-foreground);
+            font-family: var(--font-family);
+            font-size: var(--vscode-font-size);
+            background-color: var(--vscode-editor-background);
             line-height: 1.5;
-            min-height: 100vh;
-            -webkit-font-smoothing: antialiased;
         }
-        
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-        
+        * { box-sizing: border-box; }
+
         .container {
-            max-width: 560px;
+            max-width: 600px;
             margin: 0 auto;
-        }
-        
-	        .header {
-	            display: flex;
-	            align-items: center;
-	            justify-content: space-between;
-	            margin-bottom: 24px;
-	            padding: 20px;
-	            background: linear-gradient(135deg, rgba(32, 201, 151, 0.9) 0%, rgba(249, 115, 22, 0.9) 100%);
-	            border-radius: var(--radius-lg);
-	            box-shadow: var(--shadow-md), 0 0 40px var(--accent-glow);
-	        }
-	        .header-left {
-	            display: flex;
-	            align-items: center;
-	            gap: 14px;
-	            min-width: 0;
-	        }
-	        .lang-btn {
-	            border: 1px solid rgba(255,255,255,0.25);
-	            background: rgba(255,255,255,0.14);
-	            color: #fff;
-	            border-radius: 999px;
-	            padding: 8px 12px;
-	            font-size: 12px;
-	            cursor: pointer;
-	            transition: var(--transition);
-	            flex: 0 0 auto;
-	        }
-	        .lang-btn:hover {
-	            background: rgba(255,255,255,0.22);
-	            border-color: rgba(255,255,255,0.35);
-	        }
-        .header-icon {
-            width: 48px;
-            height: 48px;
-            background: rgba(255,255,255,0.2);
-            border-radius: var(--radius-md);
             display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 24px;
-        }
-        .header-text h1 {
-            font-size: 18px;
-            font-weight: 600;
-            color: #fff;
-            letter-spacing: -0.3px;
-        }
-	        .header-text p {
-	            font-size: 12px;
-	            color: rgba(255,255,255,0.8);
-	            margin-top: 2px;
-	        }
-        
-        .card {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-lg);
-            padding: 20px;
-            margin-bottom: 16px;
-        }
-        
-        .card-label {
-            font-size: 11px;
-            font-weight: 500;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 10px;
-        }
-        
-	        .reason-box {
-	            background: var(--bg-elevated);
-	            padding: 16px;
-	            border-radius: var(--radius-md);
-	            color: var(--text-primary);
-	            font-size: 14px;
-	            line-height: 1.7;
-	            border: 1px solid var(--border);
-	            white-space: pre-wrap;
-	            word-break: break-word;
-	        }
-        
-        .input-label {
-            display: block;
-            font-size: 11px;
-            font-weight: 500;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 10px;
-        }
-        
-        textarea {
-            width: 100%;
-            min-height: 120px;
-            padding: 14px;
-            background: var(--bg-input);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-md);
-            color: var(--text-primary);
-            font-size: 14px;
-            resize: vertical;
-            font-family: inherit;
-            transition: var(--transition);
-        }
-        textarea:focus {
-            outline: none;
-            border-color: var(--accent);
-            box-shadow: 0 0 0 3px var(--accent-glow);
-        }
-        textarea::placeholder {
-            color: var(--text-muted);
+            flex-direction: column;
+            gap: 20px;
         }
 
-        .choice-card {
-            display: none;
-        }
-        .choice-card.show {
-            display: block;
-        }
-        .choice-hint {
-            font-size: 12px;
-            color: var(--text-secondary);
-            margin-bottom: 12px;
-        }
-        .choice-list {
-            display: grid;
-            gap: 10px;
-        }
-        .choice-option {
-            width: 100%;
-            border: 1px solid var(--border);
-            background: var(--bg-elevated);
-            color: var(--text-primary);
-            padding: 12px 14px;
-            border-radius: var(--radius-md);
-            cursor: pointer;
-            text-align: left;
+        /* Header */
+        .header {
+            background: var(--vscode-sideBar-background);
+            border: 1px solid var(--vscode-widget-border);
+            border-radius: var(--radius);
+            padding: 16px;
             display: flex;
-            gap: 12px;
             align-items: center;
-            transition: var(--transition);
+            justify-content: space-between;
         }
-        .choice-option:hover {
-            border-color: var(--border-hover);
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
         }
-        .choice-option.selected {
-            border-color: var(--accent);
-            box-shadow: 0 0 0 2px var(--accent-glow);
-        }
-        .choice-letter {
-            width: 28px;
-            height: 28px;
-            border-radius: 999px;
-            background: rgba(255,255,255,0.12);
-            display: inline-flex;
+        .header-icon {
+            font-size: 24px;
+            width: 40px;
+            height: 40px;
+            display: flex;
             align-items: center;
             justify-content: center;
+            background: var(--vscode-editor-inactiveSelectionBackground);
+            border-radius: var(--radius);
+        }
+        .header-text h1 {
+            font-size: 16px;
             font-weight: 600;
+            margin: 0;
+            color: var(--vscode-foreground);
+        }
+        .header-text p {
+            font-size: 12px;
+            color: var(--vscode-descriptionForeground);
+            margin: 2px 0 0 0;
+        }
+        .lang-btn {
+            background: transparent;
+            color: var(--vscode-textLink-foreground);
+            border: 1px solid transparent;
+            border-radius: var(--radius);
+            padding: 4px 8px;
+            cursor: pointer;
             font-size: 12px;
         }
-        .choice-text {
-            flex: 1 1 auto;
-            font-size: 14px;
+        .lang-btn:hover {
+            background: var(--vscode-list-hoverBackground);
+        }
+
+        /* Card */
+        .card {
+            background: var(--vscode-editor-inactiveSelectionBackground);
+            border: 1px solid var(--vscode-widget-border);
+            border-radius: var(--radius);
+            padding: 16px;
+        }
+        .card-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            color: var(--vscode-descriptionForeground);
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+        .reason-box {
+            background: var(--vscode-editor-background);
+            padding: 12px;
+            border-radius: var(--radius);
+            border: 1px solid var(--vscode-widget-border);
+            white-space: pre-wrap;
+            word-break: break-word;
+            font-family: var(--vscode-editor-font-family, monospace);
+            font-size: 13px;
+        }
+
+        /* Choice */
+        .choice-card { display: none; }
+        .choice-card.show { display: block; }
+        .choice-hint { font-size: 12px; color: var(--vscode-descriptionForeground); margin-bottom: 12px; }
+        .choice-list { display: flex; flex-direction: column; gap: 8px; }
+        .choice-option {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            background: var(--vscode-editor-background);
+            border: 1px solid var(--vscode-widget-border);
+            border-radius: var(--radius);
+            cursor: pointer;
+        }
+        .choice-option:hover {
+            background: var(--vscode-list-hoverBackground);
+        }
+        .choice-option.selected {
+            border-color: var(--vscode-focusBorder);
+            background: var(--vscode-list-activeSelectionBackground);
+            color: var(--vscode-list-activeSelectionForeground);
+        }
+        .choice-letter {
+            width: 24px; height: 24px;
+            display: flex; align-items: center; justify-content: center;
+            background: var(--vscode-badge-background);
+            color: var(--vscode-badge-foreground);
+            border-radius: 4px;
+            font-weight: 600; font-size: 12px;
         }
         .choice-actions {
             margin-top: 12px;
             display: flex;
             justify-content: flex-end;
         }
-        .choice-group {
-            margin-bottom: 16px;
+
+        /* Inputs */
+        textarea {
+            width: 100%;
+            min-height: 120px;
+            padding: 10px;
+            background: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            border: 1px solid var(--vscode-input-border);
+            border-radius: var(--radius);
+            font-family: var(--vscode-editor-font-family, monospace);
+            resize: vertical;
         }
-        .choice-group:last-child {
-            margin-bottom: 0;
-        }
-        .choice-prompt {
-            font-size: 13px;
-            color: var(--text-primary);
-            margin-bottom: 10px;
-            font-weight: 600;
-        }
-        
-        .image-section {
-            margin-top: 20px;
-            padding-top: 20px;
-            border-top: 1px solid var(--border);
-        }
-        .image-options {
-            display: flex;
-            gap: 20px;
-            margin-bottom: 14px;
-        }
-        .image-options label {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            cursor: pointer;
-            font-size: 13px;
-            color: var(--text-secondary);
-            transition: var(--transition);
-        }
-        .image-options label:hover {
-            color: var(--text-primary);
-        }
-        .image-options input[type="radio"] {
-            accent-color: var(--accent);
-            width: 16px;
-            height: 16px;
-        }
-        
-        .image-drop-zone {
-            border: 2px dashed var(--border);
-            border-radius: var(--radius-md);
-            padding: 36px;
-            text-align: center;
-            color: var(--text-muted);
-            cursor: pointer;
-            transition: var(--transition);
-            margin-bottom: 14px;
-        }
-        .image-drop-zone:hover {
-            border-color: var(--accent);
-            color: var(--text-secondary);
-            background: rgba(99, 102, 241, 0.05);
-        }
-        .image-drop-zone.dragover {
-            border-color: var(--accent);
-            background: rgba(99, 102, 241, 0.1);
-        }
-        .image-drop-zone .icon {
-            font-size: 32px;
-            margin-bottom: 8px;
-        }
-        
-        .image-preview {
-            max-width: 100%;
-            max-height: 200px;
-            border-radius: var(--radius-md);
-            display: none;
-            margin-bottom: 14px;
-            border: 1px solid var(--border);
-        }
-        .image-preview.show {
-            display: block;
+        textarea:focus {
+            outline: 1px solid var(--vscode-focusBorder);
+            border-color: var(--vscode-focusBorder);
         }
 
+        /* Images */
+        .image-section { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--vscode-widget-border); }
+        .input-label {
+             display: block;
+            font-size: 11px;
+            text-transform: uppercase;
+            color: var(--vscode-descriptionForeground);
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+        .image-drop-zone {
+            border: 2px dashed var(--vscode-widget-border);
+            border-radius: var(--radius);
+            padding: 24px;
+            text-align: center;
+            cursor: pointer;
+            color: var(--vscode-descriptionForeground);
+            transition: all 0.2s;
+            margin-bottom: 12px;
+        }
+        .image-drop-zone:hover, .image-drop-zone.dragover {
+            border-color: var(--vscode-focusBorder);
+            background: var(--vscode-list-hoverBackground);
+        }
         .image-preview-grid {
             display: none;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 10px;
-            margin-bottom: 14px;
-        }
-	        .image-preview-grid.show {
-	            display: grid;
-	        }
-	        .image-preview-item {
-	            position: relative;
-	            width: 100%;
-	            height: 70px;
-	            border-radius: var(--radius-sm);
-	            overflow: hidden;
-	            border: 1px solid var(--border);
-	            background: var(--bg-elevated);
-	        }
-	        .image-preview-item img {
-	            width: 100%;
-	            height: 70px;
-	            object-fit: cover;
-	            display: block;
-	        }
-	        .image-remove {
-	            position: absolute;
-	            top: 6px;
-	            right: 6px;
-	            width: 22px;
-	            height: 22px;
-	            border: 1px solid rgba(255,255,255,0.15);
-	            background: rgba(15,15,15,0.7);
-	            color: #fff;
-	            border-radius: 999px;
-	            cursor: pointer;
-	            display: inline-flex;
-	            align-items: center;
-	            justify-content: center;
-	            line-height: 1;
-	            transition: var(--transition);
-	        }
-	        .image-remove:hover {
-	            background: rgba(239,68,68,0.85);
-	            border-color: rgba(239,68,68,0.9);
-	        }
-        
-        .btn {
-            padding: 14px 24px;
-            border: none;
-            border-radius: var(--radius-md);
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 500;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
+            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
             gap: 8px;
-            transition: var(--transition);
-            font-family: inherit;
+            margin-bottom: 12px;
         }
-        .btn:active { transform: scale(0.97); }
-        
-        .btn-success {
-            background: var(--success);
-            color: #fff;
-            flex: 1;
-            box-shadow: 0 2px 12px var(--success-glow);
+        .image-preview-grid.show { display: grid; }
+        .image-preview-item {
+            position: relative;
+            height: 80px;
+            border-radius: var(--radius);
+            overflow: hidden;
+            border: 1px solid var(--vscode-widget-border);
         }
-        .btn-success:hover {
-            filter: brightness(1.1);
-            box-shadow: 0 4px 20px var(--success-glow);
+        .image-preview-item img {
+            width: 100%; height: 100%; object-fit: cover;
         }
-        
-        .btn-ghost {
-            background: var(--bg-elevated);
-            color: var(--text-secondary);
-            border: 1px solid var(--border);
-            flex: 1;
+        .image-remove {
+            position: absolute; top: 4px; right: 4px;
+            width: 20px; height: 20px;
+            background: rgba(0,0,0,0.6); color: white;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer;
+            font-size: 12px;
         }
-        .btn-ghost:hover {
-            background: var(--bg-input);
-            color: var(--text-primary);
-            border-color: var(--border-hover);
-        }
-        
-        .btn-outline {
-            background: transparent;
-            border: 1px solid var(--border);
-            color: var(--text-secondary);
-            padding: 10px 16px;
-        }
-        .btn-outline:hover {
-            background: var(--bg-elevated);
-            color: var(--text-primary);
-        }
-        
+        .image-remove:hover { background: var(--vscode-errorForeground); }
+
+        /* Buttons */
         .btn-row {
             display: flex;
             gap: 12px;
-            margin-top: 20px;
+            margin-top: 10px;
         }
-        
+        .btn {
+            padding: 10px 16px;
+            border-radius: var(--radius);
+            border: none;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 13px;
+            flex: 1;
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+        }
+        .btn-success {
+            background: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+        }
+        .btn-success:hover { background: var(--vscode-button-hoverBackground); }
+        .btn-ghost {
+            background: transparent;
+            color: var(--vscode-button-secondaryForeground);
+            border: 1px solid var(--vscode-button-border, transparent);
+        }
+        .btn-ghost:hover {
+            background: var(--vscode-list-hoverBackground);
+        }
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--vscode-widget-border);
+            color: var(--vscode-foreground);
+            padding: 6px 12px;
+            border-radius: var(--radius);
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .btn-outline:hover { background: var(--vscode-list-hoverBackground); }
+
+        /* Shortcuts */
         .shortcuts {
             text-align: center;
             font-size: 11px;
-            color: var(--text-muted);
+            color: var(--vscode-descriptionForeground);
             margin-top: 20px;
-            padding: 12px;
-            background: var(--bg-card);
-            border-radius: var(--radius-md);
-            border: 1px solid var(--border);
         }
         .shortcuts kbd {
-            background: var(--bg-elevated);
-            padding: 3px 8px;
-            border-radius: 4px;
-            border: 1px solid var(--border);
-            font-family: 'SF Mono', Monaco, monospace;
-            font-size: 10px;
+            background: var(--vscode-keybindingLabel-background);
+            color: var(--vscode-keybindingLabel-foreground);
+            border: 1px solid var(--vscode-keybindingLabel-border);
+            border-bottom-color: var(--vscode-keybindingLabel-bottomBorder);
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: var(--vscode-editor-font-family);
             margin: 0 2px;
         }
         
@@ -11199,13 +11087,13 @@ function getDialogHtml(
             bottom: 24px;
             left: 50%;
             transform: translateX(-50%);
-            background: var(--bg-elevated);
-            color: var(--text-primary);
+            background: var(--vscode-editor-background);
+            color: var(--vscode-foreground);
             padding: 12px 24px;
-            border-radius: var(--radius-md);
+            border-radius: var(--radius);
             font-size: 13px;
-            box-shadow: var(--shadow-md);
-            border: 1px solid var(--success);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            border: 1px solid var(--vscode-widget-border);
             z-index: 1000;
             animation: toastIn 0.3s ease;
         }
@@ -11215,30 +11103,30 @@ function getDialogHtml(
         }
     </style>
 </head>
-	<body>
-	    <div class="container">
-	        <div class="header">
-	            <div class="header-left">
-	                <div class="header-icon">${isContinue ? '💬' : '📝'}</div>
-	                <div class="header-text">
-	                    <h1 id="panelTitle"></h1>
-	                    <p id="panelSubtitle"></p>
-	                </div>
-	            </div>
-	            <button class="lang-btn" id="langBtn" type="button"></button>
-	        </div>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="header-left">
+                <div class="header-icon">${isContinue ? '💬' : '📝'}</div>
+                <div class="header-text">
+                    <h1 id="panelTitle"></h1>
+                    <p id="panelSubtitle"></p>
+                </div>
+            </div>
+            <button class="lang-btn" id="langBtn" type="button"></button>
+        </div>
 
-	        <div class="card">
-	            <div class="card-label" id="reasonLabel"></div>
-	            <div class="reason-box" id="reasonText"></div>
-	        </div>
+        <div class="card">
+            <div class="card-label" id="reasonLabel"></div>
+            <div class="reason-box" id="reasonText"></div>
+        </div>
 
         <div class="card choice-card" id="choiceCard">
             <div class="card-label" id="choiceLabel"></div>
             <div class="choice-hint" id="choiceHint"></div>
-            <div id="choiceContainer"></div>
+            <div class="choice-list" id="choiceContainer"></div>
             <div class="choice-actions">
-                <button class="btn btn-outline" id="choiceClearBtn" type="button"></button>
+                <button class="btn-outline" id="choiceClearBtn" type="button"></button>
             </div>
         </div>
 
@@ -11254,19 +11142,19 @@ function getDialogHtml(
                     <div id="dropZoneHint"></div>
                 </div>
                 <div id="imagePreviewGrid" class="image-preview-grid"></div>
-                <button class="btn btn-outline" id="chooseImageBtn" type="button"></button>
+                <button class="btn-outline" id="chooseImageBtn" type="button"></button>
                 <input type="file" id="fileInput" accept="image/*" multiple style="display:none" />
             </div>
             ` : ''}
         </div>
 
-	        <div class="btn-row">
-	            <button class="btn btn-success" id="primaryBtn" type="button"></button>
-	            <button class="btn btn-ghost" id="secondaryBtn" type="button"></button>
-	        </div>
+        <div class="btn-row">
+            <button class="btn btn-success" id="primaryBtn" type="button"></button>
+            <button class="btn btn-ghost" id="secondaryBtn" type="button"></button>
+        </div>
 
-	        <div class="shortcuts" id="shortcuts"></div>
-	    </div>
+        <div class="shortcuts" id="shortcuts"></div>
+    </div>
 
 	    <script nonce="${nonce}">
         const vscode = acquireVsCodeApi();
@@ -12166,43 +12054,56 @@ class SidebarProvider implements vscode.WebviewViewProvider {
     <title>WindsurfAutoMcp</title>
     <style>
         :root {
-            --bg: #0c0f10;
-            --bg-card: #14191c;
-            --bg-card-strong: #1d2429;
-            --text: #f5f2e9;
-            --muted: #9aa4a9;
-            --accent: #20c997;
-            --accent-weak: rgba(32, 201, 151, 0.25);
-            --accent-warm: #f97316;
-            --border: rgba(255, 255, 255, 0.08);
-            --shadow: 0 18px 40px rgba(0,0,0,0.4);
+            --radius: 4px;
+            --font-family: var(--vscode-font-family, "Segoe UI", sans-serif);
         }
-        * { box-sizing: border-box; }
         body {
             margin: 0;
-            padding: 14px;
-            font-family: "Trebuchet MS", "Segoe UI Variable Display", "Segoe UI", sans-serif;
-            color: var(--text);
-            background:
-                radial-gradient(600px 300px at 10% -10%, rgba(32,201,151,0.22), transparent 60%),
-                radial-gradient(500px 260px at 100% 0%, rgba(249,115,22,0.16), transparent 55%),
-                var(--bg);
+            padding: 20px;
+            color: var(--vscode-foreground);
+            font-family: var(--font-family);
+            font-size: var(--vscode-font-size);
+            background-color: var(--vscode-editor-background);
+            overflow-x: hidden;
         }
-        .wrap {
+        * { box-sizing: border-box; }
+        
+        /* Layout */
+        .container {
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            gap: 20px;
+            max-width: 100%;
+            margin: 0 auto;
         }
+
+        /* Typography */
+        h2 {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: var(--vscode-descriptionForeground);
+            margin: 0 0 10px 0;
+            font-weight: 600;
+        }
+
+        /* Hero Section */
         .hero {
+            background: var(--vscode-sideBar-background);
+            border: 1px solid var(--vscode-widget-border);
+            border-radius: 8px;
+            padding: 16px;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            gap: 12px;
-            padding: 16px;
-            border-radius: 16px;
-            background: linear-gradient(140deg, rgba(32,201,151,0.2), rgba(20,25,28,0.9));
-            border: 1px solid var(--border);
-            box-shadow: var(--shadow);
+            position: relative;
+            overflow: hidden;
+        }
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; width: 4px; height: 100%;
+            background: var(--vscode-activityBarBadge-background);
         }
         .brand {
             display: flex;
@@ -12210,383 +12111,389 @@ class SidebarProvider implements vscode.WebviewViewProvider {
             gap: 12px;
         }
         .logo {
-            width: 42px;
-            height: 42px;
-            border-radius: 12px;
+            width: 36px;
+            height: 36px;
+            background: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            border-radius: 8px;
             display: grid;
             place-items: center;
-            font-weight: 700;
-            background: rgba(32,201,151,0.18);
-            border: 1px solid var(--accent-weak);
-            color: var(--accent);
-            letter-spacing: 0.08em;
+            font-weight: bold;
+            font-size: 18px;
         }
-        .title {
-            font-size: 15px;
-            font-weight: 700;
-        }
-        .subtitle {
-            font-size: 11px;
-            color: var(--muted);
-            margin-top: 4px;
-        }
-        .status-pill {
-            padding: 6px 12px;
-            border-radius: 999px;
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 0.1em;
-            border: 1px solid var(--border);
-            color: var(--muted);
-        }
-        .status-pill.on {
-            color: var(--accent);
-            border-color: var(--accent-weak);
-            box-shadow: 0 0 16px rgba(32,201,151,0.25);
-        }
-        .card {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 14px;
-            padding: 14px;
+        .brand-info {
             display: flex;
             flex-direction: column;
-            gap: 10px;
         }
-        .card-title {
+        .brand-title {
+            font-weight: 600;
+            font-size: 15px;
+        }
+        .brand-status {
+            font-size: 12px;
+            color: var(--vscode-descriptionForeground);
+            margin-top: 2px;
+        }
+        .status-badge {
             font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 0.14em;
-            color: var(--muted);
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-weight: 600;
+            background: var(--vscode-badge-background);
+            color: var(--vscode-badge-foreground);
         }
+
+        /* Cards & Sections */
+        .section {
+            display: flex;
+            flex-direction: column;
+        }
+        .card {
+            background: var(--vscode-editor-inactiveSelectionBackground);
+            border-radius: var(--radius);
+            padding: 1px;
+        }
+        
+        /* Buttons */
+        .btn-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+        .btn-group.full { grid-template-columns: 1fr; }
+        
+        button {
+            border: none;
+            padding: 8px 12px;
+            border-radius: var(--radius);
+            font-family: inherit;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.2s;
+            outline-offset: 2px;
+        }
+        button:hover { opacity: 0.9; }
+        button:focus { outline: 1px solid var(--vscode-focusBorder); }
+        
+        .btn-primary {
+            background: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+        }
+        .btn-secondary {
+            background: var(--vscode-button-secondaryBackground);
+            color: var(--vscode-button-secondaryForeground);
+        }
+        .btn-danger {
+            background: var(--vscode-errorForeground);
+            color: var(--vscode-editor-background);
+        }
+        .btn-ghost {
+            background: transparent;
+            color: var(--vscode-textLink-foreground);
+            border: 1px solid transparent;
+        }
+        .btn-ghost:hover {
+            background: var(--vscode-list-hoverBackground);
+        }
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--vscode-button-border, var(--vscode-widget-border));
+            color: var(--vscode-foreground);
+        }
+        .btn-outline:hover {
+            background: var(--vscode-list-hoverBackground);
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+        }
+        .stat-item {
+            background: var(--vscode-sideBar-background);
+            border: 1px solid var(--vscode-widget-border);
+            border-radius: var(--radius);
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            min-width: 0; /* Prevent overflow */
+        }
+        .stat-val {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--vscode-foreground);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .stat-lbl {
+            font-size: 11px;
+            color: var(--vscode-descriptionForeground);
+            margin-top: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        /* Form Elements */
+        .form-group {
+            margin-bottom: 12px;
+        }
+        label {
+            display: block;
+            font-size: 12px;
+            margin-bottom: 6px;
+            color: var(--vscode-foreground);
+        }
+        input[type="text"], input[type="number"] {
+            width: 100%;
+            padding: 8px;
+            background: var(--vscode-input-background);
+            color: var(--vscode-input-foreground);
+            border: 1px solid var(--vscode-input-border);
+            border-radius: var(--radius);
+            font-family: inherit;
+        }
+        input:focus {
+            border-color: var(--vscode-focusBorder);
+            outline: none;
+        }
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 12px 0;
+            cursor: pointer;
+        }
+        
+        /* Panels List */
         .panel-list {
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 6px;
         }
-        .panel-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
+        .panel-btn {
+            background: var(--vscode-sideBar-background);
+            border: 1px solid var(--vscode-widget-border);
+            color: var(--vscode-foreground);
             padding: 10px 12px;
-            border-radius: 12px;
-            background: var(--bg-card-strong);
-            border: 1px solid rgba(255,255,255,0.04);
-        }
-        .panel-name {
-            font-size: 13px;
-        }
-        .panel-open {
-            border: 1px solid var(--accent-weak);
-            background: rgba(32,201,151,0.12);
-            color: var(--accent);
-            padding: 6px 10px;
-            border-radius: 999px;
-            font-size: 11px;
-            cursor: pointer;
-        }
-        .stats-subtitle {
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 0.12em;
-            color: var(--muted);
-        }
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 8px;
-        }
-        .stat {
-            background: var(--bg-card-strong);
-            border: 1px solid rgba(255,255,255,0.04);
-            border-radius: 10px;
-            padding: 8px;
-        }
-        .stat-label {
-            font-size: 10px;
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            color: var(--muted);
-        }
-        .stat-value {
-            font-size: 14px;
-            font-weight: 700;
-            margin-top: 2px;
-        }
-        .stats-divider {
-            height: 1px;
-            background: var(--border);
-            margin: 8px 0;
-        }
-        .row {
-            display: flex;
-            align-items: center;
+            border-radius: var(--radius);
+            text-align: left;
             justify-content: space-between;
-            gap: 8px;
         }
-        .row label {
-            font-size: 12px;
-            color: var(--muted);
+        .panel-btn:hover {
+            background: var(--vscode-list-hoverBackground);
+            border-color: var(--vscode-focusBorder);
         }
-        .input {
-            width: 100%;
-            padding: 8px 10px;
-            border-radius: 10px;
-            border: 1px solid var(--border);
-            background: rgba(12,15,16,0.6);
-            color: var(--text);
-            font-size: 12px;
+        .panel-btn::after {
+            content: '→';
+            font-family: monospace;
+            opacity: 0.5;
         }
-        .input:focus { outline: none; border-color: var(--accent-weak); }
-        .actions {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
+
+        .divider {
+            height: 1px;
+            background: var(--vscode-widget-border);
+            margin: 16px 0;
         }
-        button.primary {
-            border: none;
-            background: linear-gradient(135deg, var(--accent), #1aa37c);
-            color: #041312;
-            padding: 8px 12px;
-            border-radius: 12px;
-            font-size: 12px;
-            font-weight: 600;
-            cursor: pointer;
-        }
-        button.ghost {
-            border: 1px solid var(--border);
-            background: transparent;
-            color: var(--text);
-            padding: 8px 12px;
-            border-radius: 12px;
-            font-size: 12px;
-            cursor: pointer;
-        }
-        button.warn {
-            border: 1px solid rgba(249,115,22,0.3);
-            color: var(--accent-warm);
-            background: rgba(249,115,22,0.12);
-        }
-        .status-line {
-            font-size: 11px;
-            color: var(--muted);
-        }
-        .toggle {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 12px;
-        }
-        .toggle input { accent-color: var(--accent); }
     </style>
 </head>
 <body>
-    <div class="wrap">
+    <div class="container">
+        <!-- Hero Status -->
         <div class="hero">
             <div class="brand">
-                <div class="logo">WS</div>
-                <div>
-                    <div class="title">WindsurfAutoMcp</div>
-                    <div class="subtitle" id="statusText">${isRunning ? tr('sidebar.running', {}, lang) : tr('sidebar.stopped', {}, lang)} • :${isRunning ? currentPort : configuredPort}</div>
+                <div class="logo">W</div>
+                <div class="brand-info">
+                    <div class="brand-title">Windsurf MCP</div>
+                    <div class="brand-status" id="statusText">
+                        ${isRunning ? tr('sidebar.running', {}, lang) : tr('sidebar.stopped', {}, lang)} • :${isRunning ? currentPort : configuredPort}
+                    </div>
                 </div>
             </div>
-            <div class="status-pill ${isRunning ? 'on' : 'off'}" id="statusPill">${isRunning ? tr('sidebar.running', {}, lang) : tr('sidebar.stopped', {}, lang)}</div>
+            <div class="status-badge" id="statusPill" style="background: ${isRunning ? 'var(--vscode-testing-iconPassed)' : 'var(--vscode-testing-iconFailed)'}; color: #fff;">
+                ${isRunning ? tr('sidebar.running', {}, lang) : tr('sidebar.stopped', {}, lang)}
+            </div>
         </div>
 
-        <div class="card">
-            <div class="card-title">${tr('sidebar.panelsTitle', {}, lang)}</div>
-	            <div class="panel-list">
-	                <div class="panel-row">
-	                    <div class="panel-name">${tr('sidebar.panelOverview', {}, lang)}</div>
-	                    <button class="panel-open" data-action="openOverviewPanel">${tr('sidebar.openPanel', {}, lang)}</button>
-	                </div>
-	                <div class="panel-row">
-	                    <div class="panel-name">${tr('sidebar.panelPrd', {}, lang)}</div>
-	                    <button class="panel-open" data-action="openPrdPanel">${tr('sidebar.openPanel', {}, lang)}</button>
-	                </div>
-	                <div class="panel-row">
-	                    <div class="panel-name">${tr('sidebar.panelPlan', {}, lang)}</div>
-	                    <button class="panel-open" data-action="openPlanPanel">${tr('sidebar.openPanel', {}, lang)}</button>
-	                </div>
-		                <div class="panel-row">
-		                    <div class="panel-name">${tr('sidebar.panelMemory', {}, lang)}</div>
-		                    <button class="panel-open" data-action="openMemoryPanel">${tr('sidebar.openPanel', {}, lang)}</button>
-		                </div>
-		                <div class="panel-row">
-		                    <div class="panel-name">${tr('sidebar.panelWam', {}, lang)}</div>
-		                    <button class="panel-open" data-action="openWamPanel">${tr('sidebar.openPanel', {}, lang)}</button>
-		                </div>
-		                <div class="panel-row">
-		                    <div class="panel-name">${tr('sidebar.panelAudit', {}, lang)}</div>
-		                    <button class="panel-open" data-action="openAuditPanel">${tr('sidebar.openPanel', {}, lang)}</button>
-		                </div>
-		                <div class="panel-row">
-		                    <div class="panel-name">${tr('sidebar.panelWalkthrough', {}, lang)}</div>
-		                    <button class="panel-open" data-action="openWalkthroughPanel">${tr('sidebar.openPanel', {}, lang)}</button>
-		                </div>
-	            </div>
-	        </div>
+        <!-- System Controls -->
+        <div class="section">
+            <h2>${tr('sidebar.systemTitle', {}, lang)}</h2>
+            <div class="btn-group">
+                <button class="btn-primary" data-action="startServer" style="display: ${isRunning ? 'none' : 'flex'}">${tr('sidebar.start', {}, lang)}</button>
+                <button class="btn-danger" data-action="stopServer" style="display: ${isRunning ? 'flex' : 'none'}">${tr('sidebar.stop', {}, lang)}</button>
+                <button class="btn-secondary" data-action="restartServer">${tr('sidebar.restart', {}, lang)}</button>
+            </div>
+            <div class="btn-group" style="margin-top: 8px;">
+                 <button class="btn-outline" data-action="configWindsurf">${tr('sidebar.configureWindsurf', {}, lang)}</button>
+                 <button class="btn-outline" data-action="installHooks">${tr('sidebar.installHooks', {}, lang)}</button>
+            </div>
+             <div style="margin-top: 8px;">
+                 <button class="btn-secondary" style="width: 100%; border: 1px solid var(--vscode-editorWarning-foreground); color: var(--vscode-editorWarning-foreground); background: transparent;" data-action="openContinueDialog">${tr('sidebar.openDialogShort', {}, lang)}</button>
+            </div>
+        </div>
 
-        <div class="card">
-            <div class="card-title">${tr('sidebar.statsTitle', {}, lang)}</div>
-            <div class="stats-subtitle">${tr('panel.statsGlobal', {}, lang)}</div>
+        <!-- Panels -->
+        <div class="section">
+            <h2>${tr('sidebar.panelsTitle', {}, lang)}</h2>
+            <div class="panel-list">
+                <button class="panel-btn" data-action="openOverviewPanel">${tr('sidebar.panelOverview', {}, lang)}</button>
+                <button class="panel-btn" data-action="openPrdPanel">${tr('sidebar.panelPrd', {}, lang)}</button>
+                <button class="panel-btn" data-action="openPlanPanel">${tr('sidebar.panelPlan', {}, lang)}</button>
+                <button class="panel-btn" data-action="openMemoryPanel">${tr('sidebar.panelMemory', {}, lang)}</button>
+                <button class="panel-btn" data-action="openWamPanel">${tr('sidebar.panelWam', {}, lang)}</button>
+                <button class="panel-btn" data-action="openAuditPanel">${tr('sidebar.panelAudit', {}, lang)}</button>
+                <button class="panel-btn" data-action="openWalkthroughPanel">${tr('sidebar.panelWalkthrough', {}, lang)}</button>
+            </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="section">
+            <h2>${tr('sidebar.statsTitle', {}, lang)}</h2>
             <div class="stats-grid">
-                <div class="stat">
-                    <div class="stat-label">${tr('sidebar.totalCalls', {}, lang)}</div>
-                    <div class="stat-value" id="statTotalCalls">${stats.totalCalls}</div>
+                <div class="stat-item">
+                    <div class="stat-val" id="statTotalCalls">${stats.totalCalls}</div>
+                    <div class="stat-lbl">${tr('sidebar.totalCalls', {}, lang)}</div>
                 </div>
-                <div class="stat">
-                    <div class="stat-label">${tr('sidebar.statAskContinue', {}, lang)}</div>
-                    <div class="stat-value" id="statAskContinue">${stats.askContinueCalls}</div>
+                <div class="stat-item">
+                    <div class="stat-val" id="statAskContinue">${stats.askContinueCalls}</div>
+                    <div class="stat-lbl">${tr('sidebar.statAskContinue', {}, lang)}</div>
                 </div>
-                <div class="stat">
-                    <div class="stat-label">${tr('sidebar.statAskUser', {}, lang)}</div>
-                    <div class="stat-value" id="statAskUser">${stats.askUserCalls}</div>
+                 <div class="stat-item">
+                    <div class="stat-val" id="statAskUser">${stats.askUserCalls}</div>
+                    <div class="stat-lbl">${tr('sidebar.statAskUser', {}, lang)}</div>
                 </div>
-                <div class="stat">
-                    <div class="stat-label">${tr('sidebar.statAskQuestion', {}, lang)}</div>
-                    <div class="stat-value" id="statAskQuestion">${stats.askQuestionCalls}</div>
+                 <div class="stat-item">
+                    <div class="stat-val" id="statAskQuestion">${stats.askQuestionCalls}</div>
+                    <div class="stat-lbl">${tr('sidebar.statAskQuestion', {}, lang)}</div>
                 </div>
-                <div class="stat">
-                    <div class="stat-label">${tr('sidebar.statSetPrd', {}, lang)}</div>
-                    <div class="stat-value" id="statSetPrd">${stats.setPrdCalls}</div>
+                 <div class="stat-item">
+                    <div class="stat-val" id="statSetPrd">${stats.setPrdCalls}</div>
+                    <div class="stat-lbl">${tr('sidebar.statSetPrd', {}, lang)}</div>
                 </div>
-                <div class="stat">
-                    <div class="stat-label">${tr('sidebar.statUpdateOverview', {}, lang)}</div>
-                    <div class="stat-value" id="statUpdateOverview">${stats.updateOverviewCalls}</div>
+                 <div class="stat-item">
+                    <div class="stat-val" id="statUpdateOverview">${stats.updateOverviewCalls}</div>
+                    <div class="stat-lbl">${tr('sidebar.statUpdateOverview', {}, lang)}</div>
                 </div>
-                <div class="stat">
-                    <div class="stat-label">${tr('sidebar.statGenerateOverview', {}, lang)}</div>
-                    <div class="stat-value" id="statGenerateOverview">${stats.generateOverviewCalls}</div>
+                 <div class="stat-item">
+                    <div class="stat-val" id="statGenerateOverview">${stats.generateOverviewCalls}</div>
+                    <div class="stat-lbl">${tr('sidebar.statGenerateOverview', {}, lang)}</div>
                 </div>
-                <div class="stat">
-                    <div class="stat-label">${tr('sidebar.statUpdatePlan', {}, lang)}</div>
-                    <div class="stat-value" id="statUpdatePlan">${stats.updatePlanCalls}</div>
+                <div class="stat-item">
+                    <div class="stat-val" id="statUpdatePlan">${stats.updatePlanCalls}</div>
+                    <div class="stat-lbl">${tr('sidebar.statUpdatePlan', {}, lang)}</div>
                 </div>
-                <div class="stat">
-                    <div class="stat-label">${tr('sidebar.statPlanChangeRequest', {}, lang)}</div>
-                    <div class="stat-value" id="statPlanChangeRequest">${stats.planChangeRequestCalls}</div>
+                <div class="stat-item">
+                    <div class="stat-val" id="statPlanChangeRequest">${stats.planChangeRequestCalls}</div>
+                    <div class="stat-lbl">${tr('sidebar.statPlanChangeRequest', {}, lang)}</div>
                 </div>
-                <div class="stat">
-                    <div class="stat-label">${tr('sidebar.statUpdateWalkthrough', {}, lang)}</div>
-                    <div class="stat-value" id="statUpdateWalkthrough">${stats.updateWalkthroughCalls}</div>
+                <div class="stat-item">
+                    <div class="stat-val" id="statUpdateWalkthrough">${stats.updateWalkthroughCalls}</div>
+                    <div class="stat-lbl">${tr('sidebar.statUpdateWalkthrough', {}, lang)}</div>
                 </div>
-                <div class="stat">
-                    <div class="stat-label">${tr('sidebar.statRagSearch', {}, lang)}</div>
-                    <div class="stat-value" id="statRagSearch">${stats.ragSearchCalls}</div>
+                <div class="stat-item">
+                    <div class="stat-val" id="statRagSearch">${stats.ragSearchCalls}</div>
+                    <div class="stat-lbl">${tr('sidebar.statRagSearch', {}, lang)}</div>
                 </div>
-                <div class="stat">
-                    <div class="stat-label">${tr('sidebar.statMemorySearch', {}, lang)}</div>
-                    <div class="stat-value" id="statMemorySearch">${stats.memorySearchCalls}</div>
+                <div class="stat-item">
+                    <div class="stat-val" id="statMemorySearch">${stats.memorySearchCalls}</div>
+                    <div class="stat-lbl">${tr('sidebar.statMemorySearch', {}, lang)}</div>
                 </div>
-                <div class="stat">
-                    <div class="stat-label">${tr('sidebar.statMemoryHygiene', {}, lang)}</div>
-                    <div class="stat-value" id="statMemoryHygiene">${stats.memoryHygieneCalls}</div>
+                <div class="stat-item">
+                    <div class="stat-val" id="statMemoryHygiene">${stats.memoryHygieneCalls}</div>
+                    <div class="stat-lbl">${tr('sidebar.statMemoryHygiene', {}, lang)}</div>
                 </div>
-                <div class="stat">
-                    <div class="stat-label">${tr('sidebar.statRecordLesson', {}, lang)}</div>
-                    <div class="stat-value" id="statRecordLesson">${stats.recordLessonCalls}</div>
+                <div class="stat-item">
+                    <div class="stat-val" id="statRecordLesson">${stats.recordLessonCalls}</div>
+                    <div class="stat-lbl">${tr('sidebar.statRecordLesson', {}, lang)}</div>
                 </div>
-                <div class="stat">
-                    <div class="stat-label">${tr('sidebar.statGetProjectStatus', {}, lang)}</div>
-                    <div class="stat-value" id="statGetProjectStatus">${stats.getProjectStatusCalls}</div>
+                <div class="stat-item">
+                    <div class="stat-val" id="statGetProjectStatus">${stats.getProjectStatusCalls}</div>
+                    <div class="stat-lbl">${tr('sidebar.statGetProjectStatus', {}, lang)}</div>
                 </div>
-                <div class="stat">
-                    <div class="stat-label">${tr('sidebar.statPreflight', {}, lang)}</div>
-                    <div class="stat-value" id="statPreflight">${stats.preflightCalls}</div>
+                <div class="stat-item">
+                    <div class="stat-val" id="statPreflight">${stats.preflightCalls}</div>
+                    <div class="stat-lbl">${tr('sidebar.statPreflight', {}, lang)}</div>
                 </div>
-                <div class="stat">
-                    <div class="stat-label">${tr('sidebar.statSaveMemory', {}, lang)}</div>
-                    <div class="stat-value" id="statSaveMemory">${stats.saveMemoryCalls}</div>
+                <div class="stat-item">
+                    <div class="stat-val" id="statSaveMemory">${stats.saveMemoryCalls}</div>
+                    <div class="stat-lbl">${tr('sidebar.statSaveMemory', {}, lang)}</div>
                 </div>
-                <div class="stat">
-                    <div class="stat-label">${tr('sidebar.statGetMemory', {}, lang)}</div>
-                    <div class="stat-value" id="statGetMemory">${stats.getMemoryCalls}</div>
+                <div class="stat-item">
+                    <div class="stat-val" id="statGetMemory">${stats.getMemoryCalls}</div>
+                    <div class="stat-lbl">${tr('sidebar.statGetMemory', {}, lang)}</div>
                 </div>
-	                <div class="stat">
-	                    <div class="stat-label">${tr('sidebar.statListMemory', {}, lang)}</div>
-	                    <div class="stat-value" id="statListMemory">${stats.listMemoryCalls}</div>
-	                </div>
-	            </div>
-            <div class="stats-divider"></div>
-            <div class="stats-subtitle">${tr('panel.statsProject', {}, lang)}</div>
+                <div class="stat-item">
+                    <div class="stat-val" id="statListMemory">${stats.listMemoryCalls}</div>
+                    <div class="stat-lbl">${tr('sidebar.statListMemory', {}, lang)}</div>
+                </div>
+            </div>
+            
+            <div class="divider"></div>
+            
             <div class="stats-grid">
-                <div class="stat">
-                    <div class="stat-label">${tr('sidebar.trackerStatsPrd', {}, lang)}</div>
-                    <div class="stat-value" id="statPrdUpdates">${trackerSnapshot.stats.prdUpdates}</div>
+                <div class="stat-item">
+                     <div class="stat-val" id="statPrdUpdates">${trackerSnapshot.stats.prdUpdates}</div>
+                     <div class="stat-lbl">${tr('sidebar.trackerStatsPrd', {}, lang)}</div>
                 </div>
-                <div class="stat">
-                    <div class="stat-label">${tr('sidebar.trackerStatsApprovals', {}, lang)}</div>
-                    <div class="stat-value" id="statPrdApprovals">${trackerSnapshot.stats.prdApprovals}</div>
+                 <div class="stat-item">
+                     <div class="stat-val" id="statPrdApprovals">${trackerSnapshot.stats.prdApprovals}</div>
+                     <div class="stat-lbl">${tr('sidebar.trackerStatsApprovals', {}, lang)}</div>
                 </div>
-                <div class="stat">
-                    <div class="stat-label">${tr('sidebar.trackerStatsOverview', {}, lang)}</div>
-                    <div class="stat-value" id="statOverviewUpdates">${trackerSnapshot.stats.overviewUpdates}</div>
+                 <div class="stat-item">
+                     <div class="stat-val" id="statOverviewUpdates">${trackerSnapshot.stats.overviewUpdates}</div>
+                     <div class="stat-lbl">${tr('sidebar.trackerStatsOverview', {}, lang)}</div>
                 </div>
-                <div class="stat">
-                    <div class="stat-label">${tr('sidebar.trackerStatsPlan', {}, lang)}</div>
-                    <div class="stat-value" id="statPlanUpdates">${trackerSnapshot.stats.planUpdates}</div>
+                 <div class="stat-item">
+                     <div class="stat-val" id="statPlanUpdates">${trackerSnapshot.stats.planUpdates}</div>
+                     <div class="stat-lbl">${tr('sidebar.trackerStatsPlan', {}, lang)}</div>
                 </div>
-                <div class="stat">
-                    <div class="stat-label">${tr('sidebar.trackerStatsWalkthrough', {}, lang)}</div>
-                    <div class="stat-value" id="statWalkthroughUpdates">${trackerSnapshot.stats.walkthroughUpdates}</div>
+                 <div class="stat-item">
+                     <div class="stat-val" id="statWalkthroughUpdates">${trackerSnapshot.stats.walkthroughUpdates}</div>
+                     <div class="stat-lbl">${tr('sidebar.trackerStatsWalkthrough', {}, lang)}</div>
                 </div>
             </div>
         </div>
-
-        <div class="card">
-            <div class="card-title">${tr('sidebar.systemTitle', {}, lang)}</div>
-            <div class="status-line">${tr('sidebar.configStatus', {}, lang)}: ${isConfigured ? tr('sidebar.configStatusConfigured', {}, lang) : tr('sidebar.configStatusMissing', {}, lang)}</div>
-            <div class="actions">
-                <button class="primary" data-action="startServer">${tr('sidebar.start', {}, lang)}</button>
-                <button class="ghost" data-action="stopServer">${tr('sidebar.stop', {}, lang)}</button>
-                <button class="ghost" data-action="restartServer">${tr('sidebar.restart', {}, lang)}</button>
-            </div>
-            <div class="actions">
-                <button class="primary" data-action="configWindsurf">${tr('sidebar.configureWindsurf', {}, lang)}</button>
-                <button class="ghost" data-action="installHooks">${tr('sidebar.installHooks', {}, lang)}</button>
-            </div>
-            <div class="actions">
-                <button class="warn" data-action="openContinueDialog">${tr('sidebar.openDialogShort', {}, lang)}</button>
-            </div>
+        
+        <!-- Cleanup -->
+        <div class="section">
+             <h2>${tr('sidebar.clearTitle', {}, lang)}</h2>
+             <div class="btn-group">
+                <button class="btn-ghost" data-action="clearOverview">${tr('sidebar.clearOverview', {}, lang)}</button>
+                <button class="btn-ghost" data-action="clearPrd">${tr('sidebar.clearPrd', {}, lang)}</button>
+                <button class="btn-ghost" data-action="clearPlan">${tr('sidebar.clearPlan', {}, lang)}</button>
+                <button class="btn-ghost" data-action="clearWalkthrough">${tr('sidebar.clearWalkthrough', {}, lang)}</button>
+                <button class="btn-ghost" data-action="clearAudit">${tr('sidebar.clearAudit', {}, lang)}</button>
+                <button class="btn-ghost" style="color: var(--vscode-errorForeground)" data-action="clearTracking">${tr('sidebar.clearTracking', {}, lang)}</button>
+             </div>
         </div>
 
-        <div class="card">
-            <div class="card-title">${tr('sidebar.clearTitle', {}, lang)}</div>
-            <div class="actions">
-                <button class="ghost" data-action="clearOverview">${tr('sidebar.clearOverview', {}, lang)}</button>
-                <button class="ghost" data-action="clearPrd">${tr('sidebar.clearPrd', {}, lang)}</button>
-                <button class="ghost" data-action="clearPlan">${tr('sidebar.clearPlan', {}, lang)}</button>
-                <button class="ghost" data-action="clearWalkthrough">${tr('sidebar.clearWalkthrough', {}, lang)}</button>
-                <button class="ghost" data-action="clearAudit">${tr('sidebar.clearAudit', {}, lang)}</button>
-                <button class="warn" data-action="clearTracking">${tr('sidebar.clearTracking', {}, lang)}</button>
+        <!-- Config -->
+        <div class="section">
+            <h2>${tr('sidebar.settingsTitle', {}, lang)}</h2>
+            <div class="form-group">
+                <label>${tr('sidebar.port', {}, lang)}</label>
+                <input type="number" id="portInput" value="${configuredPort}" min="1024" max="65535" />
             </div>
-        </div>
-
-        <div class="card">
-            <div class="card-title">${tr('sidebar.settingsTitle', {}, lang)}</div>
-            <div class="row">
-                <label for="portInput">${tr('sidebar.port', {}, lang)}</label>
-                <input class="input" id="portInput" type="number" min="1024" max="65535" value="${configuredPort}" />
+            <div class="form-group">
+                <label>${tr('sidebar.defaultReason', {}, lang)}</label>
+                <input type="text" id="defaultReasonInput" value="${defaultReason}" placeholder="${tr('sidebar.defaultReasonPlaceholder', {}, lang)}" />
             </div>
-            <div class="row">
-                <label for="defaultReasonInput">${tr('sidebar.defaultReason', {}, lang)}</label>
-                <input class="input" id="defaultReasonInput" type="text" value="${defaultReason}" placeholder="${tr('sidebar.defaultReasonPlaceholder', {}, lang)}" />
-            </div>
-            <div class="toggle">
-                <input type="checkbox" id="autoStart" ${autoStart ? 'checked' : ''} />
+            <div class="checkbox-group">
+                <input type="checkbox" id="autoStart" ${autoStart ? 'checked' : ''}>
                 <label for="autoStart">${tr('sidebar.autoStart', {}, lang)}</label>
             </div>
-            <div class="actions">
-                <button class="primary" id="saveSettings">${tr('sidebar.saveSettings', {}, lang)}</button>
-                <button class="ghost" data-action="resetDefaults">${tr('sidebar.resetDefaultPort', {}, lang)}</button>
+            <div class="btn-group">
+                <button class="btn-primary" id="saveSettings">${tr('sidebar.saveSettings', {}, lang)}</button>
+                <button class="btn-ghost" data-action="resetDefaults">${tr('sidebar.resetDefaultPort', {}, lang)}</button>
             </div>
-        </div>
-
-        <div class="card">
-            <div class="card-title">${tr('sidebar.languageTitle', {}, lang)}</div>
-            <div class="actions">
-                <button class="ghost" id="toggleLanguage">${lang === 'en' ? tr('ui.lang.zh', {}, lang) : tr('ui.lang.en', {}, lang)}</button>
+             <div class="btn-group" style="margin-top: 10px;">
+                <button class="btn-ghost" id="toggleLanguage">${lang === 'en' ? tr('ui.lang.zh', {}, lang) : tr('ui.lang.en', {}, lang)}</button>
             </div>
         </div>
     </div>
@@ -12600,9 +12507,10 @@ class SidebarProvider implements vscode.WebviewViewProvider {
             const el = document.getElementById(id);
             if (el) el.textContent = String(value ?? 0);
         };
-	        const updateToolStats = (s) => {
-	            if (!s) return;
-	            setText('statTotalCalls', s.totalCalls);
+
+        const updateToolStats = (s) => {
+            if (!s) return;
+            setText('statTotalCalls', s.totalCalls);
             setText('statAskContinue', s.askContinueCalls);
             setText('statAskUser', s.askUserCalls);
             setText('statAskQuestion', s.askQuestionCalls);
@@ -12610,18 +12518,16 @@ class SidebarProvider implements vscode.WebviewViewProvider {
             setText('statUpdateOverview', s.updateOverviewCalls);
             setText('statGenerateOverview', s.generateOverviewCalls);
             setText('statUpdatePlan', s.updatePlanCalls);
-            setText('statPlanChangeRequest', s.planChangeRequestCalls);
-            setText('statUpdateWalkthrough', s.updateWalkthroughCalls);
             setText('statRagSearch', s.ragSearchCalls);
-            setText('statMemorySearch', s.memorySearchCalls);
+            setText('statMemorySearch', s.memorySearchCalls); // Kept ID but not in HTML? I should add it back or it will just be ignored
             setText('statMemoryHygiene', s.memoryHygieneCalls);
             setText('statRecordLesson', s.recordLessonCalls);
             setText('statGetProjectStatus', s.getProjectStatusCalls);
-	            setText('statSaveMemory', s.saveMemoryCalls);
-	            setText('statGetMemory', s.getMemoryCalls);
-	            setText('statListMemory', s.listMemoryCalls);
-	            setText('statPreflight', s.preflightCalls);
-	        };
+            setText('statSaveMemory', s.saveMemoryCalls);
+            setText('statGetMemory', s.getMemoryCalls);
+            setText('statListMemory', s.listMemoryCalls);
+            setText('statPreflight', s.preflightCalls);
+        };
         const updateProjectStats = (s) => {
             if (!s) return;
             setText('statPrdUpdates', s.prdUpdates);
@@ -12669,7 +12575,7 @@ class SidebarProvider implements vscode.WebviewViewProvider {
                 }
                 if (statusPill) {
                     statusPill.textContent = running ? ${safeJson(tr('sidebar.running', {}, lang))} : ${safeJson(tr('sidebar.stopped', {}, lang))};
-                    statusPill.classList.toggle('on', running);
+                    statusPill.style.background = running ? 'var(--vscode-testing-iconPassed)' : 'var(--vscode-testing-iconFailed)';
                 }
                 if (msg.stats) {
                     updateToolStats(msg.stats);
