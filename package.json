@@ -102,10 +102,10 @@
         "mcpService.language": {
           "type": "string",
           "enum": [
-            "zh",
-            "en"
+            "en",
+            "zh"
           ],
-          "default": "zh",
+          "default": "en",
           "description": "UI language / 界面语言"
         },
         "mcpService.defaultReason": {
