@@ -101,80 +101,80 @@ WindsurfAutoMcp standardizes task completion with MCP: when the AI finishes a ta
 ```text
 # WindsurfAutoMcp Workflow Rules
 
-## 🚨 BLOCKED ACTION? READ THIS FIRST 🚨
-**If ANY action failed or was blocked by a hook (exit code 2):**
-1. STOP immediately - do NOT retry the same action
-2. Call `check_hook_status()` NOW to see WHY you were blocked
-3. Read the `hookFeedback.lastBlock` message in the response
-4. Fix the root cause (missing plan? missing preflight? too many writes?)
-5. ONLY then retry
+## 🧠 CORE PRINCIPLE: RECALL → THINK → ACT (Like Humans Do)
+**Before EVERY action, follow this sequence:**
+1. **RECALL**: `memory_search()` + `rag_search()` - What do I already know?
+2. **THINK**: `sequential_thinking()` - Analyze and plan the approach
+3. **ACT**: Execute based on recalled knowledge and thinking
 
-## ⚠️ CRITICAL: STOP → THINK → READ → RESEARCH → PLAN → CODE
+## 🚨 HOOK FEEDBACK IN EVERY TOOL RESPONSE
+**All MCP tools now include hook feedback at the TOP of responses.**
+If you see `⛔ HOOK BLOCKED YOUR LAST ACTION:` - READ IT and FIX IT!
+Do NOT ignore this message. Do NOT retry the same action.
 
-**NEVER trust your knowledge. ALWAYS research first. Treat 2024 info as outdated.**
+## ⚠️ WORKFLOW: RECALL → THINK → RESEARCH → PLAN → CODE
 
-## Phase 0: STOP & UNDERSTAND
-Before ANY action:
+**NEVER trust your knowledge. ALWAYS recall memory first. Treat 2024 info as outdated.**
+
+## Phase 0: INITIALIZE
 1. `preflight()` - MANDATORY first call every session
-2. If action fails/blocked → `check_hook_status()` IMMEDIATELY
-3. Read the error/block message. Understand WHY.
+2. Read the response - it contains project status AND any hook blocks
 
-## Phase 1: THINK DEEPLY
-1. `index_codebase({depth:"deep"})` - Understand project tech stack, structure, patterns
-2. `sequential_thinking()` - Break down complex problems into stages
-3. Read target files BEFORE editing - understand context
-4. Identify: What exists? What patterns? What conventions?
+## Phase 1: RECALL (Like Human Memory)
+**Always recall before thinking - just like humans do!**
+1. `memory_search({query, scope:"both"})` - What lessons/knowledge exist?
+2. `rag_search({query})` - What code patterns exist in THIS project?
+3. `get_memory({key:"relevant-key"})` - Get specific cached research
 
-## Phase 2: RESEARCH (MANDATORY)
-**NEVER skip research. NEVER assume. ALWAYS verify.**
-1. `memory_search({query, scope:"both"})` - Check lessons, cached research
-2. `rag_search({query})` - Find existing code patterns in THIS project
-3. `resolve_library_docs()` → `get_library_docs()` - Get CURRENT docs (not from memory)
-4. Web search for best practices - treat knowledge from 2024 as potentially outdated
-5. Save findings: `save_memory({key:"research:topic", scope:"global", kind:"long"})`
+## Phase 2: THINK
+1. `sequential_thinking()` - Break down problems into stages
+2. `index_codebase({depth:"deep"})` - Understand project structure
+3. Read target files BEFORE editing
 
-## Phase 3: PLAN (NO CODE WITHOUT PLAN)
+## Phase 3: RESEARCH (Verify External Info)
+1. `resolve_library_docs()` → `get_library_docs()` - Get CURRENT docs
+2. Web search for best practices if needed
+3. `save_memory()` - Cache findings for future recall
+
+## Phase 4: PLAN (NO CODE WITHOUT PLAN)
 1. `update_plan({items:[...]})` - Create detailed checklist
-2. Include: verification steps, tests, code_review
-3. Get user approval for significant changes
-4. Plan must reference research findings
+2. Include: verification, tests, code_review items
+3. `ensure_release_gate()` - Add required quality gates
 
-## Phase 4: EXECUTE (ONE STEP AT A TIME)
+## Phase 5: EXECUTE (ONE STEP AT A TIME)
 1. Complete ONE plan item
-2. `check_plan()` - Mark done, get next
-3. `verify_action()` - Confirm success
+2. `update_plan()` - Mark done, get next
+3. `check_plan()` - Verify progress
 4. Repeat until complete
 
-## Phase 5: VERIFY & LEARN
+## Phase 6: VERIFY & LEARN
 1. `code_review()` - Required before completion
-2. `record_lesson()` - On errors/learnings
+2. `record_lesson()` - Save learnings for future recall
 3. `ask_continue()` - Only after code_review passes
 
-## 🛑 ABSOLUTE BLOCKS
+## 🛑 ABSOLUTE RULES
+- ❌ NO action without recalling memory first
 - ❌ NO code without approved plan
 - ❌ NO plan without research (memory + rag + docs)
-- ❌ NO implementation without reading existing code first
 - ❌ NO ask_continue without code_review
-- ❌ NO assumptions - verify everything with existing code
+- ❌ NO ignoring hook block messages
 
-## 🚨 WHEN BLOCKED
-If hooks block your action (exit code 2):
-1. STOP retrying the same action
-2. Call `check_hook_status()` immediately
-3. Read the block reason in the response
-4. Fix the issue (e.g., create plan first, run preflight)
-5. Then retry
+## 🚨 WHEN BLOCKED (Hook returns exit code 2)
+**Every tool response will show the block reason at the top!**
+1. READ the `⛔ HOOK BLOCKED` message in the tool response
+2. UNDERSTAND the root cause
+3. FIX it (missing plan? run `update_plan`. missing gate? run `ensure_release_gate`)
+4. THEN retry your action
 
 ## KEY TOOLS
-- `preflight()` - Session start (MANDATORY)
-- `check_hook_status()` - When blocked/failed
-- `index_codebase({depth:"deep"})` - Understand project
-- `sequential_thinking()` - Think through complex problems
-- `memory_search({scope:"both"})` - Check memory
+- `preflight()` - Session start
+- `memory_search({scope:"both"})` - RECALL first!
 - `rag_search()` - Find code patterns
-- `resolve_library_docs()` / `get_library_docs()` - Get docs
+- `sequential_thinking()` - THINK before acting
 - `update_plan()` / `check_plan()` - Plan management
+- `ensure_release_gate()` - Add required quality gates
 - `code_review()` - Before completion
+- `record_lesson()` - Save for future recall
 - `ask_continue()` - Request next task
 ```
 

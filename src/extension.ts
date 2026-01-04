@@ -3312,11 +3312,13 @@ let extensionContext: vscode.ExtensionContext;
 		    askContinueCalls: 0,
 		    preflightCalls: 0,
 		    setPrdCalls: 0,
+		    approvePrdCalls: 0,
 		    updateOverviewCalls: 0,
 		    generateOverviewCalls: 0,
 		    updatePlanCalls: 0,
 		    planChangeRequestCalls: 0,
 		    updateWalkthroughCalls: 0,
+		    generateWalkthroughCalls: 0,
 		    ragSearchCalls: 0,
 		    memorySearchCalls: 0,
 		    memoryHygieneCalls: 0,
@@ -3352,6 +3354,8 @@ let extensionContext: vscode.ExtensionContext;
 	    getLibraryDocsCalls: 0,
 	    thinkStepCalls: 0,
 	    getThinkingHistoryCalls: 0,
+	    manageSprintCalls: 0,
+	    generateCommitMessageCalls: 0,
 	    imageUploads: 0,
 	    startTime: Date.now()
 	};
@@ -4458,9 +4462,11 @@ async function handleToolCall(name: string, args: any): Promise<any> {
     let result;
     switch (name) {
         case 'manage_sprint':
+            stats.manageSprintCalls++;
             result = await handleManageSprint(args);
             break;
         case 'generate_commit_message':
+            stats.generateCommitMessageCalls++;
             result = await handleGenerateCommitMessage(args);
             break;
         case 'ask_user':
@@ -4476,6 +4482,7 @@ async function handleToolCall(name: string, args: any): Promise<any> {
             result = await handleSetPrd(args);
             break;
         case 'approve_prd':
+            stats.approvePrdCalls++;
             result = await handleApprovePrd(args);
             break;
         case 'update_overview':
@@ -4595,7 +4602,7 @@ async function handleToolCall(name: string, args: any): Promise<any> {
             result = await handleUpdateWalkthrough(args);
             break;
         case 'generate_walkthrough':
-            stats.updateWalkthroughCalls++;
+            stats.generateWalkthroughCalls++;
             result = await handleGenerateWalkthrough(args);
             break;
         case 'check_hook_status':
@@ -4663,6 +4670,9 @@ async function handleToolCall(name: string, args: any): Promise<any> {
     updateStatusBar();
     const configuredPort = vscode.workspace.getConfiguration('mcpService').get('port', 3456);
     sidebarProvider?.updateStatus(mcpServer !== null, mcpServer ? currentPort : configuredPort);
+
+    // Inject hook feedback into ALL tool responses so AI always sees block reasons
+    result = injectHookFeedbackIntoResult(result, args);
 
     return result;
 }
@@ -6296,6 +6306,73 @@ function clearHookFeedbackFromMemory(rootPath?: string): void {
         }
     } catch {
         // ignore
+    }
+}
+
+/**
+ * Inject hook feedback into ANY MCP tool result so AI always sees block reasons.
+ * This is called at the end of handleToolCall to ensure ALL tools surface hook feedback.
+ */
+function injectHookFeedbackIntoResult(result: any, args: any): any {
+    try {
+        const rootPath = typeof args?.rootPath === 'string' ? args.rootPath : undefined;
+        const hookFeedback = getHookFeedbackFromMemory(rootPath);
+        
+        // If no hook feedback, return result unchanged
+        if (!hookFeedback || (!hookFeedback.lastBlock && !hookFeedback.lastWarning && !hookFeedback.lastError)) {
+            return result;
+        }
+        
+        // If result doesn't have content array, return unchanged
+        if (!result || !Array.isArray(result.content)) {
+            return result;
+        }
+        
+        const lang = getUiLanguage();
+        const feedbackLines: string[] = [];
+        
+        // Build feedback message - BLOCK is most important
+        if (hookFeedback.lastBlock) {
+            feedbackLines.push('═'.repeat(50));
+            feedbackLines.push(lang === 'en' 
+                ? `⛔ HOOK BLOCKED YOUR LAST ACTION:`
+                : `⛔ 钩子阻止了你的上一个操作:`);
+            feedbackLines.push(hookFeedback.lastBlock);
+            feedbackLines.push('');
+            feedbackLines.push(lang === 'en'
+                ? '🔴 You MUST fix this before retrying. Read the message above!'
+                : '🔴 你必须先修复此问题才能重试。请阅读上面的消息！');
+            feedbackLines.push('═'.repeat(50));
+            feedbackLines.push('');
+        }
+        
+        if (hookFeedback.lastWarning && !hookFeedback.lastBlock) {
+            feedbackLines.push(lang === 'en' 
+                ? `⚠️ HOOK WARNING: ${hookFeedback.lastWarning}`
+                : `⚠️ 钩子警告: ${hookFeedback.lastWarning}`);
+            feedbackLines.push('');
+        }
+        
+        if (hookFeedback.lastError && !hookFeedback.lastBlock) {
+            feedbackLines.push(lang === 'en' 
+                ? `❌ LAST ERROR: ${hookFeedback.lastError}`
+                : `❌ 上次错误: ${hookFeedback.lastError}`);
+            feedbackLines.push('');
+        }
+        
+        if (feedbackLines.length === 0) {
+            return result;
+        }
+        
+        // Prepend hook feedback as the FIRST content item
+        const feedbackItem = { type: 'text', text: feedbackLines.join('\n') };
+        return {
+            ...result,
+            content: [feedbackItem, ...result.content]
+        };
+    } catch {
+        // On any error, return result unchanged
+        return result;
     }
 }
 
