@@ -566,6 +566,23 @@ def _iso_now():
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 
+def print_block_prominent(msg, fix_hint=None):
+    """
+    Print block message to BOTH stdout and stderr for maximum AI visibility.
+    Many LLMs don't reliably read stderr, so we output to both streams.
+    """
+    separator = "=" * 60
+    print("\n" + separator, file=sys.stdout)
+    print("⛔ HOOK BLOCKED - AI MUST READ THIS:", file=sys.stdout)
+    print(separator, file=sys.stdout)
+    print(msg, file=sys.stdout)
+    if fix_hint:
+        print("\n🔧 FIX: " + fix_hint, file=sys.stdout)
+    print(separator + "\n", file=sys.stdout)
+    # Also print to stderr for traditional logging
+    print(msg, file=sys.stderr)
+
+
 def call_mcp_tool(server_url, tool_name, arguments, timeout_sec=0.8):
     if not server_url:
         return None
@@ -1860,7 +1877,7 @@ def main():
             preflight = _check_prompt_preflight(server_url, project)
             if preflight:
                 persist_hook_feedback(server_url, project, "pre_run_command", "block", preflight)
-                print(preflight, file=sys.stderr)
+                print_block_prominent(preflight, "Run preflight() or the required tools first")
                 return 2
             # Enforce periodic Plan progress updates during implementation (to prevent drifting trackers).
             try:
@@ -1882,7 +1899,7 @@ def main():
                             "Required: update_plan (mark progress), then wam_commit(), then continue."
                         )
                         persist_hook_feedback(server_url, project, "pre_run_command", "block", msg)
-                        print(msg, file=sys.stderr)
+                        print_block_prominent(msg, "Call update_plan() to mark progress, then wam_commit(), then retry")
                         return 2
             except Exception:
                 pass
@@ -1890,7 +1907,7 @@ def main():
             gate = check_project_gates(project, memory_data=memory_data, server_url=server_url)
             if gate:
                 persist_hook_feedback(server_url, project, "pre_run_command", "block", gate)
-                print(gate, file=sys.stderr)
+                print_block_prominent(gate, "Follow the instructions above to fix the issue")
                 return 2
         if looks_dangerous_command(command_line):
             maybe_record_lesson(
@@ -1909,7 +1926,7 @@ def main():
                 "block",
                 msg,
             )
-            print(msg, file=sys.stderr)
+            print_block_prominent(msg, "Use safer alternatives or ask user for confirmation")
             return 2
 
     if action == "pre_write_code":
@@ -1923,13 +1940,13 @@ def main():
                 "Required: use MCP tools (update_plan/save_memory/etc) and then wam_commit() to change tracked state."
             )
             persist_hook_feedback(server_url, project, "pre_write_code", "block", msg)
-            print(msg, file=sys.stderr)
+            print_block_prominent(msg, "Use MCP tools instead of direct file writes")
             return 2
         if project:
             preflight = _check_prompt_preflight(server_url, project)
             if preflight:
                 persist_hook_feedback(server_url, project, "pre_write_code", "block", preflight)
-                print(preflight, file=sys.stderr)
+                print_block_prominent(preflight, "Run preflight() or the required tools first")
                 return 2
             # Enforce periodic Plan progress updates during implementation (to prevent drifting trackers).
             try:
@@ -1951,14 +1968,14 @@ def main():
                             "Required: update_plan (mark progress), then wam_commit(), then continue."
                         )
                         persist_hook_feedback(server_url, project, "pre_write_code", "block", msg)
-                        print(msg, file=sys.stderr)
+                        print_block_prominent(msg, "Call update_plan() to mark progress, then wam_commit(), then retry")
                         return 2
             except Exception:
                 pass
             gate = check_project_gates(project, memory_data=memory_data, server_url=server_url)
             if gate:
                 persist_hook_feedback(server_url, project, "pre_write_code", "block", gate)
-                print(gate, file=sys.stderr)
+                print_block_prominent(gate, "Follow the instructions above to fix the issue")
                 return 2
         if looks_sensitive_write_path(file_path):
             if project:
@@ -1972,7 +1989,7 @@ def main():
                 )
             msg = f"Blocked write to sensitive path: {file_path}"
             persist_hook_feedback(server_url, project, "pre_write_code", "block", msg)
-            print(msg, file=sys.stderr)
+            print_block_prominent(msg, "Use project-local paths instead")
             return 2
 
     if action == "post_write_code":
@@ -2021,7 +2038,7 @@ def main():
                     requirement_error = check_workflow_requirement(state, project_id, tool_name)
                     if requirement_error:
                         persist_hook_feedback(server_url, project, "pre_mcp_tool_use", "block", requirement_error)
-                        print(requirement_error, file=sys.stderr)
+                        print_block_prominent(requirement_error, "Run preflight(userPrompt='...') first")
                         return 2
                     # Advance workflow state based on tool called
                     state, new_state = advance_workflow_state(state, project_id, tool_name)
@@ -2049,7 +2066,7 @@ def main():
                     scope="both",
                 )
                 persist_hook_feedback(server_url, project, "pre_mcp_tool_use", "block", msg)
-                print(msg, file=sys.stderr)
+                print_block_prominent(msg, f"Add rationale='why {tool_name}' to tool arguments")
                 return 2
 
         if tool_name == "update_plan":
@@ -2071,7 +2088,7 @@ def main():
                     scope="both",
                 )
                 persist_hook_feedback(server_url, project, "pre_mcp_tool_use", "block", msg)
-                print(msg, file=sys.stderr)
+                print_block_prominent(msg, "Use plan_change_request instead of mode=replace")
                 return 2
 
         if tool_name == "ask_continue" and project:
@@ -2079,7 +2096,7 @@ def main():
             gate = check_project_gates(project, memory_data=memory_data, server_url=server_url)
             if gate:
                 persist_hook_feedback(server_url, project, "pre_mcp_tool_use", "block", gate)
-                print(gate, file=sys.stderr)
+                print_block_prominent(gate, "Follow the instructions above")
                 return 2
 
             complete, done, total = _plan_is_complete(project)
@@ -2100,7 +2117,7 @@ def main():
                     scope="both",
                 )
                 persist_hook_feedback(server_url, project, "pre_mcp_tool_use", "block", msg)
-                print(msg, file=sys.stderr)
+                print_block_prominent(msg, "Run update_plan() to mark items done, then check_plan()")
                 return 2
 
             if not _plan_has_done_code_review(project):
@@ -2120,7 +2137,7 @@ def main():
                     scope="both",
                 )
                 persist_hook_feedback(server_url, project, "pre_mcp_tool_use", "block", msg)
-                print(msg, file=sys.stderr)
+                print_block_prominent(msg, "Add code review Plan item and mark it done")
                 return 2
 
             if not _walkthrough_has_content(project):
@@ -2140,7 +2157,7 @@ def main():
                     scope="both",
                 )
                 persist_hook_feedback(server_url, project, "pre_mcp_tool_use", "block", msg)
-                print(msg, file=sys.stderr)
+                print_block_prominent(msg, "Run update_walkthrough() with changes log")
                 return 2
 
             # Formal review artifact: Walkthrough must contain a structured review section
@@ -2174,7 +2191,7 @@ def main():
                             scope="both",
                         )
                         persist_hook_feedback(server_url, project, "pre_mcp_tool_use", "block", msg)
-                        print(msg, file=sys.stderr)
+                        print_block_prominent(msg, "Run update_walkthrough() AFTER latest code changes")
                         return 2
 
                     if last_write and not _walkthrough_has_review_artifact(project):
@@ -2194,7 +2211,7 @@ def main():
                             scope="both",
                         )
                         persist_hook_feedback(server_url, project, "pre_mcp_tool_use", "block", msg)
-                        print(msg, file=sys.stderr)
+                        print_block_prominent(msg, "Add '## Review' section to Walkthrough with security/perf/tests")
                         return 2
             except Exception:
                 pass
