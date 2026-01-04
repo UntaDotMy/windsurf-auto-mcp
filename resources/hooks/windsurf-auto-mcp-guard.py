@@ -20,7 +20,9 @@ AUDIT_FILE_NAME = "audit.jsonl"
 AUDIT_MAX_BYTES = 260_000
 AUDIT_MAX_LINES = 260
 
-MAX_WRITES_WITHOUT_PLAN_UPDATE = 3
+# STRICT: Only allow 2 writes before requiring plan update
+# This prevents the AI from doing too much work without tracking progress
+MAX_WRITES_WITHOUT_PLAN_UPDATE = 2
 
 # Workflow State Machine
 # States: IDLE -> PREFLIGHT_DONE -> PLAN_EXISTS -> ACTING -> VERIFYING -> READY_TO_ASK
@@ -1075,23 +1077,29 @@ def _check_prompt_preflight(server_url, project):
             missing.append("rag_search")
         if _needs("lastWamStatusAt"):
             missing.append("wam_status")
+        if _needs("lastSequentialThinkingAt"):
+            missing.append("sequential_thinking")
 
         if not missing:
             return None
 
         msg = (
             "\n" + "="*60 + "\n"
-            "BLOCKED: THINK-FIRST WORKFLOW REQUIRED\n"
+            "BLOCKED: RECALL → THINK → ACT WORKFLOW REQUIRED\n"
             "="*60 + "\n\n"
-            "Before ANY action, you MUST understand the context first!\n\n"
+            "Before ANY action, you MUST:\n"
+            "1. RECALL - What do I already know?\n"
+            "2. THINK - Analyze the problem\n"
+            "3. PLAN - Create checklist before coding\n\n"
             "QUICK FIX: Run preflight(userPrompt='<current task>')\n\n"
             "OR run these tools IN ORDER:\n"
-            "1. get_project_status - Understand current project state\n"
-            "2. check_plan - Review plan progress and next items\n"
-            "3. memory_search(query='relevant keywords') - Recall lessons/decisions\n"
-            "4. rag_search(query='what to find') - Locate exact code to edit\n"
-            "5. wam_status - Check if history is clean\n\n"
-            f"MISSING: {', '.join(missing)}\n\n"
+            "1. memory_search(query='relevant keywords') - RECALL lessons/decisions\n"
+            "2. rag_search(query='what to find') - RECALL code patterns\n"
+            "3. sequential_thinking(thought='...') - THINK about approach\n"
+            "4. get_project_status - Understand current state\n"
+            "5. check_plan - Review plan progress\n"
+            "6. wam_status - Check if history is clean\n\n"
+            f"⚠️ MISSING: {', '.join(missing)}\n\n"
             "THEN: Create/update plan with update_plan(items=[...]) before coding.\n"
             + "="*60
         )

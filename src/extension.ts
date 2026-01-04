@@ -55,6 +55,7 @@ type ProjectTrackerStats = {
     lastMemorySearchAt?: string;
     lastRagSearchAt?: string;
     lastWamStatusAt?: string;
+    lastSequentialThinkingAt?: string;  // Required for THINK-FIRST workflow
 
     // Artifact update timestamps
     lastPlanUpdateAt?: string;
@@ -10473,6 +10474,15 @@ async function handleSequentialThinking(args: any): Promise<any> {
         } catch {
             // ignore memory errors
         }
+    }
+
+    // Update project stats to track sequential_thinking usage
+    try {
+        const { data, project } = resolveProjectTracker(rootPath !== 'global' ? rootPath : undefined);
+        project.stats.lastSequentialThinkingAt = nowIso();
+        saveTrackerData(data);
+    } catch {
+        // ignore tracker errors
     }
 
     const result = {
