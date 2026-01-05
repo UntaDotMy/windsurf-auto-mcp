@@ -98,83 +98,73 @@ WindsurfAutoMcp 通过 MCP 协议标准化交互：AI 完成任务后必须 `ask
 > 根据[官方文档](https://docs.windsurf.com/windsurf/cascade/memories)，规则应简洁（每文件<6000字符）。工作流强制执行由 **Hooks** 处理（见下方）。
 
 ```text
-# WindsurfAutoMcp 工作流规则
+# WindsurfAutoMcp 强制工作流规则
 
-## 🚨 操作被阻止？先看这里 🚨
-**如果任何操作失败或被钩子阻止（退出码 2）：**
-1. 立即停止 - 不要重试相同的操作
-2. 现在调用 `check_hook_status()` 查看为什么被阻止
-3. 阅读响应中的 `hookFeedback.lastBlock` 消息
-4. 修复根本原因（缺少计划？缺少 preflight？写入次数太多？）
-5. 然后才重试
+## 重要：所有MCP工具在你按顺序操作前都被阻止
 
-## ⚠️ 核心流程：停止 → 思考 → 阅读 → 研究 → 计划 → 编码
+Hooks 强制执行必须工作流。跳过步骤将阻止你的工具。
 
-**永远不要相信你的知识。始终先研究。把 2024 年的信息当作过时的。**
+## 强制顺序（由HOOKS强制执行）
 
-## 阶段 0：停止并理解
-任何操作前：
-1. `preflight()` - 每次会话必须先调用
-2. 如果操作失败/被阻止 → 立即调用 `check_hook_status()`
-3. 阅读错误/阻止消息。理解为什么。
+### 第1步：PREFLIGHT（必须首先执行）
+所有MCP工具都被阻止，直到你调用：
+  preflight(userPrompt="<用户的请求>")
 
-## 阶段 1：深入思考
-1. `index_codebase({depth:"deep"})` - 理解项目技术栈、结构、模式
-2. `sequential_thinking()` - 将复杂问题分解为阶段
-3. 编辑前先阅读目标文件 - 理解上下文
-4. 识别：现有什么？什么模式？什么约定？
+这会加载项目状态、计划、记忆和RAG上下文。
+在此完成前，其他MCP工具都不会工作。
 
-## 阶段 2：研究（必须）
-**永远不要跳过研究。永远不要假设。始终验证。**
-1. `memory_search({query, scope:"both"})` - 检查经验、缓存的研究
-2. `rag_search({query})` - 在此项目中查找现有代码模式
-3. `resolve_library_docs()` → `get_library_docs()` - 获取当前文档（不是从记忆）
-4. 网络搜索最佳实践 - 把 2024 年的知识当作可能过时
-5. 保存发现：`save_memory({key:"research:topic", scope:"global", kind:"long"})`
+### 第2步：THINK 思考（计划前必须执行）
+update_plan() 被阻止，直到你调用：
+  sequential_thinking() 或 think_step()
 
-## 阶段 3：计划（无计划不编码）
-1. `update_plan({items:[...]})` - 创建详细清单
-2. 包含：验证步骤、测试、code_review
-3. 重大变更需获取用户批准
-4. 计划必须引用研究发现
+你必须先思考再计划。先分析问题。
 
-## 阶段 4：执行（一次一步）
-1. 完成一个计划项
-2. `check_plan()` - 标记完成，获取下一项
-3. `verify_action()` - 确认成功
-4. 重复直到完成
+### 第3步：PLAN 计划（编码前必须执行）
+代码/操作工具需要计划。调用：
+  update_plan({items:[...], rationale:"原因"})
 
-## 阶段 5：验证与学习
-1. `code_review()` - 完成前必须执行
-2. `record_lesson()` - 记录错误/经验
-3. `ask_continue()` - 仅在 code_review 通过后调用
+### 第4步：EXECUTE 执行
+现在你可以写代码、运行命令等。
+完成项目时更新计划进度。
 
-## 🛑 绝对禁止
-- ❌ 无审批计划不能编码
-- ❌ 无研究不能做计划（memory + rag + docs）
-- ❌ 不先阅读现有代码不能实现
-- ❌ 无 code_review 不能 ask_continue
-- ❌ 不能假设 - 用现有代码验证一切
+### 第5步：VERIFY 验证 & COMPLETE 完成
+  code_review() - 完成前必须执行
+  ask_continue() - 仅在code_review后
 
-## 🚨 被阻止时
-如果钩子阻止了你的操作（退出码 2）：
-1. 停止重试相同操作
-2. 立即调用 `check_hook_status()`
-3. 阅读响应中的阻止原因
-4. 修复问题（如先创建计划、运行 preflight）
-5. 然后重试
+## 工作流状态机
+
+IDLE -> PREFLIGHT_DONE -> THINK_DONE -> PLAN_EXISTS -> [代码/验证]
+
+- IDLE: 除preflight和check_hook_status外，没有MCP工具工作
+- PREFLIGHT_DONE: 可以使用memory_search、rag_search、思考工具
+- THINK_DONE: 现在可以调用update_plan
+- PLAN_EXISTS: 可以写代码、运行命令
+
+## 被阻止时
+
+1. 调用 check_hook_status() 查看原因
+2. 阅读错误中的强制工作流顺序
+3. 按顺序执行：preflight -> 思考 -> 计划 -> 操作
+4. 不要在修复顺序之前重试相同操作
+
+## 绝对规则（强制执行）
+
+- 调用preflight()之前所有工具被阻止
+- 调用sequential_thinking()或think_step()之前 update_plan被阻止
+- 计划存在之前 code_review、ask_continue被阻止
+- 不能跳过步骤 - hooks会阻止你
 
 ## 关键工具
-- `preflight()` - 会话开始（必须）
-- `check_hook_status()` - 被阻止/失败时调用
-- `index_codebase({depth:"deep"})` - 理解项目
-- `sequential_thinking()` - 思考复杂问题
-- `memory_search({scope:"both"})` - 检查记忆
-- `rag_search()` - 查找代码模式
-- `resolve_library_docs()` / `get_library_docs()` - 获取文档
-- `update_plan()` / `check_plan()` - 计划管理
-- `code_review()` - 完成前必须
-- `ask_continue()` - 请求下一个任务
+
+- preflight(userPrompt=...) - 强制第一步（启用其他工具）
+- sequential_thinking() - 强制第二步（启用计划）
+- think_step() - sequential_thinking的替代
+- update_plan() - 强制第三步（启用编码）
+- check_hook_status() - 被阻止时调用查看原因
+- memory_search({scope:"both"}) - 搜索记忆（preflight后）
+- rag_search() - 搜索代码库（preflight后）
+- code_review() - 完成前必须
+- ask_continue() - 请求下一个任务
 ```
 
 ## 项目跟踪（Overview / PRD / Plan / WAM / Walkthrough）

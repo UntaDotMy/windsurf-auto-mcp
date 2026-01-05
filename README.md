@@ -99,83 +99,73 @@ WindsurfAutoMcp standardizes task completion with MCP: when the AI finishes a ta
 > Per [official docs](https://docs.windsurf.com/windsurf/cascade/memories), rules should be concise (<6000 chars per file). Workflow enforcement is handled by **hooks** (see below).
 
 ```text
-# WindsurfAutoMcp Workflow Rules
+# WindsurfAutoMcp MANDATORY Workflow Rules
 
-## 🧠 CORE PRINCIPLE: RECALL → THINK → ACT (Like Humans Do)
-**Before EVERY action, follow this sequence:**
-1. **RECALL**: `memory_search()` + `rag_search()` - What do I already know?
-2. **THINK**: `sequential_thinking()` - Analyze and plan the approach
-3. **ACT**: Execute based on recalled knowledge and thinking
+## CRITICAL: ALL MCP TOOLS ARE BLOCKED UNTIL YOU FOLLOW THIS SEQUENCE
 
-## 🚨 HOOK FEEDBACK IN EVERY TOOL RESPONSE
-**All MCP tools now include hook feedback at the TOP of responses.**
-If you see `⛔ HOOK BLOCKED YOUR LAST ACTION:` - READ IT and FIX IT!
-Do NOT ignore this message. Do NOT retry the same action.
+Hooks enforce a MANDATORY workflow. Skipping steps will BLOCK your tools.
 
-## ⚠️ WORKFLOW: RECALL → THINK → RESEARCH → PLAN → CODE
+## MANDATORY SEQUENCE (ENFORCED BY HOOKS)
 
-**NEVER trust your knowledge. ALWAYS recall memory first. Treat 2024 info as outdated.**
+### STEP 1: PREFLIGHT (REQUIRED FIRST)
+ALL MCP tools are BLOCKED until you call:
+  preflight(userPrompt="<user's request>")
 
-## Phase 0: INITIALIZE
-1. `preflight()` - MANDATORY first call every session
-2. Read the response - it contains project status AND any hook blocks
+This loads project status, plan, memory, and RAG context.
+NO OTHER MCP TOOL WILL WORK until this is done.
 
-## Phase 1: RECALL (Like Human Memory)
-**Always recall before thinking - just like humans do!**
-1. `memory_search({query, scope:"both"})` - What lessons/knowledge exist?
-2. `rag_search({query})` - What code patterns exist in THIS project?
-3. `get_memory({key:"relevant-key"})` - Get specific cached research
+### STEP 2: THINK (REQUIRED BEFORE PLANNING)
+update_plan() is BLOCKED until you call:
+  sequential_thinking() OR think_step()
 
-## Phase 2: THINK
-1. `sequential_thinking()` - Break down problems into stages
-2. `index_codebase({depth:"deep"})` - Understand project structure
-3. Read target files BEFORE editing
+You MUST think before you plan. Analyze the problem first.
 
-## Phase 3: RESEARCH (Verify External Info)
-1. `resolve_library_docs()` → `get_library_docs()` - Get CURRENT docs
-2. Web search for best practices if needed
-3. `save_memory()` - Cache findings for future recall
+### STEP 3: PLAN (REQUIRED BEFORE CODING)
+Code/action tools require a plan. Call:
+  update_plan({items:[...], rationale:"why"})
 
-## Phase 4: PLAN (NO CODE WITHOUT PLAN)
-1. `update_plan({items:[...]})` - Create detailed checklist
-2. Include: verification, tests, code_review items
-3. `ensure_release_gate()` - Add required quality gates
+### STEP 4: EXECUTE
+Now you can write code, run commands, etc.
+Update plan progress as you complete items.
 
-## Phase 5: EXECUTE (ONE STEP AT A TIME)
-1. Complete ONE plan item
-2. `update_plan()` - Mark done, get next
-3. `check_plan()` - Verify progress
-4. Repeat until complete
+### STEP 5: VERIFY & COMPLETE
+  code_review() - Required before completion
+  ask_continue() - Only after code_review
 
-## Phase 6: VERIFY & LEARN
-1. `code_review()` - Required before completion
-2. `record_lesson()` - Save learnings for future recall
-3. `ask_continue()` - Only after code_review passes
+## WORKFLOW STATE MACHINE
 
-## 🛑 ABSOLUTE RULES
-- ❌ NO action without recalling memory first
-- ❌ NO code without approved plan
-- ❌ NO plan without research (memory + rag + docs)
-- ❌ NO ask_continue without code_review
-- ❌ NO ignoring hook block messages
+IDLE -> PREFLIGHT_DONE -> THINK_DONE -> PLAN_EXISTS -> [code/verify]
 
-## 🚨 WHEN BLOCKED (Hook returns exit code 2)
-**Every tool response will show the block reason at the top!**
-1. READ the `⛔ HOOK BLOCKED` message in the tool response
-2. UNDERSTAND the root cause
-3. FIX it (missing plan? run `update_plan`. missing gate? run `ensure_release_gate`)
-4. THEN retry your action
+- IDLE: No MCP tools work except preflight, check_hook_status
+- PREFLIGHT_DONE: Can use memory_search, rag_search, thinking tools
+- THINK_DONE: Can now call update_plan
+- PLAN_EXISTS: Can write code, run commands
+
+## WHEN BLOCKED
+
+1. Call check_hook_status() to see why
+2. Read the MANDATORY WORKFLOW SEQUENCE in the error
+3. Follow the sequence: preflight -> think -> plan -> act
+4. Do NOT retry the same action without fixing the sequence
+
+## ABSOLUTE RULES (ENFORCED)
+
+- ALL tools blocked until preflight() called
+- update_plan blocked until sequential_thinking() or think_step() called
+- code_review, ask_continue blocked until plan exists
+- NO skipping steps - hooks will block you
 
 ## KEY TOOLS
-- `preflight()` - Session start
-- `memory_search({scope:"both"})` - RECALL first!
-- `rag_search()` - Find code patterns
-- `sequential_thinking()` - THINK before acting
-- `update_plan()` / `check_plan()` - Plan management
-- `ensure_release_gate()` - Add required quality gates
-- `code_review()` - Before completion
-- `record_lesson()` - Save for future recall
-- `ask_continue()` - Request next task
+
+- preflight(userPrompt=...) - MANDATORY FIRST (enables all other tools)
+- sequential_thinking() - MANDATORY SECOND (enables planning)
+- think_step() - Alternative to sequential_thinking
+- update_plan() - MANDATORY THIRD (enables coding)
+- check_hook_status() - Call when blocked to see why
+- memory_search({scope:"both"}) - Search memories (after preflight)
+- rag_search() - Search codebase (after preflight)
+- code_review() - Before completion
+- ask_continue() - Request next task
 ```
 
 ## Project Tracker (Overview / PRD / Plan / WAM / Walkthrough)
