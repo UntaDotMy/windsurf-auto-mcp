@@ -98,85 +98,62 @@ WindsurfAutoMcp standardizes task completion with MCP: when the AI finishes a ta
 > **Copy this into Windsurf global rules** (Customizations → Rules → + Global).
 > Per [official docs](https://docs.windsurf.com/windsurf/cascade/memories), rules should be concise (<6000 chars per file). Workflow enforcement is handled by **hooks** (see below).
 
-```text
-# WindsurfAutoMcp MANDATORY Workflow Rules
+```markdown
+# WindsurfAutoMcp MCP Workflow Rules
 
-## CRITICAL: ALL MCP TOOLS ARE BLOCKED UNTIL YOU FOLLOW THIS SEQUENCE
+## MCP Server
+- This project uses WindsurfAutoMcp MCP server for workflow enforcement
+- All MCP tools are available via the `windsurf_auto_mcp` server
+- Hooks automatically block tools if workflow sequence is not followed
 
-Hooks enforce a MANDATORY workflow. Skipping steps will BLOCK your tools.
+## Mandatory Workflow Sequence
+Follow this exact sequence for every task. Hooks will BLOCK if you skip steps.
 
-## MANDATORY SEQUENCE (ENFORCED BY HOOKS)
+1. **PREFLIGHT** - Call `preflight(userPrompt="<request>")` first
+   - Loads project status, plan, memory, RAG context
+   - ALL other MCP tools are blocked until this completes
 
-### STEP 1: PREFLIGHT (REQUIRED FIRST)
-ALL MCP tools are BLOCKED until you call:
-  preflight(userPrompt="<user's request>")
+2. **THINK** - Call `sequential_thinking()` or `think_step()` before planning
+   - Analyze the problem before creating a plan
+   - `update_plan()` is blocked until you think first
 
-This loads project status, plan, memory, and RAG context.
-NO OTHER MCP TOOL WILL WORK until this is done.
+3. **PLAN** - Call `update_plan({items:[...], rationale:"why"})` before coding
+   - Create a checklist of tasks
+   - Code/action tools require a plan to exist
 
-### STEP 2: THINK (REQUIRED BEFORE PLANNING)
-update_plan() is BLOCKED until you call:
-  sequential_thinking() OR think_step()
+4. **EXECUTE** - Write code, run commands, complete plan items
+   - Mark items done with `update_plan()`
+   - Check progress with `check_plan()`
 
-You MUST think before you plan. Analyze the problem first.
+5. **VERIFY** - Call `code_review()` before completion
+   - Required gate before task can be marked complete
 
-### STEP 3: PLAN (REQUIRED BEFORE CODING)
-Code/action tools require a plan. Call:
-  update_plan({items:[...], rationale:"why"})
+6. **COMPLETE** - Call `ask_continue()` when task is done
+   - MANDATORY - never continue without user permission
+   - User decides next action or gives new instructions
 
-### STEP 4: EXECUTE
-Now you can write code, run commands, etc.
-Update plan progress as you complete items.
+## User Interaction Tools
+- `ask_user()` - Request free-form input or confirmation (supports images)
+- `ask_question()` - Ask clarifying questions with predefined options
+- `ask_continue()` - MANDATORY at task completion - ask user what to do next
 
-### STEP 5: VERIFY & COMPLETE
-  code_review() - Required before completion
-  ask_continue() - Only after code_review
+## When Blocked
+- Call `check_hook_status()` to see the block reason
+- Follow the workflow sequence: preflight → think → plan → execute → verify → complete
+- Do NOT retry without fixing the sequence
 
-## WORKFLOW STATE MACHINE
-
-IDLE -> PREFLIGHT_DONE -> THINK_DONE -> PLAN_EXISTS -> [code/verify]
-
-- IDLE: No MCP tools work except preflight, check_hook_status
-- PREFLIGHT_DONE: Can use memory_search, rag_search, thinking tools
-- THINK_DONE: Can now call update_plan
-- PLAN_EXISTS: Can write code, run commands
-
-## WHEN BLOCKED
-
-1. Call check_hook_status() to see why
-2. Read the MANDATORY WORKFLOW SEQUENCE in the error
-3. Follow the sequence: preflight -> think -> plan -> act
-4. Do NOT retry the same action without fixing the sequence
-
-## ABSOLUTE RULES (ENFORCED)
-
-- ALL tools blocked until preflight() called
-- update_plan blocked until sequential_thinking() or think_step() called
-- code_review, ask_continue blocked until plan exists
-- NO skipping steps - hooks will block you
-
-## USER INTERACTION TOOLS (WHEN TO USE)
-
-- ask_user() - Request free-form input or confirmation from user (supports image upload)
-- ask_question() - Ask clarifying questions with predefined options (single-choice)
-- ask_continue() - MANDATORY at task completion. Ask if user wants to continue or give new instructions
-
-RULES:
-- ALWAYS call ask_continue() when task is complete - never continue without user permission
-- Use ask_question() when you need clarification with specific options
-- Use ask_user() when you need free-form input or confirmation
-
-## KEY TOOLS
-
-- preflight(userPrompt=...) - MANDATORY FIRST (enables all other tools)
-- sequential_thinking() - MANDATORY SECOND (enables planning)
-- think_step() - Alternative to sequential_thinking
-- update_plan() - MANDATORY THIRD (enables coding)
-- check_hook_status() - Call when blocked to see why
-- memory_search({scope:"both"}) - Search memories (after preflight)
-- rag_search() - Search codebase (after preflight)
-- code_review() - Before completion
-- ask_continue() - MANDATORY at task completion
+## Key MCP Tools Reference
+| Tool | When to Use |
+|------|-------------|
+| `preflight()` | FIRST - before any other tool |
+| `sequential_thinking()` | SECOND - before planning |
+| `think_step()` | Alternative to sequential_thinking |
+| `update_plan()` | THIRD - before coding |
+| `memory_search()` | Search memories (after preflight) |
+| `rag_search()` | Search codebase (after preflight) |
+| `code_review()` | Before completion |
+| `ask_continue()` | LAST - when task complete |
+| `check_hook_status()` | When blocked - see why |
 ```
 
 ## Project Tracker (Overview / PRD / Plan / WAM / Walkthrough)

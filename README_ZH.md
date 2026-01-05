@@ -97,85 +97,62 @@ WindsurfAutoMcp 通过 MCP 协议标准化交互：AI 完成任务后必须 `ask
 > **复制到 Windsurf 全局规则**（Customizations → Rules → + Global）。
 > 根据[官方文档](https://docs.windsurf.com/windsurf/cascade/memories)，规则应简洁（每文件<6000字符）。工作流强制执行由 **Hooks** 处理（见下方）。
 
-```text
-# WindsurfAutoMcp 强制工作流规则
+```markdown
+# WindsurfAutoMcp MCP 工作流规则
 
-## 重要：所有MCP工具在你按顺序操作前都被阻止
+## MCP 服务器
+- 本项目使用 WindsurfAutoMcp MCP 服务器进行工作流强制执行
+- 所有 MCP 工具通过 `windsurf_auto_mcp` 服务器提供
+- 如果不按工作流顺序执行，Hooks 会自动阻止工具
 
-Hooks 强制执行必须工作流。跳过步骤将阻止你的工具。
+## 强制工作流顺序
+每个任务必须按此顺序执行。跳过步骤会被 Hooks 阻止。
 
-## 强制顺序（由HOOKS强制执行）
+1. **预检 PREFLIGHT** - 首先调用 `preflight(userPrompt="<请求>")`
+   - 加载项目状态、计划、记忆、RAG 上下文
+   - 在此完成前，所有其他 MCP 工具都被阻止
 
-### 第1步：PREFLIGHT（必须首先执行）
-所有MCP工具都被阻止，直到你调用：
-  preflight(userPrompt="<用户的请求>")
+2. **思考 THINK** - 计划前调用 `sequential_thinking()` 或 `think_step()`
+   - 在创建计划前分析问题
+   - 在思考之前 `update_plan()` 被阻止
 
-这会加载项目状态、计划、记忆和RAG上下文。
-在此完成前，其他MCP工具都不会工作。
+3. **计划 PLAN** - 编码前调用 `update_plan({items:[...], rationale:"原因"})`
+   - 创建任务清单
+   - 代码/操作工具需要计划存在
 
-### 第2步：THINK 思考（计划前必须执行）
-update_plan() 被阻止，直到你调用：
-  sequential_thinking() 或 think_step()
+4. **执行 EXECUTE** - 写代码、运行命令、完成计划项目
+   - 用 `update_plan()` 标记完成项
+   - 用 `check_plan()` 检查进度
 
-你必须先思考再计划。先分析问题。
+5. **验证 VERIFY** - 完成前调用 `code_review()`
+   - 任务完成前的必要门禁
 
-### 第3步：PLAN 计划（编码前必须执行）
-代码/操作工具需要计划。调用：
-  update_plan({items:[...], rationale:"原因"})
+6. **完成 COMPLETE** - 任务完成时调用 `ask_continue()`
+   - 必须调用 - 未经用户许可不得继续
+   - 用户决定下一步操作或给出新指令
 
-### 第4步：EXECUTE 执行
-现在你可以写代码、运行命令等。
-完成项目时更新计划进度。
-
-### 第5步：VERIFY 验证 & COMPLETE 完成
-  code_review() - 完成前必须执行
-  ask_continue() - 仅在code_review后
-
-## 工作流状态机
-
-IDLE -> PREFLIGHT_DONE -> THINK_DONE -> PLAN_EXISTS -> [代码/验证]
-
-- IDLE: 除preflight和check_hook_status外，没有MCP工具工作
-- PREFLIGHT_DONE: 可以使用memory_search、rag_search、思考工具
-- THINK_DONE: 现在可以调用update_plan
-- PLAN_EXISTS: 可以写代码、运行命令
+## 用户交互工具
+- `ask_user()` - 请求自由输入或确认（支持图片）
+- `ask_question()` - 提出带预设选项的澄清问题
+- `ask_continue()` - 任务完成时必须调用 - 询问用户下一步
 
 ## 被阻止时
+- 调用 `check_hook_status()` 查看阻止原因
+- 按工作流顺序执行：预检 → 思考 → 计划 → 执行 → 验证 → 完成
+- 不要在修复顺序之前重试
 
-1. 调用 check_hook_status() 查看原因
-2. 阅读错误中的强制工作流顺序
-3. 按顺序执行：preflight -> 思考 -> 计划 -> 操作
-4. 不要在修复顺序之前重试相同操作
-
-## 绝对规则（强制执行）
-
-- 调用preflight()之前所有工具被阻止
-- 调用sequential_thinking()或think_step()之前 update_plan被阻止
-- 计划存在之前 code_review、ask_continue被阻止
-- 不能跳过步骤 - hooks会阻止你
-
-## 用户交互工具（何时使用）
-
-- ask_user() - 请求用户自由输入或确认（支持图片上传）
-- ask_question() - 提出带预设选项的澄清问题（单选）
-- ask_continue() - 任务完成时必须调用。询问用户是否继续或给出新指令
-
-规则：
-- 任务完成时必须调用 ask_continue() - 未经用户许可不得继续
-- 需要特定选项的澄清时使用 ask_question()
-- 需要自由输入或确认时使用 ask_user()
-
-## 关键工具
-
-- preflight(userPrompt=...) - 强制第一步（启用其他工具）
-- sequential_thinking() - 强制第二步（启用计划）
-- think_step() - sequential_thinking的替代
-- update_plan() - 强制第三步（启用编码）
-- check_hook_status() - 被阻止时调用查看原因
-- memory_search({scope:"both"}) - 搜索记忆（preflight后）
-- rag_search() - 搜索代码库（preflight后）
-- code_review() - 完成前必须
-- ask_continue() - 任务完成时必须调用
+## MCP 工具参考
+| 工具 | 何时使用 |
+|------|----------|
+| `preflight()` | 第一步 - 在其他工具之前 |
+| `sequential_thinking()` | 第二步 - 计划之前 |
+| `think_step()` | sequential_thinking 的替代 |
+| `update_plan()` | 第三步 - 编码之前 |
+| `memory_search()` | 搜索记忆（预检后） |
+| `rag_search()` | 搜索代码库（预检后） |
+| `code_review()` | 完成前 |
+| `ask_continue()` | 最后 - 任务完成时 |
+| `check_hook_status()` | 被阻止时 - 查看原因 |
 ```
 
 ## 项目跟踪（Overview / PRD / Plan / WAM / Walkthrough）
