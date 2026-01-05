@@ -3474,9 +3474,9 @@ const TOOLS = [
 	            required: ['rationale']
 	        }
 	    },
-		    {
+    {
 		        name: 'update_plan',
-		        description: 'Update plan (include tasks/checklist); default merges, avoid accidental loss / 更新计划（含任务/清单）；默认合并，避免误覆盖',
+		        description: '**REQUIRES THINKING FIRST** - Create/update plan with tasks/checklist. BLOCKED until you call sequential_thinking() or think_step(). Workflow: preflight -> THINK -> update_plan. / **需要先思考** - 创建/更新计划（含任务/清单）。在调用sequential_thinking()或think_step()之前被阻止。工作流：preflight -> 思考 -> update_plan。',
 		        inputSchema: {
 		            type: 'object',
 		            properties: {
@@ -3629,14 +3629,14 @@ const TOOLS = [
 	            }
 	        }
 	    },
-	    {
+    {
 	        name: 'preflight',
-	        description: 'Run required preflight checks (status/plan/memory/rag/wam) / 运行必需预检（状态/计划/记忆/RAG/WAM）',
+	        description: '**MANDATORY FIRST STEP** - ALL MCP tools are BLOCKED until you call this. Run this IMMEDIATELY when starting any task. Loads project status, plan, memory, RAG context. / **必须首先调用** - 所有MCP工具在此之前都被阻止。任务开始时立即运行。加载项目状态、计划、记忆、RAG上下文。',
 	        inputSchema: {
 	            type: 'object',
 	            properties: {
 	                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' },
-	                userPrompt: { type: 'string', description: 'Current user prompt (used as search query) / 当前用户提示（用作检索 query）' },
+	                userPrompt: { type: 'string', description: 'REQUIRED: Current user prompt/request. This is used for context search. / 必填：当前用户提示/请求，用于上下文检索' },
 	                query: { type: 'string', description: 'Fallback query for memory/rag search / 记忆/RAG 检索的兜底 query' },
 	                ragQuery: { type: 'string', description: 'Override query for rag_search / rag_search 专用 query' },
 	                memoryQuery: { type: 'string', description: 'Override query for memory_search / memory_search 专用 query' },
@@ -4104,7 +4104,7 @@ const TOOLS = [
     },
     {
         name: 'sequential_thinking',
-        description: 'REQUIRED for complex tasks. Break down problems into structured thinking steps: define problem, research, analyze, synthesize, conclude. Tracks thought progression and enables revision. Call BEFORE planning complex features. / 复杂任务必调。将问题分解为结构化思考步骤：定义问题、研究、分析、综合、结论。跟踪思维进展并支持修订。规划复杂功能前必调。',
+        description: '**MANDATORY STEP 2** - Call AFTER preflight, BEFORE update_plan. BLOCKED: update_plan() until you call this. Structured thinking: define problem, research, analyze, synthesize, conclude. Workflow: preflight -> THIS -> update_plan. / **必须第2步** - preflight后、update_plan前调用。update_plan()在调用此工具前被阻止。结构化思考：定义问题、研究、分析、综合、结论。工作流：preflight -> 此工具 -> update_plan。',
         inputSchema: {
             type: 'object',
             properties: {
@@ -4177,7 +4177,7 @@ const TOOLS = [
     },
     {
         name: 'think_step',
-        description: 'Record a single thinking step in a structured problem-solving session. Lighter than sequential_thinking - use for quick thought logging. Auto-tracks history and enables revision. / 在结构化问题解决会话中记录单个思考步骤。比 sequential_thinking 更轻量 - 用于快速思维记录。自动跟踪历史并支持修订。',
+        description: '**ALTERNATIVE TO sequential_thinking** - Lightweight thinking step. Also satisfies MANDATORY THINK requirement before update_plan. Use for simpler tasks. Workflow: preflight -> THIS -> update_plan. / **sequential_thinking的替代** - 轻量级思考步骤。也满足update_plan前的必须思考要求。用于简单任务。工作流：preflight -> 此工具 -> update_plan。',
         inputSchema: {
             type: 'object',
             properties: {

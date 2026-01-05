@@ -24,15 +24,17 @@ AUDIT_MAX_LINES = 260
 # This prevents the AI from doing too much work without tracking progress
 MAX_WRITES_WITHOUT_PLAN_UPDATE = 2
 
-# Workflow State Machine
-# States: IDLE -> PREFLIGHT_DONE -> PLAN_EXISTS -> ACTING -> VERIFYING -> READY_TO_ASK
+# Workflow State Machine - MANDATORY SEQUENCE
+# States: IDLE -> PREFLIGHT_DONE -> THINK_DONE -> PLAN_EXISTS -> ACTING -> VERIFYING -> READY_TO_ASK
+# AI MUST follow this exact sequence. Skipping steps is BLOCKED.
 WORKFLOW_STATES = {
     "IDLE": 0,           # Initial state, no work started
-    "PREFLIGHT_DONE": 1, # preflight() completed
-    "PLAN_EXISTS": 2,    # Plan with checklist exists
-    "ACTING": 3,         # Implementing (write_code/run_command allowed)
-    "VERIFYING": 4,      # Running verification (tests/build/lint)
-    "READY_TO_ASK": 5,   # Ready to call ask_continue
+    "PREFLIGHT_DONE": 1, # preflight() completed - REQUIRED for ALL tools
+    "THINK_DONE": 2,     # sequential_thinking/think_step completed - REQUIRED before planning
+    "PLAN_EXISTS": 3,    # Plan with checklist exists - REQUIRED before action
+    "ACTING": 4,         # Implementing (write_code/run_command allowed)
+    "VERIFYING": 5,      # Running verification (tests/build/lint)
+    "READY_TO_ASK": 6,   # Ready to call ask_continue
 }
 
 # Tools that advance workflow state
@@ -40,20 +42,32 @@ WORKFLOW_ADVANCE_TOOLS = {
     "preflight": "PREFLIGHT_DONE",
     "get_project_status": "PREFLIGHT_DONE",  # Alternative to preflight
     "index_codebase": "PREFLIGHT_DONE",  # Deep codebase analysis
+    "sequential_thinking": "THINK_DONE",  # Advance to THINK_DONE
+    "think_step": "THINK_DONE",  # Lightweight thinking also advances state
     "update_plan": "PLAN_EXISTS",
     "check_plan": "READY_TO_ASK",
 }
 
-# Tools that require minimum workflow state
+# BOOTSTRAP TOOLS: These are the ONLY tools allowed before preflight
+# Everything else is BLOCKED until preflight() is called
+WORKFLOW_BOOTSTRAP_TOOLS = {
+    "preflight",           # The required bootstrap tool
+    "check_hook_status",   # Always allowed (acknowledge blocks)
+}
+
+# Tools that require minimum workflow state (specific requirements beyond PREFLIGHT_DONE)
+# NOTE: ALL tools require PREFLIGHT_DONE by default. This dict specifies ADDITIONAL requirements.
 WORKFLOW_REQUIREMENTS = {
-    "set_prd": "PREFLIGHT_DONE",
-    "update_plan": "PREFLIGHT_DONE",
-    "update_overview": "PREFLIGHT_DONE",
-    "generate_overview": "PREFLIGHT_DONE",
+    # Require THINK_DONE before planning (MANDATORY: think before you plan)
+    "update_plan": "THINK_DONE",
+    "plan_change_request": "THINK_DONE",
+    "set_prd": "THINK_DONE",
+    "approve_prd": "THINK_DONE",
+    # Require PLAN_EXISTS before these (MANDATORY: plan before you act)
     "update_walkthrough": "PLAN_EXISTS",
-    "save_memory": "PREFLIGHT_DONE",
-    "record_lesson": "PREFLIGHT_DONE",
-    "wam_commit": "PREFLIGHT_DONE",
+    "generate_walkthrough": "PLAN_EXISTS",
+    "code_review": "PLAN_EXISTS",
+    "ask_continue": "PLAN_EXISTS",
 }
 
 REQUIRE_RATIONALE_TOOLS = {
@@ -537,18 +551,78 @@ def advance_workflow_state(state, project_id, tool_name):
 
 
 def check_workflow_requirement(state, project_id, tool_name):
-    """Check if workflow state meets tool requirement."""
-    if tool_name not in WORKFLOW_REQUIREMENTS:
-        return None  # No requirement
-    required_state = WORKFLOW_REQUIREMENTS[tool_name]
+    """
+    MANDATORY workflow enforcement.
+    
+    Rules:
+    1. Bootstrap tools (preflight, check_hook_status) are ALWAYS allowed
+    2. ALL other tools require PREFLIGHT_DONE at minimum
+    3. Some tools require higher states (THINK_DONE, PLAN_EXISTS) per WORKFLOW_REQUIREMENTS
+    
+    Returns error message if blocked, None if allowed.
+    """
+    # Bootstrap tools are always allowed (these are the ONLY exception)
+    if tool_name in WORKFLOW_BOOTSTRAP_TOOLS:
+        return None
+    
     current = get_workflow_state(state, project_id)
     current_level = WORKFLOW_STATES.get(current, 0)
-    required_level = WORKFLOW_STATES.get(required_state, 0)
-    if current_level < required_level:
+    
+    # MANDATORY: ALL tools require PREFLIGHT_DONE at minimum
+    preflight_level = WORKFLOW_STATES.get("PREFLIGHT_DONE", 1)
+    if current_level < preflight_level:
         return (
-            f"Blocked: Tool '{tool_name}' requires workflow state '{required_state}' but current state is '{current}'.\n"
-            f"Required: Run preflight(userPrompt=...) first to initialize workflow state."
+            f"BLOCKED: MANDATORY preflight() not called.\n"
+            f"Tool '{tool_name}' is blocked because you have not run preflight().\n"
+            f"\n"
+            f"MANDATORY WORKFLOW SEQUENCE:\n"
+            f"  1. preflight(userPrompt=...) - REQUIRED FIRST\n"
+            f"  2. sequential_thinking() or think_step() - REQUIRED before planning\n"
+            f"  3. update_plan() - REQUIRED before coding\n"
+            f"  4. [code/verify] - Then implement\n"
+            f"\n"
+            f"Current state: {current}\n"
+            f"Required: Run preflight(userPrompt='<user request>') NOW."
         )
+    
+    # Check for additional requirements (THINK_DONE, PLAN_EXISTS, etc.)
+    if tool_name in WORKFLOW_REQUIREMENTS:
+        required_state = WORKFLOW_REQUIREMENTS[tool_name]
+        required_level = WORKFLOW_STATES.get(required_state, 0)
+        if current_level < required_level:
+            # Provide specific guidance based on required state
+            if required_state == "THINK_DONE":
+                return (
+                    f"BLOCKED: Tool '{tool_name}' requires THINKING first.\n"
+                    f"\n"
+                    f"MANDATORY: You must THINK before you PLAN.\n"
+                    f"Current state: {current}\n"
+                    f"Required state: {required_state}\n"
+                    f"\n"
+                    f"Run sequential_thinking() or think_step() to analyze the problem before planning."
+                )
+            elif required_state == "PLAN_EXISTS":
+                return (
+                    f"BLOCKED: Tool '{tool_name}' requires a PLAN first.\n"
+                    f"\n"
+                    f"MANDATORY: You must have a plan before using this tool.\n"
+                    f"Current state: {current}\n"
+                    f"Required state: {required_state}\n"
+                    f"\n"
+                    f"Workflow sequence:\n"
+                    f"  1. preflight() - Done\n"
+                    f"  2. sequential_thinking() - {'Done' if current_level >= WORKFLOW_STATES.get('THINK_DONE', 2) else 'MISSING'}\n"
+                    f"  3. update_plan() - MISSING\n"
+                    f"\n"
+                    f"Create a plan with update_plan() first."
+                )
+            else:
+                return (
+                    f"BLOCKED: Tool '{tool_name}' requires workflow state '{required_state}'.\n"
+                    f"Current state: {current}\n"
+                    f"Follow the mandatory workflow sequence."
+                )
+    
     return None
 
 
