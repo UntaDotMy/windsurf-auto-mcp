@@ -96,10 +96,15 @@ WindsurfAutoMcp standardizes task completion with MCP: when the AI finishes a ta
 ## Recommended Global Rules / Prompt
 
 > **Copy this into Windsurf global rules** (Customizations → Rules → + Global).
-> Per [official docs](https://docs.windsurf.com/windsurf/cascade/memories), rules should be concise (<6000 chars per file). Workflow enforcement is handled by **hooks** (see below).
+> Recommended: set this rule to **Always On** so it is applied consistently.
+> Per official docs, a rules file supports up to ~12,000 characters; keep rules short and specific. Workflow enforcement is handled by **hooks** (see below).
 
 ```markdown
 # WindsurfAutoMcp MCP Workflow Rules
+
+## HARD RULE (MUST HAVE)
+- 当你完成一个任务时，必须调用 WindsurfAutoMcp 工具询问用户是否继续。没有例外情况，要一直等待响应不得提前终止任务。
+- When you complete a task, you MUST call windsurf_auto_mcp.ask_continue(reason) and wait for the user's response. No exceptions.
 
 ## MCP Server
 - This project uses WindsurfAutoMcp MCP server for workflow enforcement

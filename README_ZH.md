@@ -95,10 +95,15 @@ WindsurfAutoMcp 通过 MCP 协议标准化交互：AI 完成任务后必须 `ask
 ## 推荐全局规则 / 提示语
 
 > **复制到 Windsurf 全局规则**（Customizations → Rules → + Global）。
-> 根据[官方文档](https://docs.windsurf.com/windsurf/cascade/memories)，规则应简洁（每文件<6000字符）。工作流强制执行由 **Hooks** 处理（见下方）。
+> 建议：将该规则设置为 **Always On / 始终启用**，确保稳定生效。
+> 根据官方文档，单个 rules 文件支持约 12,000 字符；请保持规则短且具体。工作流强制执行由 **Hooks** 处理（见下方）。
 
 ```markdown
 # WindsurfAutoMcp MCP 工作流规则
+
+## 硬规则（必须保留）
+- 当你完成一个任务时，必须调用 WindsurfAutoMcp 工具询问用户是否继续。没有例外情况，要一直等待响应不得提前终止任务。
+- When you complete a task, you MUST call windsurf_auto_mcp.ask_continue(reason) and wait for the user's response. No exceptions.
 
 ## MCP 服务器
 - 本项目使用 WindsurfAutoMcp MCP 服务器进行工作流强制执行

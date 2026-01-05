@@ -3393,8 +3393,8 @@ function prunePendingRequests(maxAgeMs = 2 * 60 * 60 * 1000) {
 
 const TOOLS = [
     {
-        name: 'ask_user',
-        description: 'Request user input/confirmation; opens a dialog (supports image upload) / 请求用户输入或确认：弹出对话框（支持图片上传）',
+	        name: 'ask_user',
+        description: 'MUST use for free-form user input/confirmation (supports image upload). Do NOT ask the user to type answers in plain chat when you need a response. / 必须用于请求用户自由输入/确认（支持图片上传）。需要用户回应时不要在聊天里随便问，必须用此工具弹窗。',
         inputSchema: {
             type: 'object',
             properties: {
@@ -3411,8 +3411,8 @@ const TOOLS = [
         }
     },
     {
-        name: 'ask_question',
-        description: 'Ask single-choice clarification questions (any number of options) with optional extra text / 单选澄清问题（选项数量不限），可附加补充文本',
+	        name: 'ask_question',
+        description: 'MUST use for clarifying questions with predefined options (single-choice). Do NOT present options in plain chat; use this tool. / 必须用于带预设选项的澄清问题（单选）。不要在聊天里列选项让用户回复，必须用此工具。',
         inputSchema: {
             type: 'object',
             properties: {
@@ -3646,9 +3646,9 @@ const TOOLS = [
 	            }
 	        }
 	    },
-	    {
+    {
 	        name: 'ask_continue',
-	        description: 'Ask whether to continue after finishing a task / 任务完成后询问用户是否继续（可提供新指令）',
+	        description: 'MANDATORY: When you complete a task, you MUST call this tool to ask the user whether to continue. No exceptions - ALWAYS wait for the response and do not terminate early. / 必须：当你完成一个任务时，必须调用 WindsurfAutoMcp 工具询问用户是否继续。没有例外情况，要一直等待响应不得提前终止任务。',
 	        inputSchema: {
             type: 'object',
             properties: {

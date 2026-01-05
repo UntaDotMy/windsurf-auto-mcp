@@ -48,11 +48,17 @@ WORKFLOW_ADVANCE_TOOLS = {
     "check_plan": "READY_TO_ASK",
 }
 
-# BOOTSTRAP TOOLS: These are the ONLY tools allowed before preflight
-# Everything else is BLOCKED until preflight() is called
+# BOOTSTRAP TOOLS: Allowed even before preflight
+# NOTE: We intentionally allow user-interaction tools so the agent does not fall back to plain-text questions.
 WORKFLOW_BOOTSTRAP_TOOLS = {
-    "preflight",           # The required bootstrap tool
-    "check_hook_status",   # Always allowed (acknowledge blocks)
+    # Required bootstrap
+    "preflight",
+    # Always allowed (acknowledge blocks)
+    "check_hook_status",
+    # User interaction (must work even if agent forgot preflight)
+    "ask_user",
+    "ask_question",
+    "ask_continue",
 }
 
 # Tools that require minimum workflow state (specific requirements beyond PREFLIGHT_DONE)
@@ -67,7 +73,7 @@ WORKFLOW_REQUIREMENTS = {
     "update_walkthrough": "PLAN_EXISTS",
     "generate_walkthrough": "PLAN_EXISTS",
     "code_review": "PLAN_EXISTS",
-    "ask_continue": "PLAN_EXISTS",
+    # NOTE: ask_continue is always allowed; gating is handled in pre_mcp_tool_use based on whether code was written.
 }
 
 REQUIRE_RATIONALE_TOOLS = {
@@ -2372,6 +2378,10 @@ def main():
                         allowed = {
                             # acknowledge (can be used again)
                             "check_hook_status",
+                            # user interaction (always allowed)
+                            "ask_user",
+                            "ask_question",
+                            "ask_continue",
                             # recall/think/research
                             "preflight",
                             "get_project_status",
@@ -2467,73 +2477,86 @@ def main():
                 return 2
 
         if tool_name == "ask_continue" and project:
-            # Ensure all core gates are satisfied before allowing task completion.
-            gate = check_project_gates(project, memory_data=memory_data, server_url=server_url)
-            if gate:
-                persist_hook_feedback(server_url, project, "pre_mcp_tool_use", "block", gate)
-                print_block_prominent(gate, "Follow the instructions above")
-                return 2
+            # ask_continue must ALWAYS be callable.
+            # We only enforce strict completion gates when code was written during this task.
+            try:
+                project_id = str(project.get("projectId") or "").strip()
+                state = load_guard_state()
+                state, ps = _get_project_state(state, project_id)
+                last_user_prompt = str(ps.get("lastUserPromptAt") or "").strip()
+                last_write = str(ps.get("lastCodeWriteAt") or "").strip()
+                wrote_code_this_task = bool(last_write) and (not last_user_prompt or last_write >= last_user_prompt)
+            except Exception:
+                wrote_code_this_task = False
 
-            complete, done, total = _plan_is_complete(project)
-            if total > 0 and not complete:
-                msg = (
-                    f"Blocked: Plan is not complete ({done}/{total}).\n"
-                    "Required: update_plan to mark items done, then run check_plan, then retry ask_continue."
-                )
-                maybe_record_lesson(
-                    server_url,
-                    project,
-                    "ask_continue_plan_incomplete",
-                    f"Attempted ask_continue while Plan is incomplete ({done}/{total}).",
-                    "Update plan progress (update_plan), verify with check_plan, then call ask_continue again.",
-                    "Always treat Plan as the source of truth; do not finalize until all required items are done.",
-                    title="ask_continue blocked: Plan incomplete",
-                    tags=["ask_continue", "plan", "block"],
-                    scope="both",
-                )
-                persist_hook_feedback(server_url, project, "pre_mcp_tool_use", "block", msg)
-                print_block_prominent(msg, "Run update_plan() to mark items done, then check_plan()")
-                return 2
+            if wrote_code_this_task:
+                # Ensure all core gates are satisfied before allowing task completion.
+                gate = check_project_gates(project, memory_data=memory_data, server_url=server_url)
+                if gate:
+                    persist_hook_feedback(server_url, project, "pre_mcp_tool_use", "block", gate)
+                    print_block_prominent(gate, "Follow the instructions above")
+                    return 2
 
-            if not _plan_has_done_code_review(project):
-                msg = (
-                    "Blocked: Code review gate is missing/not done.\n"
-                    "Required: add a Plan item like 'Final code review (security/performance/gaps)' and mark it done, then retry ask_continue."
-                )
-                maybe_record_lesson(
-                    server_url,
-                    project,
-                    "ask_continue_code_review_missing",
-                    "Attempted ask_continue without completing a final code review gate.",
-                    "Add a code review Plan item (security/performance/gaps) and mark it done before final delivery.",
-                    "Make code review the last mandatory step before shipping to avoid gaps, security issues, and regressions.",
-                    title="ask_continue blocked: Code review gate missing",
-                    tags=["ask_continue", "code_review", "block"],
-                    scope="both",
-                )
-                persist_hook_feedback(server_url, project, "pre_mcp_tool_use", "block", msg)
-                print_block_prominent(msg, "Add code review Plan item and mark it done")
-                return 2
+                complete, done, total = _plan_is_complete(project)
+                if total > 0 and not complete:
+                    msg = (
+                        f"Blocked: Plan is not complete ({done}/{total}).\n"
+                        "Required: update_plan to mark items done, then run check_plan, then retry ask_continue."
+                    )
+                    maybe_record_lesson(
+                        server_url,
+                        project,
+                        "ask_continue_plan_incomplete",
+                        f"Attempted ask_continue while Plan is incomplete ({done}/{total}).",
+                        "Update plan progress (update_plan), verify with check_plan, then call ask_continue again.",
+                        "Always treat Plan as the source of truth; do not finalize until all required items are done.",
+                        title="ask_continue blocked: Plan incomplete",
+                        tags=["ask_continue", "plan", "block"],
+                        scope="both",
+                    )
+                    persist_hook_feedback(server_url, project, "pre_mcp_tool_use", "block", msg)
+                    print_block_prominent(msg, "Run update_plan() to mark items done, then check_plan()")
+                    return 2
 
-            if not _walkthrough_has_content(project):
-                msg = (
-                    "Blocked: Walkthrough is empty.\n"
-                    "Required: update_walkthrough with a short project log (what changed, verification, risks), then retry ask_continue."
-                )
-                maybe_record_lesson(
-                    server_url,
-                    project,
-                    "ask_continue_walkthrough_empty",
-                    "Attempted ask_continue with an empty Walkthrough.",
-                    "Update walkthrough with what changed, verification steps, and risks, then retry ask_continue.",
-                    "Keep Walkthrough updated during work; ensure it is non-empty before final delivery for auditability.",
-                    title="ask_continue blocked: Walkthrough empty",
-                    tags=["ask_continue", "walkthrough", "block"],
-                    scope="both",
-                )
-                persist_hook_feedback(server_url, project, "pre_mcp_tool_use", "block", msg)
-                print_block_prominent(msg, "Run update_walkthrough() with changes log")
-                return 2
+                if not _plan_has_done_code_review(project):
+                    msg = (
+                        "Blocked: Code review gate is missing/not done.\n"
+                        "Required: add a Plan item like 'Final code review (security/performance/gaps)' and mark it done, then retry ask_continue."
+                    )
+                    maybe_record_lesson(
+                        server_url,
+                        project,
+                        "ask_continue_code_review_missing",
+                        "Attempted ask_continue without completing a final code review gate.",
+                        "Add a code review Plan item (security/performance/gaps) and mark it done before final delivery.",
+                        "Make code review the last mandatory step before shipping to avoid gaps, security issues, and regressions.",
+                        title="ask_continue blocked: Code review gate missing",
+                        tags=["ask_continue", "code_review", "block"],
+                        scope="both",
+                    )
+                    persist_hook_feedback(server_url, project, "pre_mcp_tool_use", "block", msg)
+                    print_block_prominent(msg, "Add code review Plan item and mark it done")
+                    return 2
+
+                if not _walkthrough_has_content(project):
+                    msg = (
+                        "Blocked: Walkthrough is empty.\n"
+                        "Required: update_walkthrough with a short project log (what changed, verification, risks), then retry ask_continue."
+                    )
+                    maybe_record_lesson(
+                        server_url,
+                        project,
+                        "ask_continue_walkthrough_empty",
+                        "Attempted ask_continue with an empty Walkthrough.",
+                        "Update walkthrough with what changed, verification steps, and risks, then retry ask_continue.",
+                        "Keep Walkthrough updated during work; ensure it is non-empty before final delivery for auditability.",
+                        title="ask_continue blocked: Walkthrough empty",
+                        tags=["ask_continue", "walkthrough", "block"],
+                        scope="both",
+                    )
+                    persist_hook_feedback(server_url, project, "pre_mcp_tool_use", "block", msg)
+                    print_block_prominent(msg, "Run update_walkthrough() with changes log")
+                    return 2
 
             # Formal review artifact: Walkthrough must contain a structured review section
             # and must be updated after the last code write.
@@ -2613,6 +2636,15 @@ def main():
             except Exception:
                 pass
 
+            # Clear lockout after successful ask_continue (completion remediation)
+            try:
+                if project and str(tool_name or "") == "ask_continue":
+                    pid = str(project.get("projectId") or "").strip()
+                    if pid:
+                        _clear_lockout(pid)
+            except Exception:
+                pass
+
             # If the agent ran a remediation tool, clear stale last-block message.
             remediation_tools = {
                 "preflight",
@@ -2622,6 +2654,9 @@ def main():
                 "record_lesson",
                 "wam_commit",
                 "check_hook_status",
+                "ask_continue",
+                "ask_user",
+                "ask_question",
                 "update_scratchpad",
                 "log_progress",
             }
@@ -2661,14 +2696,61 @@ def main():
 
     if action == "post_cascade_response":
         response = str(tool_info.get("response") or "")
-        if "ask_continue" not in response:
-            msg = (
-                "Warning: Cascade response does not include ask_continue. "
-                "If you use WindsurfAutoMcp, enforce the hard rule: end via ask_continue(reason)."
+        response_l = response.lower()
+        tracker = load_tracker()
+        cwd_hint = _extract_workspace_root_hint(payload, tool_info)
+        project = select_project(tracker, cwd=cwd_hint)
+
+        # NOTE: Post-hooks cannot block actions. We persist a BLOCK to memory + lockout so the agent is forced
+        # to acknowledge and fix on the next MCP tool call.
+        # See: https://docs.windsurf.com/windsurf/mcp-and-plugins/hooks
+
+        def _mentions_ask_continue(resp_lower: str) -> bool:
+            return (
+                "windsurf_auto_mcp.ask_continue" in resp_lower
+                or "ask_continue" in resp_lower
             )
-            persist_hook_feedback(server_url, None, "post_cascade_response", "warn", msg)
-            print(msg, file=sys.stderr)
-            return 1
+
+        def _looks_like_completion(resp_text: str, resp_lower: str) -> bool:
+            # Heuristic completion signals (EN + ZH)
+            keywords = [
+                "final output",
+                "task completed",
+                "completed",
+                "all done",
+                "done.",
+                "finished",
+                "successfully",
+                "已完成",
+                "完成",
+                "搞定",
+                "结束",
+                "全部完成",
+            ]
+            if any(k in resp_lower for k in keywords if isinstance(k, str)):
+                return True
+            # Also treat an explicit summary section as likely completion
+            if "## completion" in resp_lower or "## 完成" in resp_text:
+                return True
+            return False
+
+        if project and (not _mentions_ask_continue(response_l)):
+            # If the Plan is complete, or the response looks like completion, require ask_continue.
+            try:
+                complete, done, total = _plan_is_complete(project)
+            except Exception:
+                complete, done, total = (False, 0, 0)
+
+            if (total > 0 and complete) or _looks_like_completion(response, response_l):
+                msg = (
+                    "Blocked: Missing ask_continue at task completion.\n"
+                    "Required (ZH): 当你完成一个任务时，必须调用 WindsurfAutoMcp 工具询问用户是否继续。没有例外情况，要一直等待响应不得提前终止任务。\n"
+                    "Required (EN): When you complete a task, you MUST call windsurf_auto_mcp.ask_continue(reason) and wait for the user's response. No exceptions.\n"
+                    "Fix: Call ask_continue(reason='...') now."
+                )
+                persist_hook_feedback(server_url, project, "post_cascade_response", "block", msg)
+                print(msg, file=sys.stderr)
+                return 1
         # Soft audit: if the model is trying to end the task but the plan is not complete,
         # remind it to update progress and/or record lessons before final delivery.
         try:
