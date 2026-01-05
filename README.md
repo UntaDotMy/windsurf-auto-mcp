@@ -155,6 +155,17 @@ IDLE -> PREFLIGHT_DONE -> THINK_DONE -> PLAN_EXISTS -> [code/verify]
 - code_review, ask_continue blocked until plan exists
 - NO skipping steps - hooks will block you
 
+## USER INTERACTION TOOLS (WHEN TO USE)
+
+- ask_user() - Request free-form input or confirmation from user (supports image upload)
+- ask_question() - Ask clarifying questions with predefined options (single-choice)
+- ask_continue() - MANDATORY at task completion. Ask if user wants to continue or give new instructions
+
+RULES:
+- ALWAYS call ask_continue() when task is complete - never continue without user permission
+- Use ask_question() when you need clarification with specific options
+- Use ask_user() when you need free-form input or confirmation
+
 ## KEY TOOLS
 
 - preflight(userPrompt=...) - MANDATORY FIRST (enables all other tools)
@@ -165,7 +176,7 @@ IDLE -> PREFLIGHT_DONE -> THINK_DONE -> PLAN_EXISTS -> [code/verify]
 - memory_search({scope:"both"}) - Search memories (after preflight)
 - rag_search() - Search codebase (after preflight)
 - code_review() - Before completion
-- ask_continue() - Request next task
+- ask_continue() - MANDATORY at task completion
 ```
 
 ## Project Tracker (Overview / PRD / Plan / WAM / Walkthrough)

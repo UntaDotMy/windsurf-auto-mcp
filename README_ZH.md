@@ -154,6 +154,17 @@ IDLE -> PREFLIGHT_DONE -> THINK_DONE -> PLAN_EXISTS -> [代码/验证]
 - 计划存在之前 code_review、ask_continue被阻止
 - 不能跳过步骤 - hooks会阻止你
 
+## 用户交互工具（何时使用）
+
+- ask_user() - 请求用户自由输入或确认（支持图片上传）
+- ask_question() - 提出带预设选项的澄清问题（单选）
+- ask_continue() - 任务完成时必须调用。询问用户是否继续或给出新指令
+
+规则：
+- 任务完成时必须调用 ask_continue() - 未经用户许可不得继续
+- 需要特定选项的澄清时使用 ask_question()
+- 需要自由输入或确认时使用 ask_user()
+
 ## 关键工具
 
 - preflight(userPrompt=...) - 强制第一步（启用其他工具）
@@ -164,7 +175,7 @@ IDLE -> PREFLIGHT_DONE -> THINK_DONE -> PLAN_EXISTS -> [代码/验证]
 - memory_search({scope:"both"}) - 搜索记忆（preflight后）
 - rag_search() - 搜索代码库（preflight后）
 - code_review() - 完成前必须
-- ask_continue() - 请求下一个任务
+- ask_continue() - 任务完成时必须调用
 ```
 
 ## 项目跟踪（Overview / PRD / Plan / WAM / Walkthrough）
