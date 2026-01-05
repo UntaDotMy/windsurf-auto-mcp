@@ -2239,7 +2239,17 @@ def main():
                     ps["lastCodeWriteAt"] = _iso_now()
                     ps["lastCodeWritePath"] = str(file_path or "")
                     ps["writesSincePlanUpdate"] = int(ps.get("writesSincePlanUpdate") or 0) + 1
+                    ps["writesSinceProgressLog"] = int(ps.get("writesSinceProgressLog") or 0) + 1
                     save_guard_state(state)
+                    # Soft warning: suggest progress log after many writes (not a block)
+                    writes_since_log = int(ps.get("writesSinceProgressLog") or 0)
+                    if writes_since_log >= 3:
+                        warn_msg = (
+                            f"Reminder: {writes_since_log} writes since last progress log.\n"
+                            "Recommended: call log_progress() or update_scratchpad() to track what worked/didn't work."
+                        )
+                        persist_hook_feedback(server_url, project, "post_write_code", "warn", warn_msg)
+                        print(warn_msg, file=sys.stderr)
             except Exception:
                 pass
         return 0
@@ -2310,6 +2320,10 @@ def main():
                             "wam_status",
                             "wam_diff",
                             "wam_commit",
+                            # progress tracking (scratchpad/log_progress)
+                            "update_scratchpad",
+                            "log_progress",
+                            "get_scratchpad",
                         }
                         if str(tool_name or "") not in allowed:
                             msg = (
@@ -2534,9 +2548,25 @@ def main():
                 "record_lesson",
                 "wam_commit",
                 "check_hook_status",
+                "update_scratchpad",
+                "log_progress",
             }
             if project and str(tool_name or "") in remediation_tools:
                 clear_hook_last_block(server_url, project)
+            
+            # Reset progress log counter when update_scratchpad or log_progress is called
+            progress_tools = {"update_scratchpad", "log_progress"}
+            if project and str(tool_name or "") in progress_tools:
+                try:
+                    pid = str(project.get("projectId") or "").strip()
+                    if pid:
+                        state = load_guard_state()
+                        state, ps = _get_project_state(state, pid)
+                        ps["writesSinceProgressLog"] = 0
+                        ps["lastProgressLogAt"] = _iso_now()
+                        save_guard_state(state)
+                except Exception:
+                    pass
         if error_text:
             persist_hook_feedback(
                 server_url,

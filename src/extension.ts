@@ -58,6 +58,8 @@ type ProjectTrackerStats = {
     lastSequentialThinkingAt?: string;  // Required for THINK-FIRST workflow
     lastResearchAt?: string;  // When resolve_library_docs or get_library_docs was called
     lastResearchSaveAt?: string;  // When research was saved via save_memory/record_lesson
+    lastProgressLogAt?: string;  // When log_progress or update_scratchpad was called
+    lastScratchpadUpdateAt?: string;  // When update_scratchpad was called
 
     // Artifact update timestamps
     lastPlanUpdateAt?: string;
@@ -3359,6 +3361,9 @@ let extensionContext: vscode.ExtensionContext;
 	    getThinkingHistoryCalls: 0,
 	    manageSprintCalls: 0,
 	    generateCommitMessageCalls: 0,
+	    updateScratchpadCalls: 0,
+	    logProgressCalls: 0,
+	    getScratchpadCalls: 0,
 	    imageUploads: 0,
 	    startTime: Date.now()
 	};
@@ -4197,6 +4202,88 @@ const TOOLS = [
             },
             required: []
         }
+    },
+    // ==================== Progress Tracking Tools (from devin.cursorrules + claude-task-master) ====================
+    {
+        name: 'update_scratchpad',
+        description: 'IMPORTANT: Update your scratchpad to track current task, plan steps, and findings. Review at start of each task, update during/after implementation. Survives context window limits. Like devin.cursorrules Scratchpad pattern. / 重要：更新便签本以跟踪当前任务、计划步骤和发现。每个任务开始时回顾，实施期间/后更新。可跨越上下文窗口限制。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                task: { type: 'string', description: 'Current task being worked on / 当前正在处理的任务' },
+                steps: {
+                    type: 'array',
+                    description: 'Plan steps with progress markers: {text, done} / 带进度标记的计划步骤',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            text: { type: 'string', description: 'Step description / 步骤描述' },
+                            done: { type: 'boolean', description: 'Whether step is done / 步骤是否完成' }
+                        },
+                        required: ['text']
+                    }
+                },
+                findings: { type: 'string', description: 'Key findings during implementation / 实施期间的关键发现' },
+                workedWell: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: 'Things that worked well / 有效的做法'
+                },
+                didntWork: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: 'Things that did NOT work (to avoid repeating) / 无效的做法（避免重复）'
+                },
+                nextSteps: { type: 'string', description: 'Planned next steps / 计划的下一步' },
+                mode: { type: 'string', enum: ['replace', 'append'], description: 'replace=overwrite scratchpad, append=add to existing (default: replace) / replace=覆盖便签本，append=追加到现有内容' },
+                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
+            },
+            required: ['task']
+        }
+    },
+    {
+        name: 'log_progress',
+        description: 'CALL REGULARLY during implementation. Append timestamped progress entry: what was attempted, what worked/didn\'t work, files changed, decisions made. Like claude-task-master update_subtask pattern. Hooks may require this after N writes. / 实施期间定期调用。追加带时间戳的进度条目：尝试了什么、有效/无效的做法、更改的文件、做出的决策。钩子可能在N次写入后要求此操作。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                taskId: { type: 'string', description: 'Task ID or "current" for active task / 任务ID或"current"表示当前任务' },
+                attempted: { type: 'string', description: 'What was attempted / 尝试了什么' },
+                workedWell: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: 'What worked ("fundamental truths" discovered) / 有效的做法（发现的"基本真理"）'
+                },
+                didntWork: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: 'What did NOT work and why (avoid repeating mistakes) / 无效的做法及原因（避免重复错误）'
+                },
+                filesChanged: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: 'Files created/modified / 创建/修改的文件'
+                },
+                decisions: {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: 'Decisions made and why / 做出的决策及原因'
+                },
+                nextStep: { type: 'string', description: 'Proposed next step / 建议的下一步' },
+                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
+            },
+            required: ['attempted']
+        }
+    },
+    {
+        name: 'get_scratchpad',
+        description: 'Get current scratchpad content. Call at start of task to review context from previous work. / 获取当前便签本内容。任务开始时调用以回顾之前工作的上下文。',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                rootPath: { type: 'string', description: 'Optional project root path / 可选项目根路径' }
+            }
+        }
     }
 ];
 
@@ -4659,6 +4746,18 @@ async function handleToolCall(name: string, args: any): Promise<any> {
         case 'get_thinking_history':
             stats.getThinkingHistoryCalls++;
             result = await handleGetThinkingHistory(args);
+            break;
+        case 'update_scratchpad':
+            stats.updateScratchpadCalls++;
+            result = await handleUpdateScratchpad(args);
+            break;
+        case 'log_progress':
+            stats.logProgressCalls++;
+            result = await handleLogProgress(args);
+            break;
+        case 'get_scratchpad':
+            stats.getScratchpadCalls++;
+            result = await handleGetScratchpad(args);
             break;
         default:
             {
@@ -6600,12 +6699,25 @@ async function handlePreflight(args: any): Promise<any> {
     // Include hook feedback from memory so LLMs see why their actions were blocked
     const hookFeedback = getHookFeedbackFromMemory(rootPath);
     
+    // Get scratchpad if exists (for task continuity across context windows)
+    let scratchpadData: any = null;
+    try {
+        const { project: memProj } = resolveProjectMemory(rootPath);
+        const scratchpadEntry = memProj.memories?.['scratchpad:current'];
+        if (scratchpadEntry?.content) {
+            scratchpadData = parseScratchpadFromMemory(scratchpadEntry.content);
+        }
+    } catch {
+        // no scratchpad
+    }
+    
     const payload: any = {
         startedAt,
         finishedAt: nowIso(),
         rootPath: rootPath || getWorkspaceRootPath() || '',
         autoInitialized,
         hookFeedback: hookFeedback || null,
+        scratchpad: scratchpadData,
         queries: {
             baseQuery,
             ragQuery: effectiveRagQuery,
@@ -6665,6 +6777,24 @@ async function handlePreflight(args: any): Promise<any> {
         lines.push(lang === 'en'
             ? 'You MUST address the block reason before retrying the action.'
             : '你必须先解决阻止原因才能重试该操作。');
+    }
+    
+    // Surface scratchpad context if it exists (task continuity)
+    if (scratchpadData?.task) {
+        lines.push('');
+        const stepsDone = (scratchpadData.steps || []).filter((s: any) => s?.done).length;
+        const stepsTotal = (scratchpadData.steps || []).length;
+        lines.push(lang === 'en'
+            ? `SCRATCHPAD: Task "${scratchpadData.task.slice(0, 60)}..." (${stepsDone}/${stepsTotal} steps done)`
+            : `便签本: 任务 "${scratchpadData.task.slice(0, 60)}..." (已完成 ${stepsDone}/${stepsTotal} 步骤)`);
+        if (scratchpadData.didntWork?.length) {
+            lines.push(lang === 'en'
+                ? `  AVOID (didn't work): ${scratchpadData.didntWork.slice(0, 3).join('; ')}...`
+                : `  避免 (无效): ${scratchpadData.didntWork.slice(0, 3).join('; ')}...`);
+        }
+        lines.push(lang === 'en'
+            ? '  Call get_scratchpad() for full context. Update with update_scratchpad() as you work.'
+            : '  调用 get_scratchpad() 获取完整上下文。工作时用 update_scratchpad() 更新。');
     }
 
     const text = lines.join('\n');
@@ -9244,6 +9374,349 @@ async function handleRecordLesson(args: any): Promise<any> {
     await handleSaveMemory({ key, value: content, kind: 'lesson', scope, tags, links: autoLinks });
     const text = lang === 'en' ? `Lesson recorded: ${key}` : `经验已记录: ${key}`;
     return { content: [{ type: 'text', text }] };
+}
+
+// ==================== Scratchpad & Progress Tracking (devin.cursorrules + claude-task-master patterns) ====================
+
+type ScratchpadStep = { text: string; done: boolean };
+type ScratchpadData = {
+    task: string;
+    steps: ScratchpadStep[];
+    findings: string;
+    workedWell: string[];
+    didntWork: string[];
+    nextSteps: string;
+    updatedAt: string;
+};
+
+type ProgressEntry = {
+    at: string;
+    attempted: string;
+    workedWell: string[];
+    didntWork: string[];
+    filesChanged: string[];
+    decisions: string[];
+    nextStep: string;
+};
+
+type ProgressLog = {
+    entries: ProgressEntry[];
+    updatedAt: string;
+};
+
+function formatScratchpadMarkdown(data: ScratchpadData): string {
+    const lines: string[] = [];
+    lines.push(`# Scratchpad`);
+    lines.push(`Updated: ${data.updatedAt}`);
+    lines.push('');
+    lines.push(`## Current Task`);
+    lines.push(data.task || '(none)');
+    lines.push('');
+    lines.push(`## Steps`);
+    for (const step of data.steps || []) {
+        const marker = step.done ? '[X]' : '[ ]';
+        lines.push(`${marker} ${step.text}`);
+    }
+    if (!data.steps?.length) lines.push('(no steps)');
+    lines.push('');
+    if (data.findings) {
+        lines.push(`## Key Findings`);
+        lines.push(data.findings);
+        lines.push('');
+    }
+    if (data.workedWell?.length) {
+        lines.push(`## What Worked Well`);
+        for (const item of data.workedWell) lines.push(`- ${item}`);
+        lines.push('');
+    }
+    if (data.didntWork?.length) {
+        lines.push(`## What Did NOT Work (avoid repeating)`);
+        for (const item of data.didntWork) lines.push(`- ${item}`);
+        lines.push('');
+    }
+    if (data.nextSteps) {
+        lines.push(`## Next Steps`);
+        lines.push(data.nextSteps);
+        lines.push('');
+    }
+    return lines.join('\n');
+}
+
+function parseScratchpadFromMemory(content: string): ScratchpadData {
+    // Parse markdown back to structured data (best-effort)
+    const data: ScratchpadData = {
+        task: '',
+        steps: [],
+        findings: '',
+        workedWell: [],
+        didntWork: [],
+        nextSteps: '',
+        updatedAt: ''
+    };
+    const lines = content.split('\n');
+    let section = '';
+    for (const line of lines) {
+        if (line.startsWith('Updated:')) {
+            data.updatedAt = line.replace('Updated:', '').trim();
+            continue;
+        }
+        if (line.startsWith('## Current Task')) { section = 'task'; continue; }
+        if (line.startsWith('## Steps')) { section = 'steps'; continue; }
+        if (line.startsWith('## Key Findings')) { section = 'findings'; continue; }
+        if (line.startsWith('## What Worked Well')) { section = 'workedWell'; continue; }
+        if (line.startsWith('## What Did NOT Work')) { section = 'didntWork'; continue; }
+        if (line.startsWith('## Next Steps')) { section = 'nextSteps'; continue; }
+        if (line.startsWith('## ') || line.startsWith('# ')) { section = ''; continue; }
+        
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        
+        switch (section) {
+            case 'task':
+                if (trimmed !== '(none)') data.task = trimmed;
+                break;
+            case 'steps':
+                const stepMatch = trimmed.match(/^\[(X| )\]\s+(.+)$/i);
+                if (stepMatch) {
+                    data.steps.push({ text: stepMatch[2], done: stepMatch[1].toUpperCase() === 'X' });
+                }
+                break;
+            case 'findings':
+                data.findings += (data.findings ? '\n' : '') + trimmed;
+                break;
+            case 'workedWell':
+                if (trimmed.startsWith('- ')) data.workedWell.push(trimmed.slice(2));
+                break;
+            case 'didntWork':
+                if (trimmed.startsWith('- ')) data.didntWork.push(trimmed.slice(2));
+                break;
+            case 'nextSteps':
+                data.nextSteps += (data.nextSteps ? '\n' : '') + trimmed;
+                break;
+        }
+    }
+    return data;
+}
+
+async function handleUpdateScratchpad(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const task = typeof args?.task === 'string' ? args.task.trim() : '';
+    if (!task) {
+        const msg = lang === 'en' ? 'update_scratchpad requires task.' : 'update_scratchpad 需要 task。';
+        throw new Error(msg);
+    }
+    
+    const rootPath = typeof args?.rootPath === 'string' ? args.rootPath : undefined;
+    const mode = args?.mode === 'append' ? 'append' : 'replace';
+    const newSteps: ScratchpadStep[] = Array.isArray(args?.steps)
+        ? args.steps.map((s: any) => ({ text: String(s?.text || ''), done: Boolean(s?.done) })).filter((s: ScratchpadStep) => s.text)
+        : [];
+    const newFindings = typeof args?.findings === 'string' ? args.findings.trim() : '';
+    const newWorkedWell = normalizeStringArray(args?.workedWell);
+    const newDidntWork = normalizeStringArray(args?.didntWork);
+    const newNextSteps = typeof args?.nextSteps === 'string' ? args.nextSteps.trim() : '';
+    
+    const SCRATCHPAD_KEY = 'scratchpad:current';
+    const now = nowIso();
+    
+    // Get existing scratchpad if append mode
+    let existing: ScratchpadData = {
+        task: '',
+        steps: [],
+        findings: '',
+        workedWell: [],
+        didntWork: [],
+        nextSteps: '',
+        updatedAt: now
+    };
+    
+    if (mode === 'append') {
+        try {
+            const { project } = resolveProjectMemory(rootPath);
+            const entry = project.memories?.[SCRATCHPAD_KEY];
+            if (entry?.content) {
+                existing = parseScratchpadFromMemory(entry.content);
+            }
+        } catch {
+            // no existing scratchpad
+        }
+    }
+    
+    // Build merged scratchpad
+    const merged: ScratchpadData = {
+        task: mode === 'append' && !task ? existing.task : task,
+        steps: mode === 'append' ? [...existing.steps, ...newSteps] : newSteps,
+        findings: mode === 'append' && newFindings
+            ? (existing.findings ? existing.findings + '\n\n---\n\n' + newFindings : newFindings)
+            : newFindings,
+        workedWell: mode === 'append' ? uniqStrings([...existing.workedWell, ...newWorkedWell], 24) : newWorkedWell,
+        didntWork: mode === 'append' ? uniqStrings([...existing.didntWork, ...newDidntWork], 24) : newDidntWork,
+        nextSteps: newNextSteps || existing.nextSteps,
+        updatedAt: now
+    };
+    
+    const content = formatScratchpadMarkdown(merged);
+    
+    // Save to memory
+    await handleSaveMemory({
+        key: SCRATCHPAD_KEY,
+        value: content,
+        kind: 'short',
+        scope: 'project',
+        tags: ['scratchpad', 'workflow']
+    });
+    
+    // Update stats
+    try {
+        const trackerInfo = resolveProjectTracker(rootPath);
+        trackerInfo.project.stats = normalizeTrackerStats(trackerInfo.project.stats);
+        trackerInfo.project.stats.lastScratchpadUpdateAt = now;
+        trackerInfo.project.stats.lastProgressLogAt = now;
+        saveTrackerData(trackerInfo.data);
+    } catch {
+        // ignore
+    }
+    
+    const stepsDone = merged.steps.filter(s => s.done).length;
+    const stepsTotal = merged.steps.length;
+    const text = lang === 'en'
+        ? `Scratchpad updated. Task: "${merged.task.slice(0, 60)}..." Steps: ${stepsDone}/${stepsTotal} done.`
+        : `便签本已更新。任务: "${merged.task.slice(0, 60)}..." 步骤: ${stepsDone}/${stepsTotal} 完成。`;
+    
+    return { content: [{ type: 'text', text }, { type: 'text', text: `SCRATCHPAD_JSON:\n${JSON.stringify(merged, null, 2)}` }] };
+}
+
+async function handleLogProgress(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const attempted = typeof args?.attempted === 'string' ? args.attempted.trim() : '';
+    if (!attempted) {
+        const msg = lang === 'en' ? 'log_progress requires attempted.' : 'log_progress 需要 attempted。';
+        throw new Error(msg);
+    }
+    
+    const rootPath = typeof args?.rootPath === 'string' ? args.rootPath : undefined;
+    const taskId = typeof args?.taskId === 'string' ? args.taskId.trim() : 'current';
+    const now = nowIso();
+    
+    const entry: ProgressEntry = {
+        at: now,
+        attempted,
+        workedWell: normalizeStringArray(args?.workedWell),
+        didntWork: normalizeStringArray(args?.didntWork),
+        filesChanged: normalizeStringArray(args?.filesChanged),
+        decisions: normalizeStringArray(args?.decisions),
+        nextStep: typeof args?.nextStep === 'string' ? args.nextStep.trim() : ''
+    };
+    
+    const PROGRESS_KEY = `progress:${taskId}`;
+    
+    // Get existing progress log
+    let log: ProgressLog = { entries: [], updatedAt: now };
+    try {
+        const { project } = resolveProjectMemory(rootPath);
+        const existing = project.memories?.[PROGRESS_KEY];
+        if (existing?.content) {
+            try {
+                const parsed = JSON.parse(existing.content);
+                if (Array.isArray(parsed.entries)) {
+                    log.entries = parsed.entries;
+                }
+            } catch {
+                // not JSON, append as first entry
+            }
+        }
+    } catch {
+        // no existing log
+    }
+    
+    // Append new entry (keep last 50 entries max)
+    log.entries.push(entry);
+    if (log.entries.length > 50) {
+        log.entries = log.entries.slice(-50);
+    }
+    log.updatedAt = now;
+    
+    // Format as readable content with JSON backup
+    const lines: string[] = [];
+    lines.push(`# Progress Log: ${taskId}`);
+    lines.push(`Updated: ${now}`);
+    lines.push(`Entries: ${log.entries.length}`);
+    lines.push('');
+    for (let i = log.entries.length - 1; i >= Math.max(0, log.entries.length - 10); i--) {
+        const e = log.entries[i];
+        lines.push(`## [${i + 1}] ${e.at}`);
+        lines.push(`**Attempted:** ${e.attempted}`);
+        if (e.workedWell.length) lines.push(`**Worked:** ${e.workedWell.join('; ')}`);
+        if (e.didntWork.length) lines.push(`**Did NOT work:** ${e.didntWork.join('; ')}`);
+        if (e.filesChanged.length) lines.push(`**Files:** ${e.filesChanged.join(', ')}`);
+        if (e.decisions.length) lines.push(`**Decisions:** ${e.decisions.join('; ')}`);
+        if (e.nextStep) lines.push(`**Next:** ${e.nextStep}`);
+        lines.push('');
+    }
+    lines.push('---');
+    lines.push(`PROGRESS_LOG_JSON:\n${JSON.stringify(log, null, 2)}`);
+    
+    await handleSaveMemory({
+        key: PROGRESS_KEY,
+        value: lines.join('\n'),
+        kind: 'short',
+        scope: 'project',
+        tags: ['progress', 'workflow', taskId]
+    });
+    
+    // Update stats
+    try {
+        const trackerInfo = resolveProjectTracker(rootPath);
+        trackerInfo.project.stats = normalizeTrackerStats(trackerInfo.project.stats);
+        trackerInfo.project.stats.lastProgressLogAt = now;
+        saveTrackerData(trackerInfo.data);
+    } catch {
+        // ignore
+    }
+    
+    const text = lang === 'en'
+        ? `Progress logged (${log.entries.length} entries total). Attempted: "${attempted.slice(0, 60)}..."`
+        : `进度已记录（共 ${log.entries.length} 条）。尝试: "${attempted.slice(0, 60)}..."`;
+    
+    return { content: [{ type: 'text', text }, { type: 'text', text: `PROGRESS_ENTRY_JSON:\n${JSON.stringify(entry, null, 2)}` }] };
+}
+
+async function handleGetScratchpad(args: any): Promise<any> {
+    const lang = getUiLanguage();
+    const rootPath = typeof args?.rootPath === 'string' ? args.rootPath : undefined;
+    const SCRATCHPAD_KEY = 'scratchpad:current';
+    
+    try {
+        const { project } = resolveProjectMemory(rootPath);
+        const entry = project.memories?.[SCRATCHPAD_KEY];
+        if (!entry?.content) {
+            const text = lang === 'en'
+                ? 'No scratchpad found. Call update_scratchpad to create one.'
+                : '未找到便签本。调用 update_scratchpad 创建。';
+            return { content: [{ type: 'text', text }] };
+        }
+        
+        const data = parseScratchpadFromMemory(entry.content);
+        const stepsDone = data.steps.filter(s => s.done).length;
+        const stepsTotal = data.steps.length;
+        
+        const text = lang === 'en'
+            ? `Current scratchpad (updated ${data.updatedAt}). Task: "${data.task.slice(0, 60)}" Steps: ${stepsDone}/${stepsTotal}`
+            : `当前便签本（更新于 ${data.updatedAt}）。任务: "${data.task.slice(0, 60)}" 步骤: ${stepsDone}/${stepsTotal}`;
+        
+        return {
+            content: [
+                { type: 'text', text },
+                { type: 'text', text: entry.content },
+                { type: 'text', text: `SCRATCHPAD_JSON:\n${JSON.stringify(data, null, 2)}` }
+            ]
+        };
+    } catch (e: any) {
+        const text = lang === 'en'
+            ? `Failed to get scratchpad: ${e?.message || String(e)}`
+            : `获取便签本失败: ${e?.message || String(e)}`;
+        return { content: [{ type: 'text', text }] };
+    }
 }
 
 // ==================== Walkthrough Handler ====================
