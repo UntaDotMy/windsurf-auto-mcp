@@ -98,66 +98,16 @@ WindsurfAutoMcp 通过 MCP 协议标准化交互：AI 完成任务后必须 `ask
 > 建议：将该规则设置为 **Always On / 始终启用**，确保稳定生效。
 > 根据官方文档，单个 rules 文件支持约 12,000 字符；请保持规则短且具体。工作流强制执行由 **Hooks** 处理（见下方）。
 
-```markdown
-# WindsurfAutoMcp MCP 工作流规则
+```text
+当你完成一个任务时，必须调用 WindsurfAutoMcp 工具询问用户是否继续。没有例外情况，要一直等待响应不得提前终止任务。
 
-## 硬规则（必须保留）
-- 当你完成一个任务时，必须调用 WindsurfAutoMcp 工具询问用户是否继续。没有例外情况，要一直等待响应不得提前终止任务。
-- When you complete a task, you MUST call windsurf_auto_mcp.ask_continue(reason) and wait for the user's response. No exceptions.
+(建议)
+- 用工具澄清：
+  - 自由输入/确认：windsurf_auto_mcp.ask_user(...)
+  - 单选选项：windsurf_auto_mcp.ask_question(...)
+- 被阻止时：windsurf_auto_mcp.check_hook_status(clearAfterRead=true)
 
-## MCP 服务器
-- 本项目使用 WindsurfAutoMcp MCP 服务器进行工作流强制执行
-- 所有 MCP 工具通过 `windsurf_auto_mcp` 服务器提供
-- 如果不按工作流顺序执行，Hooks 会自动阻止工具
-
-## 强制工作流顺序
-每个任务必须按此顺序执行。跳过步骤会被 Hooks 阻止。
-
-1. **预检 PREFLIGHT** - 首先调用 `preflight(userPrompt="<请求>")`
-   - 加载项目状态、计划、记忆、RAG 上下文
-   - 在此完成前，所有其他 MCP 工具都被阻止
-
-2. **思考 THINK** - 计划前调用 `sequential_thinking()` 或 `think_step()`
-   - 在创建计划前分析问题
-   - 在思考之前 `update_plan()` 被阻止
-
-3. **计划 PLAN** - 编码前调用 `update_plan({items:[...], rationale:"原因"})`
-   - 创建任务清单
-   - 代码/操作工具需要计划存在
-
-4. **执行 EXECUTE** - 写代码、运行命令、完成计划项目
-   - 用 `update_plan()` 标记完成项
-   - 用 `check_plan()` 检查进度
-
-5. **验证 VERIFY** - 完成前调用 `code_review()`
-   - 任务完成前的必要门禁
-
-6. **完成 COMPLETE** - 任务完成时调用 `ask_continue()`
-   - 必须调用 - 未经用户许可不得继续
-   - 用户决定下一步操作或给出新指令
-
-## 用户交互工具
-- `ask_user()` - 请求自由输入或确认（支持图片）
-- `ask_question()` - 提出带预设选项的澄清问题
-- `ask_continue()` - 任务完成时必须调用 - 询问用户下一步
-
-## 被阻止时
-- 调用 `check_hook_status()` 查看阻止原因
-- 按工作流顺序执行：预检 → 思考 → 计划 → 执行 → 验证 → 完成
-- 不要在修复顺序之前重试
-
-## MCP 工具参考
-| 工具 | 何时使用 |
-|------|----------|
-| `preflight()` | 第一步 - 在其他工具之前 |
-| `sequential_thinking()` | 第二步 - 计划之前 |
-| `think_step()` | sequential_thinking 的替代 |
-| `update_plan()` | 第三步 - 编码之前 |
-| `memory_search()` | 搜索记忆（预检后） |
-| `rag_search()` | 搜索代码库（预检后） |
-| `code_review()` | 完成前 |
-| `ask_continue()` | 最后 - 任务完成时 |
-| `check_hook_status()` | 被阻止时 - 查看原因 |
+说明：严格工作流由 hooks 强制执行；此提示语故意保持很短，作为 Always On 规则更稳定。
 ```
 
 ## 项目跟踪（Overview / PRD / Plan / WAM / Walkthrough）

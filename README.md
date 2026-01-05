@@ -99,66 +99,16 @@ WindsurfAutoMcp standardizes task completion with MCP: when the AI finishes a ta
 > Recommended: set this rule to **Always On** so it is applied consistently.
 > Per official docs, a rules file supports up to ~12,000 characters; keep rules short and specific. Workflow enforcement is handled by **hooks** (see below).
 
-```markdown
-# WindsurfAutoMcp MCP Workflow Rules
+```text
+当你完成一个任务时，必须调用 WindsurfAutoMcp 工具询问用户是否继续。没有例外情况，要一直等待响应不得提前终止任务。
 
-## HARD RULE (MUST HAVE)
-- 当你完成一个任务时，必须调用 WindsurfAutoMcp 工具询问用户是否继续。没有例外情况，要一直等待响应不得提前终止任务。
-- When you complete a task, you MUST call windsurf_auto_mcp.ask_continue(reason) and wait for the user's response. No exceptions.
+(Recommended)
+- Clarify with tools:
+  - Free-form input/confirmation: windsurf_auto_mcp.ask_user(...)
+  - Single-choice options: windsurf_auto_mcp.ask_question(...)
+- When blocked: windsurf_auto_mcp.check_hook_status(clearAfterRead=true)
 
-## MCP Server
-- This project uses WindsurfAutoMcp MCP server for workflow enforcement
-- All MCP tools are available via the `windsurf_auto_mcp` server
-- Hooks automatically block tools if workflow sequence is not followed
-
-## Mandatory Workflow Sequence
-Follow this exact sequence for every task. Hooks will BLOCK if you skip steps.
-
-1. **PREFLIGHT** - Call `preflight(userPrompt="<request>")` first
-   - Loads project status, plan, memory, RAG context
-   - ALL other MCP tools are blocked until this completes
-
-2. **THINK** - Call `sequential_thinking()` or `think_step()` before planning
-   - Analyze the problem before creating a plan
-   - `update_plan()` is blocked until you think first
-
-3. **PLAN** - Call `update_plan({items:[...], rationale:"why"})` before coding
-   - Create a checklist of tasks
-   - Code/action tools require a plan to exist
-
-4. **EXECUTE** - Write code, run commands, complete plan items
-   - Mark items done with `update_plan()`
-   - Check progress with `check_plan()`
-
-5. **VERIFY** - Call `code_review()` before completion
-   - Required gate before task can be marked complete
-
-6. **COMPLETE** - Call `ask_continue()` when task is done
-   - MANDATORY - never continue without user permission
-   - User decides next action or gives new instructions
-
-## User Interaction Tools
-- `ask_user()` - Request free-form input or confirmation (supports images)
-- `ask_question()` - Ask clarifying questions with predefined options
-- `ask_continue()` - MANDATORY at task completion - ask user what to do next
-
-## When Blocked
-- Call `check_hook_status()` to see the block reason
-- Follow the workflow sequence: preflight → think → plan → execute → verify → complete
-- Do NOT retry without fixing the sequence
-
-## Key MCP Tools Reference
-| Tool | When to Use |
-|------|-------------|
-| `preflight()` | FIRST - before any other tool |
-| `sequential_thinking()` | SECOND - before planning |
-| `think_step()` | Alternative to sequential_thinking |
-| `update_plan()` | THIRD - before coding |
-| `memory_search()` | Search memories (after preflight) |
-| `rag_search()` | Search codebase (after preflight) |
-| `code_review()` | Before completion |
-| `ask_continue()` | LAST - when task complete |
-| `check_hook_status()` | When blocked - see why |
+Note: strict workflow is enforced by hooks; this prompt is intentionally short so it works reliably as an Always On rule.
 ```
 
 ## Project Tracker (Overview / PRD / Plan / WAM / Walkthrough)
