@@ -5812,9 +5812,9 @@ async function handleRagSearch(args: any): Promise<any> {
     
     // Surface hook block prominently at the very top
     if (hookFeedback?.lastBlock) {
-        outputLines.push(lang === 'en' 
-            ? `⛔ HOOK BLOCKED YOUR LAST ACTION: ${hookFeedback.lastBlock}`
-            : `⛔ 钩子阻止了你的上一个操作: ${hookFeedback.lastBlock}`);
+        outputLines.push(lang === 'en'
+            ? `HOOK BLOCKED YOUR LAST ACTION: ${hookFeedback.lastBlock}`
+            : `HOOK 阻止了你的上一个操作: ${hookFeedback.lastBlock}`);
         outputLines.push(lang === 'en'
             ? 'You MUST address the block reason before retrying.'
             : '你必须先解决阻止原因才能重试。');
@@ -6213,9 +6213,9 @@ async function handleUpdatePlan(args: any): Promise<any> {
     
     // Surface hook block prominently at the very top
     if (hookFeedback?.lastBlock) {
-        responseLines.push(lang === 'en' 
-            ? `⛔ HOOK BLOCKED YOUR LAST ACTION: ${hookFeedback.lastBlock}`
-            : `⛔ 钩子阻止了你的上一个操作: ${hookFeedback.lastBlock}`);
+        responseLines.push(lang === 'en'
+            ? `HOOK BLOCKED YOUR LAST ACTION: ${hookFeedback.lastBlock}`
+            : `HOOK 阻止了你的上一个操作: ${hookFeedback.lastBlock}`);
         responseLines.push(lang === 'en'
             ? 'You MUST address the block reason before retrying.'
             : '你必须先解决阻止原因才能重试。');
@@ -6263,6 +6263,15 @@ function calculatePlanProgress(items: TrackerItem[]): { total: number; done: num
  * Read hook feedback from memory (saved by guard.py via save_memory).
  * This allows LLMs to see why their actions were blocked even if they missed stderr.
  */
+function sanitizeHookFeedbackText(text: string): string {
+    // Hook feedback is often surfaced in many different contexts.
+    // Keep it ASCII-only (Windows + tool UIs) and remove legacy decorative unicode.
+    return String(text || '')
+        .replace(/[^\x09\x0A\x0D\x20-\x7E]/g, '') // keep \t \n \r and printable ASCII
+        .replace(/\r\n/g, '\n')
+        .trim();
+}
+
 function getHookFeedbackFromMemory(rootPath?: string): { lastBlock?: string; lastWarning?: string; lastError?: string } | null {
     try {
         const { project } = resolveProjectMemory(rootPath);
@@ -6270,7 +6279,9 @@ function getHookFeedbackFromMemory(rootPath?: string): { lastBlock?: string; las
         
         const getContent = (key: string): string | undefined => {
             const entry = project.memories?.[key] || global.memories?.[key];
-            return entry?.content?.trim();
+            const raw = entry?.content;
+            const cleaned = raw ? sanitizeHookFeedbackText(raw) : '';
+            return cleaned || undefined;
         };
         
         const lastBlock = getContent('hook:last_block');
@@ -6297,15 +6308,26 @@ function getHookFeedbackFromMemory(rootPath?: string): { lastBlock?: string; las
 function clearHookFeedbackFromMemory(rootPath?: string): void {
     try {
         const { data, project } = resolveProjectMemory(rootPath);
-        let changed = false;
+        const global = loadGlobalMemoryData();
+        let changedProject = false;
+        let changedGlobal = false;
+
         for (const key of ['hook:last_block', 'hook:last_warning', 'hook:last_error']) {
             if (project.memories?.[key]) {
                 delete project.memories[key];
-                changed = true;
+                changedProject = true;
+            }
+            if (global.memories?.[key]) {
+                delete global.memories[key];
+                changedGlobal = true;
             }
         }
-        if (changed) {
+
+        if (changedProject) {
             saveMemoryAndNotify(data);
+        }
+        if (changedGlobal) {
+            saveGlobalMemoryData(global);
         }
     } catch {
         // ignore
@@ -6336,30 +6358,28 @@ function injectHookFeedbackIntoResult(result: any, args: any): any {
         
         // Build feedback message - BLOCK is most important
         if (hookFeedback.lastBlock) {
-            feedbackLines.push('═'.repeat(50));
-            feedbackLines.push(lang === 'en' 
-                ? `⛔ HOOK BLOCKED YOUR LAST ACTION:`
-                : `⛔ 钩子阻止了你的上一个操作:`);
+            feedbackLines.push(lang === 'en'
+                ? 'HOOK BLOCKED YOUR LAST ACTION:'
+                : 'HOOK 阻止了你的上一个操作:');
             feedbackLines.push(hookFeedback.lastBlock);
             feedbackLines.push('');
             feedbackLines.push(lang === 'en'
-                ? '🔴 You MUST fix this before retrying. Read the message above!'
-                : '🔴 你必须先修复此问题才能重试。请阅读上面的消息！');
-            feedbackLines.push('═'.repeat(50));
+                ? 'You MUST fix this before retrying.'
+                : '你必须先修复此问题才能重试。');
             feedbackLines.push('');
         }
         
         if (hookFeedback.lastWarning && !hookFeedback.lastBlock) {
-            feedbackLines.push(lang === 'en' 
-                ? `⚠️ HOOK WARNING: ${hookFeedback.lastWarning}`
-                : `⚠️ 钩子警告: ${hookFeedback.lastWarning}`);
+            feedbackLines.push(lang === 'en'
+                ? `HOOK WARNING: ${hookFeedback.lastWarning}`
+                : `钩子警告: ${hookFeedback.lastWarning}`);
             feedbackLines.push('');
         }
         
         if (hookFeedback.lastError && !hookFeedback.lastBlock) {
-            feedbackLines.push(lang === 'en' 
-                ? `❌ LAST ERROR: ${hookFeedback.lastError}`
-                : `❌ 上次错误: ${hookFeedback.lastError}`);
+            feedbackLines.push(lang === 'en'
+                ? `LAST ERROR: ${hookFeedback.lastError}`
+                : `上次错误: ${hookFeedback.lastError}`);
             feedbackLines.push('');
         }
         
@@ -6399,17 +6419,17 @@ async function handleCheckHookStatus(args: any): Promise<any> {
     };
     
     if (!hookFeedback) {
-        lines.push(lang === 'en' 
-            ? '✅ No hook blocks or warnings. Your actions are not being blocked by workflow hooks.'
-            : '✅ 没有钩子阻止或警告。你的操作没有被工作流钩子阻止。');
+        lines.push(lang === 'en'
+            ? 'OK: No hook blocks or warnings. Your actions are not being blocked by workflow hooks.'
+            : 'OK: 没有钩子阻止或警告。你的操作没有被工作流钩子阻止。');
         return { content: [{ type: 'text', text: lines.join('\n') }, { type: 'text', text: `HOOK_STATUS_JSON:\n${JSON.stringify(payload, null, 2)}` }] };
     }
     
     if (hookFeedback.lastBlock) {
         payload.hasBlock = true;
         lines.push(lang === 'en'
-            ? `⛔ BLOCKED: ${hookFeedback.lastBlock}`
-            : `⛔ 被阻止: ${hookFeedback.lastBlock}`);
+            ? `BLOCKED: ${hookFeedback.lastBlock}`
+            : `被阻止: ${hookFeedback.lastBlock}`);
         lines.push('');
         lines.push(lang === 'en'
             ? 'Your action was BLOCKED by a workflow hook. You MUST fix the issue before retrying:'
@@ -6429,15 +6449,15 @@ async function handleCheckHookStatus(args: any): Promise<any> {
     if (hookFeedback.lastWarning) {
         payload.hasWarning = true;
         lines.push(lang === 'en'
-            ? `⚠️ WARNING: ${hookFeedback.lastWarning}`
-            : `⚠️ 警告: ${hookFeedback.lastWarning}`);
+            ? `WARNING: ${hookFeedback.lastWarning}`
+            : `警告: ${hookFeedback.lastWarning}`);
     }
     
     if (hookFeedback.lastError) {
         payload.hasError = true;
         lines.push(lang === 'en'
-            ? `❌ ERROR: ${hookFeedback.lastError}`
-            : `❌ 错误: ${hookFeedback.lastError}`);
+            ? `ERROR: ${hookFeedback.lastError}`
+            : `错误: ${hookFeedback.lastError}`);
     }
     
     // Optionally clear the feedback after reading
@@ -6482,9 +6502,9 @@ async function handleGetProjectStatus(args: any): Promise<any> {
     // Surface hook block prominently at the top for smaller LLMs
     if (hookFeedback?.lastBlock) {
         lines.push('');
-        lines.push(lang === 'en' 
-            ? `⛔ HOOK BLOCKED YOUR LAST ACTION: ${hookFeedback.lastBlock}`
-            : `⛔ 钩子阻止了你的上一个操作: ${hookFeedback.lastBlock}`);
+        lines.push(lang === 'en'
+            ? `HOOK BLOCKED YOUR LAST ACTION: ${hookFeedback.lastBlock}`
+            : `HOOK 阻止了你的上一个操作: ${hookFeedback.lastBlock}`);
         lines.push(lang === 'en'
             ? 'You MUST address the block reason before retrying the action.'
             : '你必须先解决阻止原因才能重试该操作。');
@@ -6639,9 +6659,9 @@ async function handlePreflight(args: any): Promise<any> {
     // Surface hook block prominently for smaller LLMs that may miss stderr
     if (hookFeedback?.lastBlock) {
         lines.push('');
-        lines.push(lang === 'en' 
-            ? `⛔ HOOK BLOCKED YOUR LAST ACTION: ${hookFeedback.lastBlock}`
-            : `⛔ 钩子阻止了你的上一个操作: ${hookFeedback.lastBlock}`);
+        lines.push(lang === 'en'
+            ? `HOOK BLOCKED YOUR LAST ACTION: ${hookFeedback.lastBlock}`
+            : `HOOK 阻止了你的上一个操作: ${hookFeedback.lastBlock}`);
         lines.push(lang === 'en'
             ? 'You MUST address the block reason before retrying the action.'
             : '你必须先解决阻止原因才能重试该操作。');
@@ -8746,15 +8766,33 @@ async function handleSaveMemory(args: any): Promise<any> {
 	        pruneShortMemories(global);
 	        saveGlobalMemoryData(global);
 	    }
-    // Track research save timestamp so guard knows research findings were saved
-    try {
-        const trackerInfo = resolveProjectTracker(rootPath);
-        trackerInfo.project.stats = normalizeTrackerStats(trackerInfo.project.stats);
-        trackerInfo.project.stats.lastResearchSaveAt = nowIso();
-        saveTrackerData(trackerInfo.data);
-        refreshOpenPanels(trackerInfo.project);
-    } catch {
-        // ignore
+    // Track research save timestamp so guard knows research findings were saved.
+    // IMPORTANT: do NOT update this for internal keys like hook:last_block (otherwise it bypasses research-save enforcement).
+    const keyLower = key.toLowerCase();
+    const tagLower = tags.map((t) => String(t || '').toLowerCase());
+    const isResearchSave =
+        keyLower.startsWith('research:') ||
+        kind === 'lesson' ||
+        tagLower.includes('research');
+
+    if (isResearchSave) {
+        try {
+            const trackerInfo = resolveProjectTracker(rootPath);
+            trackerInfo.project.stats = normalizeTrackerStats(trackerInfo.project.stats);
+            trackerInfo.project.stats.lastResearchSaveAt = nowIso();
+            saveTrackerData(trackerInfo.data);
+            refreshOpenPanels(trackerInfo.project);
+        } catch {
+            // ignore
+        }
+    } else {
+        try {
+            // Best-effort: refresh panels so memory changes show up when panels are open.
+            const trackerInfo = resolveProjectTracker(rootPath);
+            refreshOpenPanels(trackerInfo.project);
+        } catch {
+            // ignore
+        }
     }
 
     const where =
@@ -8868,9 +8906,9 @@ async function handleMemorySearch(args: any): Promise<any> {
     
     // Surface hook block prominently at the very top
     if (hookFeedback?.lastBlock) {
-        outputLines.push(lang === 'en' 
-            ? `⛔ HOOK BLOCKED YOUR LAST ACTION: ${hookFeedback.lastBlock}`
-            : `⛔ 钩子阻止了你的上一个操作: ${hookFeedback.lastBlock}`);
+        outputLines.push(lang === 'en'
+            ? `HOOK BLOCKED YOUR LAST ACTION: ${hookFeedback.lastBlock}`
+            : `HOOK 阻止了你的上一个操作: ${hookFeedback.lastBlock}`);
         outputLines.push(lang === 'en'
             ? 'You MUST address the block reason before retrying.'
             : '你必须先解决阻止原因才能重试。');
@@ -9596,9 +9634,9 @@ async function handleWorkflowStatus(args: any): Promise<any> {
         // Build response lines with hook block prominently displayed
         const lines: string[] = [];
         if (hookFeedback?.lastBlock) {
-            lines.push(lang === 'en' 
-                ? `⛔ HOOK BLOCKED YOUR LAST ACTION: ${hookFeedback.lastBlock}`
-                : `⛔ 钩子阻止了你的上一个操作: ${hookFeedback.lastBlock}`);
+            lines.push(lang === 'en'
+                ? `HOOK BLOCKED YOUR LAST ACTION: ${hookFeedback.lastBlock}`
+                : `HOOK 阻止了你的上一个操作: ${hookFeedback.lastBlock}`);
             lines.push(lang === 'en'
                 ? 'You MUST address the block reason before retrying!'
                 : '你必须先解决阻止原因才能重试！');
@@ -11097,9 +11135,9 @@ async function handleCheckPlan(args: any): Promise<any> {
     
     // Surface hook block prominently at the top
     if (hookFeedback?.lastBlock) {
-        lines.push(lang === 'en' 
-            ? `⛔ HOOK BLOCKED YOUR LAST ACTION: ${hookFeedback.lastBlock}`
-            : `⛔ 钩子阻止了你的上一个操作: ${hookFeedback.lastBlock}`);
+        lines.push(lang === 'en'
+            ? `HOOK BLOCKED YOUR LAST ACTION: ${hookFeedback.lastBlock}`
+            : `HOOK 阻止了你的上一个操作: ${hookFeedback.lastBlock}`);
         lines.push(lang === 'en'
             ? 'You MUST address the block reason before retrying.'
             : '你必须先解决阻止原因才能重试。');

@@ -561,6 +561,8 @@ def reset_workflow_state(state, project_id):
         return state
     ps["workflowState"] = "IDLE"
     ps["workflowStateAt"] = _iso_now()
+    # IMPORTANT: do NOT clear lockout/ack here. A block must be acknowledged and fixed,
+    # even if the user sends a new prompt.
     return state
 
 
@@ -652,10 +654,79 @@ def _mcp_call_succeeded(resp):
     return "result" in resp
 
 
+def _set_lockout_required(project_id, reason, ack_required=True):
+    """Persist lockout state for a project (hard-enforced after any block)."""
+    try:
+        if not project_id:
+            return
+        state = load_guard_state()
+        state, ps = _get_project_state(state, project_id)
+        if ps is None:
+            return
+        ps["lockoutActive"] = True
+        ps["lockoutAt"] = _iso_now()
+        if ack_required:
+            ps["ackRequired"] = True
+            ps["ackRequiredAt"] = _iso_now()
+        # Keep reason short to avoid bloating state file.
+        ps["lockoutReason"] = _truncate_lines(str(reason or ""), 20, 1000)
+        save_guard_state(state)
+    except Exception:
+        return
+
+
+def _clear_lockout(project_id):
+    try:
+        if not project_id:
+            return
+        state = load_guard_state()
+        state, ps = _get_project_state(state, project_id)
+        if ps is None:
+            return
+        ps["lockoutActive"] = False
+        ps["ackRequired"] = False
+        ps.pop("lockoutReason", None)
+        ps.pop("lockoutAt", None)
+        ps.pop("ackRequiredAt", None)
+        ps.pop("ackAt", None)
+        save_guard_state(state)
+    except Exception:
+        return
+
+
+def _is_ack_required(project_id):
+    try:
+        if not project_id:
+            return False
+        state = load_guard_state()
+        state, ps = _get_project_state(state, project_id)
+        if not ps:
+            return False
+        return bool(ps.get("lockoutActive")) and bool(ps.get("ackRequired"))
+    except Exception:
+        return False
+
+
+def _mark_acknowledged(project_id):
+    try:
+        if not project_id:
+            return
+        state = load_guard_state()
+        state, ps = _get_project_state(state, project_id)
+        if ps is None:
+            return
+        ps["ackRequired"] = False
+        ps["ackAt"] = _iso_now()
+        save_guard_state(state)
+    except Exception:
+        return
+
+
 def persist_hook_feedback(server_url, project, action, severity, message):
     """
     Persist hook failures/warnings into MCP-managed memory so they survive the transient
     hook UI (which the model may not see) and are reviewable in extension panels.
+    Also activates immediate lockout + mandatory acknowledge on blocks.
     """
     try:
         if not server_url:
@@ -663,6 +734,13 @@ def persist_hook_feedback(server_url, project, action, severity, message):
         msg = str(message or "").strip()
         if not msg:
             return
+
+        # Any BLOCK activates lockout immediately and requires explicit acknowledge.
+        if severity == "block" and isinstance(project, dict):
+            pid = str(project.get("projectId") or "").strip()
+            if pid:
+                _set_lockout_required(pid, msg, ack_required=True)
+
         scope = "project"
         root_path = ""
         if isinstance(project, dict):
@@ -694,6 +772,34 @@ def persist_hook_feedback(server_url, project, action, severity, message):
                 "scope": scope,
                 "kind": "short",
                 "tags": ["hook", "guard", str(action).strip()],
+            },
+            timeout_sec=1.0,
+        )
+    except Exception:
+        return
+
+
+def clear_hook_last_block(server_url, project):
+    """Best-effort: clear hook:last_block so stale blocks don't keep showing after fixes."""
+    try:
+        if not server_url:
+            return
+        scope = "project"
+        root_path = ""
+        if isinstance(project, dict):
+            root_path = str(project.get("rootPath") or "").strip()
+        if not root_path:
+            scope = "global"
+        # NOTE: Use save_memory with an empty value to clear. Extension treats empty as absent.
+        call_mcp_tool(
+            server_url,
+            "save_memory",
+            {
+                "key": "hook:last_block",
+                "value": "",
+                "scope": scope,
+                "kind": "short",
+                "tags": ["hook", "guard", "cleared"],
             },
             timeout_sec=1.0,
         )
@@ -1965,6 +2071,16 @@ def main():
         cwd_hint = _extract_workspace_root_hint(payload, tool_info)
         project = select_project(tracker, cwd=cwd_hint)
         if project:
+            project_id = str(project.get("projectId") or "").strip()
+            if project_id and _is_ack_required(project_id):
+                msg = (
+                    "Blocked: ACK REQUIRED.\n"
+                    "Required: run check_hook_status(clearAfterRead=true) before any further actions."
+                )
+                persist_hook_feedback(server_url, project, "pre_run_command", "block", msg)
+                print_block_prominent(msg, "Run check_hook_status(clearAfterRead=true) first")
+                return 2
+
             preflight = _check_prompt_preflight(server_url, project)
             if preflight:
                 persist_hook_feedback(server_url, project, "pre_run_command", "block", preflight)
@@ -2040,6 +2156,16 @@ def main():
             print_block_prominent(msg, "Use MCP tools instead of direct file writes")
             return 2
         if project:
+            project_id = str(project.get("projectId") or "").strip()
+            if project_id and _is_ack_required(project_id):
+                msg = (
+                    "Blocked: ACK REQUIRED.\n"
+                    "Required: run check_hook_status(clearAfterRead=true) before any further actions."
+                )
+                persist_hook_feedback(server_url, project, "pre_write_code", "block", msg)
+                print_block_prominent(msg, "Run check_hook_status(clearAfterRead=true) first")
+                return 2
+
             preflight = _check_prompt_preflight(server_url, project)
             if preflight:
                 persist_hook_feedback(server_url, project, "pre_write_code", "block", preflight)
@@ -2102,9 +2228,12 @@ def main():
         tracker = load_tracker()
         project = select_project(tracker, file_path=file_path)
         if project:
+            clear_hook_last_block(server_url, project)
             try:
                 project_id = str(project.get("projectId") or "").strip()
                 if project_id:
+                    # Successful write = lockout cleared.
+                    _clear_lockout(project_id)
                     state = load_guard_state()
                     state, ps = _get_project_state(state, project_id)
                     ps["lastCodeWriteAt"] = _iso_now()
@@ -2133,12 +2262,65 @@ def main():
         cwd_hint = root_hint or _extract_workspace_root_hint(payload, tool_info)
         project = select_project(tracker, cwd=cwd_hint)
 
-        # Workflow state machine enforcement
+        # Workflow state machine enforcement + hard lockout enforcement
         if project:
             try:
                 project_id = str(project.get("projectId") or "").strip()
                 if project_id:
+                    # Hard lockout after ANY block: must ACK first, then only remediation tools allowed.
                     state = load_guard_state()
+                    state, ps = _get_project_state(state, project_id)
+                    lockout = bool(ps.get("lockoutActive"))
+                    ack_required = bool(ps.get("ackRequired"))
+
+                    if lockout and ack_required:
+                        # Only allow explicit acknowledge.
+                        if str(tool_name or "") != "check_hook_status" or tool_args.get("clearAfterRead") is not True:
+                            msg = (
+                                "Blocked: ACK REQUIRED.\n"
+                                "Required: run check_hook_status(clearAfterRead=true) before any other MCP tools."
+                            )
+                            persist_hook_feedback(server_url, project, "pre_mcp_tool_use", "block", msg)
+                            print_block_prominent(msg, "Run check_hook_status(clearAfterRead=true) first")
+                            return 2
+
+                    if lockout and (not ack_required):
+                        allowed = {
+                            # acknowledge (can be used again)
+                            "check_hook_status",
+                            # recall/think/research
+                            "preflight",
+                            "get_project_status",
+                            "check_plan",
+                            "memory_search",
+                            "rag_search",
+                            "sequential_thinking",
+                            "think_step",
+                            "get_thinking_history",
+                            "resolve_library_docs",
+                            "get_library_docs",
+                            "index_codebase",
+                            "generate_overview",
+                            "sync_overview",
+                            # fix/commit
+                            "update_plan",
+                            "ensure_release_gate",
+                            "save_memory",
+                            "record_lesson",
+                            "wam_status",
+                            "wam_diff",
+                            "wam_commit",
+                        }
+                        if str(tool_name or "") not in allowed:
+                            msg = (
+                                "Blocked: LOCKOUT ACTIVE due to a previous hook block.\n"
+                                "Allowed tools: check_hook_status, preflight, memory_search, rag_search, sequential_thinking, get_project_status, check_plan, update_plan, ensure_release_gate, save_memory, record_lesson, wam_status, wam_diff, wam_commit.\n"
+                                "Required: fix the block reason first, then retry your action."
+                            )
+                            persist_hook_feedback(server_url, project, "pre_mcp_tool_use", "block", msg)
+                            print_block_prominent(msg, "Use allowed remediation tools")
+                            return 2
+
                     # Check workflow requirement for this tool
                     requirement_error = check_workflow_requirement(state, project_id, tool_name)
                     if requirement_error:
@@ -2333,6 +2515,28 @@ def main():
         if not error_text:
             # MCP tool succeeded - reset block counter
             _reset_block_count()
+
+            # Acknowledge step (mandatory after any block)
+            try:
+                if project and str(tool_name or "") == "check_hook_status" and tool_args.get("clearAfterRead") is True:
+                    pid = str(project.get("projectId") or "").strip()
+                    if pid:
+                        _mark_acknowledged(pid)
+            except Exception:
+                pass
+
+            # If the agent ran a remediation tool, clear stale last-block message.
+            remediation_tools = {
+                "preflight",
+                "update_plan",
+                "ensure_release_gate",
+                "save_memory",
+                "record_lesson",
+                "wam_commit",
+                "check_hook_status",
+            }
+            if project and str(tool_name or "") in remediation_tools:
+                clear_hook_last_block(server_url, project)
         if error_text:
             persist_hook_feedback(
                 server_url,
@@ -2403,9 +2607,17 @@ def main():
 
     if action == "post_run_command":
         cmd, cwd, success, exit_code, stdout, stderr = _extract_run_command_fields(tool_info)
+        tracker = load_tracker()
+        cwd_hint = cwd or _extract_workspace_root_hint(payload, tool_info)
+        project = select_project(tracker, cwd=cwd_hint)
         # Reset block counter on successful command
         if success is True or (exit_code is not None and exit_code == 0):
             _reset_block_count()
+            if project:
+                clear_hook_last_block(server_url, project)
+                pid = str(project.get("projectId") or "").strip()
+                if pid:
+                    _clear_lockout(pid)
         if success is False or (exit_code is not None and exit_code != 0):
             tracker = load_tracker()
             cwd_hint = cwd or _extract_workspace_root_hint(payload, tool_info)
